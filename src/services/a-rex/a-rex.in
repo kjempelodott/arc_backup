@@ -1,0 +1,1029 @@
+#!/bin/bash
+#
+# Init file for the A-REX service
+#
+# chkconfig: 2345 75 25
+# description: NorduGrid grid-manager
+#
+# config: /etc/sysconfig/globus
+# config: /etc/sysconfig/nordugrid
+# config: @prefix@/etc/arc.conf
+# config: /etc/arc.conf
+#
+# This startup script takes ARC0 configuration file as
+# its input and generates ARC1 arched configuration file
+# which contains commands to start A-REX service. Service
+# is either run isolated or with WS interface enabled.
+# To enable WS interface ARC0 configuration file must 
+# contain undocumented option in [grid-manager] section:
+#
+#    arex_mount_point="a_rex_url"
+
+### BEGIN INIT INFO
+# Provides:          a-rex
+# Required-Start:    $local_fs $remote_fs
+# Required-Stop:     $local_fs $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: ARC grid manager
+# Description:       The unit of the NorduGrid's ARC middleware to 
+#                    accept and control jobs. 
+### END INIT INFO
+
+# source function library
+if [ -f /etc/init.d/functions ]; then
+    . /etc/init.d/functions
+    log_success_msg() {
+        echo -n "$@"
+        success "$@"
+        echo
+    }
+    log_warning_msg() {
+        echo -n "$@"
+        warning "$@"
+        echo
+    }
+    log_failure_msg() {
+        echo -n "$@"
+        failure "$@"
+        echo
+    }
+elif [ -f /lib/lsb/init-functions ]; then
+    . /lib/lsb/init-functions
+else
+    echo "Error: Cannot source neither init.d nor lsb functions"
+    exit 1
+fi
+
+add_library_path() {
+    location="$1"
+    if [ ! "x$location" = "x" ] ; then
+        if [ ! "$location" = "/usr" ] ; then
+            libdir="$location/lib"
+            libdir64="$location/lib64"
+            if [ -d "$libdir64" ] ; then
+                if [ "x$LD_LIBRARY_PATH" = "x" ]; then
+                    LD_LIBRARY_PATH="$libdir64"
+                else
+                    LD_LIBRARY_PATH="$libdir64:$LD_LIBRARY_PATH"
+                fi
+            fi
+            if [ -d "$libdir" ] ; then
+                if [ "x$LD_LIBRARY_PATH" = "x" ]; then
+                    LD_LIBRARY_PATH="$libdir"
+                else
+                    LD_LIBRARY_PATH="$libdir:$LD_LIBRARY_PATH"
+                fi
+            fi
+        fi
+    fi
+}
+
+prog=arched
+RUN=yes
+
+# sysconfig files
+if [ -r /etc/sysconfig/nordugrid ]; then
+    . /etc/sysconfig/nordugrid
+elif [ -r /etc/default/nordugrid ]; then
+    . /etc/default/nordugrid
+fi
+if [ -r /etc/sysconfig/a-rex ]; then
+    . /etc/sysconfig/a-rex
+elif [ -r /etc/default/a-rex ]; then
+    . /etc/default/a-rex
+fi
+
+# GLOBUS_LOCATION
+GLOBUS_LOCATION=${GLOBUS_LOCATION:-@DEFAULT_GLOBUS_LOCATION@}
+if [ -n "$GLOBUS_LOCATION" ]; then
+    if [ ! -d "$GLOBUS_LOCATION" ]; then
+        log_failure_msg "GLOBUS_LOCATION ($GLOBUS_LOCATION) not found"
+        exit 1
+    fi
+    export GLOBUS_LOCATION
+fi
+
+# ARC_LOCATION
+export prefix=@prefix@
+ARC_LOCATION=${ARC_LOCATION:-$prefix}
+if [ ! -d "$ARC_LOCATION" ]; then
+    log_failure_msg "ARC_LOCATION ($ARC_LOCATION) not found"
+    exit 1
+fi
+export ARC_LOCATION
+
+readconfigvar() {
+    fname=$1
+    if [ ! -r "$fname" ]; then
+        return
+    fi
+    bname="[$2]"
+    vname=$3
+    value=
+    cat "$fname" | sed -e 's/\r$//' -e 's/^\r//' | grep -e '^\[' -e "^${vname}=" | {
+        while true; do
+            read line
+            if [ ! $? = 0 ] ; then
+                return
+            fi
+            if [ "$line" = "$bname" ] ; then
+                while true ; do
+                    read line
+                    if [ ! $? = 0 ] ; then
+                        return
+                    fi
+                    lstart=`echo "$line" | head -c 1`
+                    if [ "$lstart" = '[' ] ; then
+                        return
+                    fi
+                    vlname=`echo "$line" | sed 's/=.*//;t;s/.*//'`
+                    if [ "$vlname" = "$vname" ] ; then
+                        val=`echo "$line" | sed 's/[^=]*=//'`
+                        eval "echo $val"
+                        return
+                    fi
+                done
+            fi
+        done
+    }
+}
+
+readconfigvars() {
+    fname=$1
+    if [ ! -r "$fname" ]; then
+        return
+    fi
+    bname="[$2]"
+    vname=$3
+    value=
+    cat "$fname" | sed -e 's/\r$//' -e 's/^\r//' | grep -e '^\[' -e "^${vname}=" | {
+        while true; do
+            read line
+            if [ ! $? = 0 ] ; then
+                return
+            fi
+            if [ "$line" = "$bname" ] ; then
+                while true ; do
+                    read line
+                    if [ ! $? = 0 ] ; then
+                        return
+                    fi
+                    lstart=`echo "$line" | head -c 1`
+                    if [ "$lstart" = '[' ] ; then
+                        return
+                    fi
+                    vlname=`echo "$line" | sed 's/=.*//;t;s/.*//'`
+                    if [ "$vlname" = "$vname" ] ; then
+                        val=`echo "$line" | sed 's/[^=]*=//'`
+                        echo "$val"
+                    fi
+                done
+            fi
+        done
+    }
+}
+
+tokenize() {
+    line="$1"
+    prefix="$2"
+    suffix="$3"
+    while true; do
+        if [ -z "$line" ]; then break; fi
+        token=`echo "$line" | sed 's/^"\([^"]*\)" *.*/\1/;t exit;s/^\([^ ]*\)  *.*/\1/;:exit'`
+        line=`echo "$line" | sed 's/^"[^"]*" *\(.*\)/\1/;t exit;s/^[^ ]*  *\(.*\)/\1/;t exit;s/.*//;:exit'`
+        echo "${prefix}${token}${suffix}"
+    done
+}
+
+voms_trust_to_xml() {
+    xml=""
+    while true; do
+        read line
+        if [ $? -ne '0' ]; then break; fi
+        if [ -z "$line" ]; then continue; fi
+        xmlchain=`tokenize "$line" "<VOMSCertTrustDN>" "</VOMSCertTrustDN>"`
+        echo "<VOMSCertTrustDNChain>${xmlchain}</VOMSCertTrustDNChain>"
+    done
+}
+
+# ARC_CONFIG
+if [ "x$ARC_CONFIG" = "x" ]; then
+    if [ -r $ARC_LOCATION/etc/arc.conf ]; then
+        ARC_CONFIG=$ARC_LOCATION/etc/arc.conf
+    elif [ -r /etc/arc.conf ]; then
+        ARC_CONFIG=/etc/arc.conf
+    fi
+fi
+
+# PID and lock file
+PID_FILE=`readconfigvar "$ARC_CONFIG" grid-manager pidfile`
+
+if [ `id -u` = 0 ] ; then
+    # Debian does not have /var/lock/subsys
+    if [ -d /var/lock/subsys ]; then
+        LOCKFILE=/var/lock/subsys/$prog-arex
+    else
+        LOCKFILE=/var/lock/$prog-arex
+    fi
+    if [ "x$PID_FILE" = "x" ]; then
+        PID_FILE=/var/run/$prog-arex.pid
+    fi
+else
+    LOCKFILE=$HOME/$prog-arex.lock
+    if [ "x$PID_FILE" = "x" ]; then
+        PID_FILE=$HOME/$prog-arex.pid
+    fi
+fi
+
+prepare() {
+
+    CMD="$ARC_LOCATION/sbin/$prog"
+    if [ ! -x "$CMD" ]; then
+        log_failure_msg "Missing executable"
+        exit 1
+    fi
+
+    if [ ! -r "$ARC_CONFIG" ]; then
+        log_failure_msg "ARC configuration not found (usually /etc/arc.conf)"
+        exit 1
+    fi
+
+    # Creating configuration file of arched
+    # Reading following information from config file:
+    #  Log file
+    #  Debug level
+    #  User name
+
+    LOGFILE=`readconfigvar "$ARC_CONFIG" grid-manager logfile`
+    WSLOGFILE=`readconfigvar "$ARC_CONFIG" grid-manager wslogfile`
+    LOGLEVEL=`readconfigvar "$ARC_CONFIG" grid-manager debug`
+    LOGSIZE=`readconfigvar "$ARC_CONFIG" grid-manager logsize`
+    LOGREOPEN=`readconfigvar "$ARC_CONFIG" grid-manager logreopen`
+    WATCHDOG=`readconfigvar "$ARC_CONFIG" grid-manager watchdog`
+    USERNAME=`readconfigvar "$ARC_CONFIG" grid-manager user`
+    GROUPNAME=`echo "$USERNAME" | sed 's/^[^:]*//;s/^://'`
+    USERNAME=`echo "$USERNAME" | sed 's/:.*//'`
+    X509_USER_CERT=`readconfigvar "$ARC_CONFIG" grid-manager x509_user_cert`
+    X509_USER_KEY=`readconfigvar "$ARC_CONFIG" grid-manager x509_user_key`
+    X509_CERT_DIR=`readconfigvar "$ARC_CONFIG" grid-manager x509_cert_dir`
+    GRIDMAP=`readconfigvar "$ARC_CONFIG" grid-manager gridmap`
+    GLOBUS_TCP_PORT_RANGE=`readconfigvar "$ARC_CONFIG" grid-manager globus_tcp_port_range`
+    GLOBUS_UDP_PORT_RANGE=`readconfigvar "$ARC_CONFIG" grid-manager globus_udp_port_range`
+    VOMS_PROCESSING=`readconfigvar "$ARC_CONFIG" grid-manager voms_processing`
+    VOMS_TRUST_CHAINS=`readconfigvars "$ARC_CONFIG" grid-manager voms_trust_chain | voms_trust_to_xml`
+    MAX_JOB_CONTROL_REQUESTS=`readconfigvar "$ARC_CONFIG" grid-manager max_job_control_requests`
+    MAX_INFOSYS_REQUESTS=`readconfigvar "$ARC_CONFIG" grid-manager max_infosys_requests`
+    MAX_DATA_TRANSFER_REQUESTS=`readconfigvar "$ARC_CONFIG" grid-manager max_data_transfer_requests`
+    ALLOWUNKNOWN=`readconfigvar "$ARC_CONFIG" gridftpd allowunknown`
+    if [ -z "$X509_USER_CERT" ] ; then
+        X509_USER_CERT=`readconfigvar "$ARC_CONFIG" common x509_user_cert`
+    fi
+    if [ -z "$X509_USER_KEY" ] ; then
+        X509_USER_KEY=`readconfigvar "$ARC_CONFIG" common x509_user_key`
+    fi
+    if [ -z "$X509_CERT_DIR" ] ; then
+        X509_CERT_DIR=`readconfigvar "$ARC_CONFIG" common x509_cert_dir`
+    fi
+    if [ -z "$GRIDMAP" ] ; then
+        GRIDMAP=`readconfigvar "$ARC_CONFIG" common gridmap`
+    fi
+    if [ -z "$GLOBUS_TCP_PORT_RANGE" ] ; then
+        GLOBUS_TCP_PORT_RANGE=`readconfigvar "$ARC_CONFIG" common globus_tcp_port_range`
+    fi
+    if [ -z "$GLOBUS_UDP_PORT_RANGE" ] ; then
+        GLOBUS_UDP_PORT_RANGE=`readconfigvar "$ARC_CONFIG" common globus_udp_port_range`
+    fi
+    if [ -z "$VOMS_PROCESSING" ] ; then
+        VOMS_PROCESSING=`readconfigvar "$ARC_CONFIG" common voms_processing`
+    fi
+    VOMS_TRUST_CHAINS="$VOMS_TRUST_CHAINS"`readconfigvars "$ARC_CONFIG" common voms_trust_chain | voms_trust_to_xml`
+
+    # Exporting collected variables
+    if [ ! -z "$X509_USER_CERT" ] ; then export X509_USER_CERT ; fi
+    if [ ! -z "$X509_USER_KEY" ] ; then export X509_USER_KEY ; fi
+    if [ ! -z "$X509_CERT_DIR" ] ; then export X509_CERT_DIR ; fi
+    if [ ! -z "$GRIDMAP" ] ; then export GRIDMAP ; fi
+    if [ ! -z "$GLOBUS_TCP_PORT_RANGE" ] ; then export GLOBUS_TCP_PORT_RANGE ; fi
+    if [ ! -z "$GLOBUS_UDP_PORT_RANGE" ] ; then export GLOBUS_UDP_PORT_RANGE ; fi
+
+    # Required defaults
+    if [ -z "$GRIDMAP" ] ; then
+        GRIDMAP=/etc/grid-security/grid-mapfile
+    fi
+    if [ -z "$X509_USER_CERT" ] ; then
+        X509_USER_CERT=/etc/grid-security/hostcert.pem
+    fi
+    if [ -z "$X509_USER_KEY" ] ; then
+        X509_USER_KEY=/etc/grid-security/hostkey.pem
+    fi
+    if [ -z "$X509_CERT_DIR" ] ; then
+        X509_CERT_DIR=/etc/grid-security/certificates
+    fi
+    if [ "$ALLOWUNKNOWN" != "yes" ] ; then
+        ALLOWUNKNOWN=""
+    fi
+
+    # Web Service configuration
+    arex_endpoint=""
+    arex_mount_point=`readconfigvar "$ARC_CONFIG" grid-manager arex_mount_point`
+    arex_mount_point=${arex_mount_point:-`readconfigvar "$ARC_CONFIG" cluster arex_mount_point`}
+    if [ ! -z "$arex_mount_point" ] ; then
+        arex_proto=`echo "$arex_mount_point" | sed 's/^\([^:]*\):\/\/.*/\1/;t;s/.*//'`
+        arex_host=`echo "$arex_mount_point" | sed 's/^[^:]*:\/\/\([^:\/]*\).*/\1/;t;s/.*//'`
+        arex_port=`echo "$arex_mount_point" | sed 's/^[^:]*:\/\/[^:]*:\([^\/]*\)\(.*\)/\1/;t;s/.*//'`
+        arex_path=`echo "$arex_mount_point" | sed 's/^[^:]*:\/\/[^\/]*\/\(.*\)/\1/;t;s/.*//'`
+        if [ -z "$arex_port" ] ; then
+            if [ "$arex_proto" = "https" ] ; then
+                arex_port="443"
+            else
+                arex_port="80"
+            fi
+        fi
+        arex_endpoint="<arex:endpoint>$arex_mount_point</arex:endpoint>"
+    fi
+
+    enable_emies_interface=`readconfigvar "$ARC_CONFIG" grid-manager enable_emies_interface`
+    if [ ! -z "$enable_emies_interface" ] ; then
+        enable_emies_interface="<arex:enableEMIESInterface>$enable_emies_interface</arex:enableEMIESInterface>"
+    fi
+
+    emir_registration=""
+#    if [ ! -z "$arex_mount_point" ]; then
+#        emir_urls=`readconfigvar "$ARC_CONFIG" "registration/emir" emirurls`
+#        if [ ! -z "$emir_urls" ]; then
+#            emir_no_xbes=`readconfigvar "$ARC_CONFIG" "registration/emir" disablereg_xbes`
+#            emir_no_emies=`readconfigvar "$ARC_CONFIG" "registration/emir" disablereg_emies`
+#            if [ ! "$emir_no_xbes" = "yes" ]; then
+#                emir_validity=`readconfigvar "$ARC_CONFIG" "registration/emir" validity`
+#                if [ -z "$emir_validity" ]; then emir_validity="600"; fi
+#                emir_period=`readconfigvar "$ARC_CONFIG" "registration/emir" period`
+#                if [ -z "$emir_period" ]; then emir_period="60"; fi
+#                emir_urls=`echo "$emir_urls" | sed ':loop;s/, */<\/URL><URL>EMIREG:/;t loop'`
+#                emir_urls="<URL>EMIREG:$emir_urls</URL>"
+#                emir_registration="\
+#<InfoRegister xmlns=\"http://www.nordugrid.org/schemas/InfoRegisterConfig/2008\">
+#  <Endpoint>$arex_mount_point</Endpoint>
+#  <Expiration>$emir_validity</Expiration>
+#  <Period>$emir_period</Period>
+#  <Registrar>
+#    $emir_urls
+#    <Retry>10</Retry>
+#    <Endpoint>$arex_mount_point</Endpoint>
+#    <Expiration>$emir_validity</Expiration>
+#    <Period>$emir_period</Period>
+#    <KeyPath>$X509_USER_KEY</KeyPath>
+#    <CertificatePath>$X509_USER_CERT</CertificatePath>
+#    <CACertificatesDir>$X509_CERT_DIR</CACertificatesDir>
+#  </Registrar>
+#</InfoRegister>"
+#            fi
+#        fi
+#    fi
+
+    isis_registration=""
+    if [ ! -z "$arex_mount_point" ]; then
+        isis_urls=`readconfigvar "$ARC_CONFIG" "registration/isis" isisurls`
+        if [ ! -z "$isis_urls" ]; then
+            isis_no_xbes=`readconfigvar "$ARC_CONFIG" "registration/isis" disablereg_xbes`
+            isis_no_emies=`readconfigvar "$ARC_CONFIG" "registration/isis" disablereg_emies`
+            if [ ! "$isis_no_xbes" = "yes" ]; then
+                isis_validity=`readconfigvar "$ARC_CONFIG" "registration/isis" validity`
+                if [ -z "$isis_validity" ]; then isis_validity="600"; fi
+                isis_period=`readconfigvar "$ARC_CONFIG" "registration/isis" period`
+                if [ -z "$isis_period" ]; then isis_period="60"; fi
+                isis_urls=`echo "$isis_urls" | sed ':loop;s/, */<\/URL><URL>ISIS:/;t loop'`
+                isis_urls="<URL>ISIS:$isis_urls</URL>"
+                isis_registration="\
+<InfoRegister xmlns=\"http://www.nordugrid.org/schemas/InfoRegisterConfig/2008\">
+  <Endpoint>$arex_mount_point</Endpoint>
+  <Expiration>$isis_validity</Expiration>
+  <Period>$isis_period</Period>
+  <Registrar>
+    $isis_urls
+    <Retry>10</Retry>
+    <Endpoint>$arex_mount_point</Endpoint>
+    <Expiration>$isis_validity</Expiration>
+    <Period>$isis_period</Period>
+    <KeyPath>$X509_USER_KEY</KeyPath>
+    <CertificatePath>$X509_USER_CERT</CertificatePath>
+    <CACertificatesDir>$X509_CERT_DIR</CACertificatesDir>
+  </Registrar>
+</InfoRegister>"
+            fi
+        fi
+    fi
+
+    infoproviders_timeout=`readconfigvar "$ARC_CONFIG" infosys infoproviders_timeout`
+    if [ -z "$infoproviders_timeout" ]; then
+        infoproviders_wakeup="\
+<arex:InfoproviderWakeupPeriod>600</arex:InfoproviderWakeupPeriod>"
+    else
+        infoproviders_wakeup="\
+<arex:InfoproviderWakeupPeriod>$infoproviders_timeout</arex:InfoproviderWakeupPeriod>"
+    fi
+
+
+    argus_shc=""
+    argus_plugin=""
+
+    arguspep_endpoint=`readconfigvar "$ARC_CONFIG" grid-manager arguspep_endpoint`
+    if [ ! -z "$arguspep_endpoint" ]; then
+      argus_plugin="${argus_plugin}<Plugins><Name>arguspepclient</Name></Plugins>"
+      if [ ! -f "$ARC_LOCATION/lib/arc/libarguspepclient.so" ] && [ ! -f "$ARC_LOCATION/lib64/arc/libarguspepclient.so" ]; then
+        log_failure_msg "Plugin arguspepclient(libarguspepclient.so) not found"
+        log_failure_msg "You may need to install corresponding package"
+        exit 1
+      fi
+      arguspep_profile=`readconfigvar "$ARC_CONFIG" grid-manager arguspep_profile`
+      if [ -z "$arguspep_profile" ]; then arguspep_profile="emi"; fi
+      arguspep_usermap=`readconfigvar "$ARC_CONFIG" grid-manager arguspep_usermap`
+      if [ -z "$arguspep_usermap" ]; then arguspep_usermap="false"; fi
+      if [ "$arguspep_usermap" = "yes" ]; then arguspep_usermap="true"; fi
+      if [ "$arguspep_usermap" = "no" ]; then arguspep_usermap="false"; fi
+      argus_shc="${argus_shc}
+<!-- Perform client authorization and mapping according to Argus through PEP service -->
+<SecHandler name=\"arguspepclient.map\" id=\"arguspep\" event=\"incoming\">
+  <PEPD>$arguspep_endpoint</PEPD>
+  <Conversion>$arguspep_profile</Conversion>
+  <KeyPath>$X509_USER_KEY</KeyPath>
+  <CertificatePath>$X509_USER_CERT</CertificatePath>
+  <CACertificatesDir>$X509_CERT_DIR</CACertificatesDir>
+  <AcceptMapping>$arguspep_usermap</AcceptMapping>
+</SecHandler>"
+    fi
+
+    arguspdp_endpoint=`readconfigvar "$ARC_CONFIG" grid-manager arguspdp_endpoint`
+    if [ ! -z "$arguspdp_endpoint" ]; then
+      argus_plugin="${argus_plugin}<Plugins><Name>arguspdpclient</Name></Plugins>"
+      if [ ! -f "$ARC_LOCATION/lib/arc/libarguspdpclient.so" ] && [ ! -f "$ARC_LOCATION/lib64/arc/libarguspdpclient.so" ]; then
+        log_failure_msg "Plugin arguspdpclient(libarguspdpclient.so) not found"
+        log_failure_msg "You may need to install corresponding package"
+        exit 1
+      fi
+      arguspdp_profile=`readconfigvar "$ARC_CONFIG" grid-manager arguspdp_profile`
+      if [ -z "$arguspdp_profile" ]; then arguspdp_profile="emi"; fi
+      arguspdp_usermap=`readconfigvar "$ARC_CONFIG" grid-manager arguspdp_usermap`
+      if [ -z "$arguspdp_usermap" ]; then arguspdp_usermap="false"; fi
+      if [ "$arguspdp_usermap" = "yes" ]; then arguspdp_usermap="true"; fi
+      if [ "$arguspdp_usermap" = "no" ]; then arguspdp_usermap="false"; fi
+      arguspdp_acceptnotapplicable=`readconfigvar "$ARC_CONFIG" grid-manager arguspdp_acceptnotapplicable`
+      if [ -z "$arguspdp_acceptnotapplicable" ]; then arguspdp_acceptnotapplicable="false"; fi
+      if [ "$arguspdp_acceptnotapplicable" = "yes" ]; then arguspdp_acceptnotapplicable="true"; fi
+      if [ "$arguspdp_acceptnotapplicable" = "no" ]; then arguspdp_acceptnotapplicable="false"; fi
+      argus_shc="${argus_shc}
+<!-- Perform client authorization and mapping according to Argus through PDP service -->
+<SecHandler name=\"arguspdpclient.map\" id=\"arguspdp\" event=\"incoming\">
+  <PDPD>$arguspdp_endpoint</PDPD>
+  <Conversion>$arguspdp_profile</Conversion>
+  <KeyPath>$X509_USER_KEY</KeyPath>
+  <CertificatePath>$X509_USER_CERT</CertificatePath>
+  <CACertificatesDir>$X509_CERT_DIR</CACertificatesDir>
+  <AcceptMapping>$arguspdp_usermap</AcceptMapping>
+  <AcceptNotApplicable>$arguspdp_acceptnotapplicable</AcceptNotApplicable>
+</SecHandler>"
+    fi
+    
+    # cache service
+    cache_service_plexer=""
+    cache_service=""
+    use_cache_service=`readconfigvar "$ARC_CONFIG" grid-manager enable_cache_service`
+    if [ "$use_cache_service" = "yes" ]; then
+        
+        use_dtr=`readconfigvar "$ARC_CONFIG" grid-manager enable_dtr`
+        if [ -z "$arex_mount_point" -o "$use_dtr" = "no" ]; then
+            log_failure_msg "Both DTR and A-REX WS interface must be turned on to use cache service"
+            exit 1
+        fi
+        
+        cache_service_plexer="<next id=\"cacheservice\">^/cacheservice</next>"
+        cache_service="\
+    <Service name=\"cacheservice\" id=\"cacheservice\">\
+      <!-- Do authorization in same way as jobs plugin of gridftpd does -->
+      <!-- Beware of hardcoded block name -->
+      <SecHandler name=\"arc.authz\" event=\"incoming\">
+        <PDP name=\"arclegacy.pdp\">
+          <ConfigBlock>
+            <ConfigFile>$ARC_CONFIG</ConfigFile>
+            <BlockName>gridftpd/jobs</BlockName>
+          </ConfigBlock>
+        </PDP>
+      </SecHandler>
+      <!-- Perform client mapping according to rules of gridftpd -->
+      <SecHandler name=\"arclegacy.map\" event=\"incoming\">
+          <ConfigBlock>
+            <ConfigFile>$ARC_CONFIG</ConfigFile>
+            <BlockName>gridftpd</BlockName>
+          </ConfigBlock>
+      </SecHandler> 
+      <cacheservice:cache>\
+        <cacheservice:config>$ARC_CONFIG</cacheservice:config>\
+        <cacheservice:witharex>true</cacheservice:witharex>\
+      </cacheservice:cache>\
+    </Service>"
+    fi
+    
+    if [ -z "$ALLOWUNKNOWN" ]; then
+        gridmapmatch="\
+<!-- Do initial user filtering by gridmap file -->
+<SecHandler name=\"arc.authz\" event=\"incoming\">
+  <PDP name=\"simplelist.pdp\" location=\"$GRIDMAP\">
+  </PDP>
+</SecHandler>"
+    fi
+
+    AREX_CONFIG=`mktemp -t arex.xml.XXXXXX`
+    if [ -z "$AREX_CONFIG" ] ; then
+        log_failure_msg "Failed to create temporary file"
+        exit 1
+    fi
+
+    CMD="$CMD -c '$AREX_CONFIG'"
+
+    # VOMS_LOCATION
+    VOMS_LOCATION=${VOMS_LOCATION:-@DEFAULT_VOMS_LOCATION@}
+
+    add_library_path "$VOMS_LOCATION"
+    add_library_path "$GLOBUS_LOCATION"
+    if [ "x$LD_LIBRARY_PATH" = "x" ]; then
+        LD_LIBRARY_PATH=$ARC_LOCATION/@libsubdir@
+    else
+        LD_LIBRARY_PATH=$ARC_LOCATION/@libsubdir@:$LD_LIBRARY_PATH
+    fi
+    export LD_LIBRARY_PATH
+
+    if [ "x$PYTHONPATH" = "x" ]; then
+	PYTHONPATH=@PYTHON_SITE_LIB@:@PYTHON_SITE_ARCH@
+    else
+	PYTHONPATH=@PYTHON_SITE_LIB@:@PYTHON_SITE_ARCH@:${PYTHONPATH}
+    fi
+    export PYTHONPATH
+
+    case "$LOGLEVEL" in 
+        0) LOGLEVEL="FATAL" ;;
+        1) LOGLEVEL="ERROR" ;;
+        2) LOGLEVEL="WARNING" ;;
+        3) LOGLEVEL="INFO" ;;
+        4) LOGLEVEL="VERBOSE" ;;
+        5) LOGLEVEL="DEBUG" ;;
+        *) LOGLEVEL="WARNING" ;;
+    esac
+
+    if [ "$USERNAME" = "root" ] ; then
+        USERNAME=""
+    fi
+    if [ "$GROUPNAME" = "root" ] ; then
+        GROUPNAME=""
+    fi
+
+    LOGFILE=${LOGFILE:-/var/log/arc/grid-manager.log}
+    if [ ! -d `dirname $LOGFILE` ]; then
+        mkdir -p `dirname $LOGFILE`
+    fi
+    WSLOGFILE=${WSLOGFILE:-/var/log/arc/ws-interface.log}
+    if [ ! -d `dirname $WSLOGFILE` ]; then
+        mkdir -p `dirname $WSLOGFILE`
+    fi
+    LOGSIZE=${LOGSIZE:--1 -1}
+    LOGNUM=`echo "$LOGSIZE" | sed 's/^ *[-+0-9]* *//'`
+    LOGSIZE=`echo "$LOGSIZE" | sed 's/^ *\([-+0-9]*\).*/\1/'`
+    LOGREOPEN=${LOGREOPEN:-no}
+    if [ "$LOGREOPEN" = "yes" ] ; then
+        LOGREOPEN="true"
+    else
+        LOGREOPEN="false"
+    fi
+    WATCHDOG=${WATCHDOG:-no}
+    if [ "$WATCHDOG" = "yes" ] ; then
+        WATCHDOG="true"
+    else
+        WATCHDOG="false"
+    fi
+    VOMS_PROCESSING=${VOMS_PROCESSING:-standard}
+    MAX_JOB_CONTROL_REQUESTS=${MAX_JOB_CONTROL_REQUESTS:-100}
+    MAX_INFOSYS_REQUESTS=${MAX_INFOSYS_REQUESTS:-1}
+    MAX_DATA_TRANSFER_REQUESTS=${MAX_DATA_TRANSFER_REQUESTS:-100}
+    if [ ! -z "$USERNAME" ] ; then
+        CMD="$CMD -u '$USERNAME'"
+    fi
+    if [ ! -z "$GROUPNAME" ] ; then
+        CMD="$CMD -g '$GROUPNAME'"
+    fi
+
+    # A-Rex without WS interface
+    AREXCFG="\
+<?xml version=\"1.0\"?>
+<ArcConfig
+  xmlns=\"http://www.nordugrid.org/schemas/ArcConfig/2007\"
+  xmlns:arex=\"http://www.nordugrid.org/schemas/a-rex/Config\">
+  <Server>
+    <PidFile>$PID_FILE</PidFile>
+    <Logger>
+      <File>$LOGFILE</File>
+      <Level>$LOGLEVEL</Level>
+      <Backups>$LOGNUM</Backups>
+      <Maxsize>$LOGSIZE</Maxsize>
+      <Reopen>$LOGREOPEN</Reopen>
+    </Logger>
+    <Watchdog>$WATCHDOG</Watchdog>
+  </Server>
+  <ModuleManager>
+    <Path>$ARC_LOCATION/@pkglibsubdir@/</Path>
+  </ModuleManager>
+  <Plugins><Name>arex</Name></Plugins>
+  <Chain>
+    <Service name=\"a-rex\" id=\"a-rex\">
+      <arex:gmconfig>$ARC_CONFIG</arex:gmconfig>
+      $infoproviders_wakeup
+    </Service>
+  </Chain>
+</ArcConfig>
+"
+
+    # A-Rex with WS interface over HTTPS
+    AREXCFGWSS="\
+<?xml version=\"1.0\"?>
+<ArcConfig
+  xmlns=\"http://www.nordugrid.org/schemas/ArcConfig/2007\"
+  xmlns:tcp=\"http://www.nordugrid.org/schemas/ArcMCCTCP/2007\"
+  xmlns:arex=\"http://www.nordugrid.org/schemas/a-rex/Config\">
+  <Server>
+    <PidFile>$PID_FILE</PidFile>
+    <Logger>
+      <File>$LOGFILE</File>
+      <File>$WSLOGFILE</File>
+      <Level>$LOGLEVEL</Level>
+      <Backups>$LOGNUM</Backups>
+      <Maxsize>$LOGSIZE</Maxsize>
+      <Reopen>$LOGREOPEN</Reopen>
+    </Logger>
+    <Watchdog>$WATCHDOG</Watchdog>
+  </Server>
+  <ModuleManager>
+    <Path>$ARC_LOCATION/@pkglibsubdir@/</Path>
+  </ModuleManager>
+  <Plugins><Name>mcctcp</Name></Plugins>
+  <Plugins><Name>mcctls</Name></Plugins>
+  <Plugins><Name>mcchttp</Name></Plugins>
+  <Plugins><Name>mccsoap</Name></Plugins>
+  <Plugins><Name>arex</Name></Plugins>
+  <Plugins><Name>identitymap</Name></Plugins>
+  <Plugins><Name>arcshc</Name></Plugins>
+  <Plugins><Name>arcshclegacy</Name></Plugins>
+  $argus_plugin
+  <Chain>
+    <Component name=\"tcp.service\" id=\"tcp\">
+      <next id=\"tls\"/>
+      <tcp:Listen><tcp:Port>$arex_port</tcp:Port></tcp:Listen>
+    </Component>
+    <Component name=\"tls.service\" id=\"tls\">
+      <next id=\"http\"/>
+      <KeyPath>$X509_USER_KEY</KeyPath>
+      <CertificatePath>$X509_USER_CERT</CertificatePath>
+      <CACertificatesDir>$X509_CERT_DIR</CACertificatesDir>
+      $VOMS_TRUST_CHAINS
+      <VOMSProcessing>$VOMS_PROCESSING</VOMSProcessing>
+      $gridmapmatch
+      <!-- Do initial identity mappping by gridmap file -->
+      <SecHandler name=\"identity.map\" id=\"map\" event=\"incoming\">
+        <PDP name=\"allow.pdp\"><LocalList>$GRIDMAP</LocalList></PDP>
+        <PDP name=\"allow.pdp\"><LocalName>nobody</LocalName></PDP>
+      </SecHandler>
+      <!-- Match client to legacy authorization groups -->
+      <SecHandler name=\"arclegacy.handler\" event=\"incoming\">
+        <ConfigFile>$ARC_CONFIG</ConfigFile>
+      </SecHandler>
+    </Component>
+    <Component name=\"http.service\" id=\"http\">
+      <next id=\"soap\">POST</next>
+      <next id=\"plexer\">GET</next>
+      <next id=\"plexer\">PUT</next>
+      <next id=\"plexer\">HEAD</next>
+    </Component>
+    <Component name=\"soap.service\" id=\"soap\">
+      <next id=\"plexer\"/>
+    </Component>
+    <Plexer name=\"plexer.service\" id=\"plexer\">
+      <next id=\"a-rex\">^/$arex_path</next>
+      $cache_service_plexer
+    </Plexer>
+    <Service name=\"a-rex\" id=\"a-rex\">
+      <!-- Do authorization in same way as jobs plugin of gridftpd does -->
+      <!-- Beware of hardcoded block name -->
+      <SecHandler name=\"arc.authz\" event=\"incoming\">
+        <PDP name=\"arclegacy.pdp\">
+          <ConfigBlock>
+            <ConfigFile>$ARC_CONFIG</ConfigFile>
+            <BlockName>gridftpd/jobs</BlockName>
+          </ConfigBlock>
+        </PDP>
+      </SecHandler>
+      <!-- Perform client mapping according to rules of gridftpd -->
+      <SecHandler name=\"arclegacy.map\" event=\"incoming\">
+          <ConfigBlock>
+            <ConfigFile>$ARC_CONFIG</ConfigFile>
+            <BlockName>gridftpd</BlockName>
+          </ConfigBlock>
+      </SecHandler>
+      $argus_shc
+      $arex_endpoint
+      $enable_emies_interface
+      $emir_registration
+      $isis_registration
+      <arex:gmconfig>$ARC_CONFIG</arex:gmconfig>
+      <arex:InfosysInterfaceMaxClients>$MAX_INFOSYS_REQUESTS</arex:InfosysInterfaceMaxClients>
+      $infoproviders_wakeup
+      <arex:JobControlInterfaceMaxClients>$MAX_JOB_CONTROL_REQUESTS</arex:JobControlInterfaceMaxClients>
+      <arex:DataTransferInterfaceMaxClients>$MAX_DATA_TRANSFER_REQUESTS</arex:DataTransferInterfaceMaxClients>
+    </Service>
+    $cache_service
+  </Chain>
+</ArcConfig>
+"
+
+    if [ -z "$arex_proto" ] ; then
+        echo "$AREXCFG" > "$AREX_CONFIG"
+    elif [ "$arex_proto" = "https" ] ; then
+        echo "$AREXCFGWSS" > "$AREX_CONFIG"
+    else
+        log_failure_msg "Unsupported protocol: $arex_proto"
+        exit 1
+    fi
+
+    if [ ! -z "$USERNAME" ] ; then
+        [ -f $AREX_CONFIG ] && chown $USERNAME $AREX_CONFIG
+    fi
+}
+
+validate() {
+    CHECK_CMD=$ARC_LOCATION/@pkglibexecsubdir@/arc-config-check
+    if [ ! -x $CHECK_CMD ]; then
+        log_failure_msg "Could not find or execute arc-config-check tool"
+        return 1
+    fi
+    eval "$CHECK_CMD --config $ARC_CONFIG"
+    RETVAL=$?
+    return $RETVAL
+}
+
+start() {
+    if [ "$RUN" != "yes" ] ; then
+        echo "a-rex disabled, please adjust the configuration to your needs "
+        echo "and then set RUN to 'yes' in /etc/default/a-rex to enable it."
+        return 0
+    fi
+
+    echo -n "Starting $prog: "
+
+    # Check if we are already running
+    if [ -f $PID_FILE ]; then
+        read pid < $PID_FILE
+        if [ "x$pid" != "x" ]; then
+            ps -p "$pid" -o comm 2>/dev/null | grep "^$prog$" 1>/dev/null 2>/dev/null
+            if [ $? -eq 0 ] ; then
+                log_success_msg "already running (pid $pid)"
+                return 0
+            fi
+        fi
+        rm -f "$PID_FILE" "$LOCKFILE"
+    fi
+
+    prepare
+
+    # If specified in configuration mount remote session/runtime directory using SSHFS.
+    REMOTE_HOST=`readconfigvar "$ARC_CONFIG" grid-manager remote_host`
+    if test "x$REMOTE_HOST" != "x"; then
+	mount_sshfs session
+	if [ $? != 0 ]; then
+	    log_failure_msg "unable to mount remote session directory"
+	    return $?
+	fi
+	mount_sshfs runtime
+	if [ $? != 0 ]; then
+	    log_failure_msg "unable to mount remote runtime directory"
+	    return $?
+	fi
+    fi
+
+    eval "$CMD"
+    RETVAL=$?
+    rm -f "$AREX_CONFIG"
+
+    if [ $RETVAL -eq 0 ]; then
+        touch $LOCKFILE
+        log_success_msg
+    else
+        log_failure_msg
+    fi
+    return $RETVAL
+}
+
+stop() {
+    echo -n "Stopping $prog: "
+
+    if [ -f "$PID_FILE" ]; then
+        read pid < "$PID_FILE"
+        if [ ! -z "$pid" ] ; then
+            if [ "x$1" != "x" ]; then
+                # kill whole process group on force-kill
+                kill -TERM "-$pid"
+            else
+                kill "$pid"
+            fi
+            RETVAL=$?
+            if [ $RETVAL -eq 0 ]; then
+                log_success_msg
+            else
+                log_failure_msg
+            fi
+      
+            timeout=180; # for stopping nicely
+            if [ "x$1" != "x" ]; then
+                timeout=1 # 1 second for force-kill
+            fi
+            
+            while ( ps -p "$pid" -o comm 2>/dev/null | grep "^$prog$" 1>/dev/null 2>/dev/null ) && [ $timeout -ge 1 ] ; do
+                sleep 1
+                timeout=$(($timeout - 1))
+            done
+
+            [ $timeout -lt 1 ] && kill -9 "$pid" 1>/dev/null 2>&1
+            rm -f "$PID_FILE" "$LOCKFILE"
+        else
+            RETVAL=1
+            log_failure_msg "$prog shutdown - pidfile is empty"
+        fi
+    else
+        RETVAL=0
+        log_success_msg "$prog shutdown - already stopped"
+    fi
+
+    # If specified in configuration and if mounted,
+    # unmount remote session, runtime and cache directories.
+    REMOTE_HOST=`readconfigvar "$ARC_CONFIG" grid-manager remote_host`
+    if test "x${REMOTE_HOST}" != "x"; then
+	SESSIONDIR=`readconfigvar "$ARC_CONFIG" grid-manager sessiondir`
+	if mount | grep ${SESSIONDIR} > /dev/null; then
+            timeout 10 fusermount -u ${SESSIONDIR} > /dev/null
+	    if [ $? != 0 ]; then
+		log_failure_msg "sshfs sessiondir unmount - timeout"
+	    else
+	        # restore write mode
+		chmod 775 ${SESSIONDIR}
+	        # restore content of sessiondir
+		if [ -d ${SESSIONDIR}.0 ]; then
+		    cp -ru ${SESSIONDIR}.0/* ${SESSIONDIR}/. && \
+			rm -r ${SESSIONDIR}.0
+		fi
+	    fi
+	fi
+	RUNTIMEDIR=`readconfigvar "$ARC_CONFIG" grid-manager runtimedir`
+	REMOTEDIR=`readconfigvar "$ARC_CONFIG" grid-manager remote_runtimedir`
+	if [ ! -z $REMOTEDIR ] && [ "$(mount | grep ${RUNTIMEDIR})" ]; then
+            timeout 10 fusermount -u ${RUNTIMEDIR} > /dev/null
+	    if [ $? != 0 ]; then
+		log_failure_msg "sshfs runtimedir unmount - timeout"
+	    else
+	        # restore write mode
+		chmod 755 ${RUNTIMEDIR}
+	        # restore content of runtimedir
+		if [ -d ${RUNTIMEDIR}.0 ]; then
+		    cp -ru ${RUNTIMEDIR}.0/* ${RUNTIMEDIR}/. && \
+			rm -r ${RUNTIMEDIR}.0
+		fi
+	    fi
+	fi 
+    fi
+    return $RETVAL
+}
+
+status() {
+    if [ -f "$PID_FILE" ]; then
+        read pid < "$PID_FILE"
+        if [ "$pid" != "" ]; then
+            if ps -p "$pid" > /dev/null; then
+                echo "$1 (pid $pid) is running..."
+                return 0
+            fi
+            echo "$1 stopped but pid file exists"
+            return 1
+        fi
+    fi
+    if [ -f $LOCKFILE ]; then
+        echo "$1 stopped but lockfile exists"
+        return 2
+    fi
+    echo "$1 is stopped"
+    return 3
+}
+
+restart() {
+    stop
+    start
+}
+
+ 
+mount_sshfs() {
+    # Read from arc.conf
+    REMOTE_HOST=`readconfigvar "$ARC_CONFIG" grid-manager remote_host`
+    REMOTE_USER=`readconfigvar "$ARC_CONFIG" grid-manager remote_user`
+    GRIDMAP=`readconfigvar "$ARC_CONFIG" common gridmap`
+    # Get user and group id and save to mapfiles
+    user=($(echo `head -1 $GRIDMAP | cut -d '"' -f 3`))
+    UIDF=/tmp/${user}.uidfile
+    GIDF=/tmp/${user}.gidfile
+    if [ ! -f $UIDF ] || [ ! -f $GIDF ]; then
+	read -ra ID <<< `ssh ${REMOTE_USER}@${REMOTE_HOST} "id -u; id -g"`
+	if [ ! -f $UIDF ]; then
+	    echo "${user}:${ID[0]}" > $UIDF
+	fi
+	if [ ! -f $GIDF ]; then
+	    echo "`id -g -n ${user}`:${ID[1]}" > $GIDF
+	fi
+    fi
+
+    case "$1" in
+	session)
+	    LOCALDIR=`readconfigvar "$ARC_CONFIG" grid-manager sessiondir`
+	    REMOTEDIR=`readconfigvar "$ARC_CONFIG" grid-manager remote_sessiondir`
+	    if [ -z REMOTEDIR ]; then
+		log_failure_msg "remote session directory not set in arc.conf"    
+		return 1;
+	    fi
+	    ;;
+	runtime)
+	    LOCALDIR=`readconfigvar "$ARC_CONFIG" grid-manager runtimedir`
+	    REMOTEDIR=`readconfigvar "$ARC_CONFIG" grid-manager remote_runtimedir`
+	    ;;
+	*)
+	    return 0
+    esac
+    
+    if [ -z ${LOCALDIR} ] || [ -z ${REMOTEDIR} ]; then
+	return 0;
+    fi
+    if [ "$(mount | grep ${LOCALDIR})" ]; then
+	echo "${LOCALDIR} is already mounted"
+	return 0
+    fi
+
+    # TODO: is this safe? What if LOCALDIR is busy?
+    # Save and clean
+    if [ "$(ls -A ${LOCALDIR})" ]; then
+	mkdir -p ${LOCALDIR}.0
+	echo && echo "INFO: copying content of ${LOCALDIR} to ${LOCALDIR}.0 ... "
+	cp -ru ${LOCALDIR}/* ${LOCALDIR}.0/. && \
+	    echo "rm -r ${LOCALDIR}" && \
+	    rm -Ir ${LOCALDIR}
+	mkdir -p ${LOCALDIR}
+    fi
+
+    # In case of bad disconnect, unmount before remount
+    fusermount -u ${LOCALDIR} 2>/dev/null 
+    # Make mount point read-only to prevent grid-manager from writing to
+    # directory if SSHFS breaks
+    chmod 555 ${LOCALDIR}
+    sshfs -o allow_other,idmap=file,uidfile=$UIDF,gidfile=$GIDF,ConnectTimeout=10 \
+	${REMOTE_USER}@${REMOTE_HOST}:${REMOTEDIR} ${LOCALDIR}
+    res=$?
+    # If other error than timeout
+    if [ ! $res = 0 ] && [ ! $res = 124 ]; then
+	sleep 10
+    fi
+    return $res
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        status $prog
+        ;;
+    restart | force-reload)
+        restart
+        ;;
+    reload)
+        ;;
+    condrestart | try-restart)
+        [ -f $LOCKFILE ] && restart || :
+        ;;
+          force-kill)
+        stop 1
+        ;;
+    validate)
+	validate
+	;;
+    mount-sshfs)
+	mount_sshfs $2
+	;;
+    *)
+        echo "Usage: $0 {start|stop|status|restart|force-reload|reload|condrestart|try-restart|force-kill|validate|mount-sshfs}"
+        exit 1
+        ;;
+esac
+
+exit $?

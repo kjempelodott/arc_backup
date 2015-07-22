@@ -1,0 +1,2702 @@
+#                                               -*- Autoconf -*-
+# Process this file with autoconf to produce a configure script.
+
+AC_PREREQ(2.56)
+AC_INIT([nordugrid-arc],m4_normalize(m4_include(VERSION)),[http://bugzilla.nordugrid.org/])
+
+dnl serial-tests is not recognized before 1.12, and required after 1.13
+m4_define([serial_tests], [
+    m4_esyscmd([case `${AUTOMAKE:-automake} --version | head -n 1` in
+      *1.11.*|*1.10.*|*1.9.*);;
+      *) echo serial-tests;;
+      esac])
+])
+
+AM_INIT_AUTOMAKE([foreign 1.9 tar-pax] serial_tests)
+AC_CONFIG_SRCDIR([Makefile.am])
+AC_CONFIG_HEADERS([config.h])
+
+baseversion=`echo $VERSION | sed 's/[[^0-9.]].*//'`
+preversion=`echo $VERSION | sed 's/^[[0-9.]]*//'`
+
+if test "x$baseversion" = "x" ; then
+   baseversion=$VERSION
+   preversion=""
+fi
+
+if test "x$preversion" = "x" ; then
+   fedorarelease="1"
+   fedorasetupopts="-q"
+   debianversion="$baseversion"
+else
+   fedorarelease="0.$preversion"
+   fedorasetupopts="-q -n %{name}-%{version}$preversion"
+   debianversion="$baseversion~$preversion"
+fi
+
+AC_SUBST(baseversion)
+AC_SUBST(preversion)
+AC_SUBST(fedorarelease)
+AC_SUBST(fedorasetupopts)
+AC_SUBST(debianversion)
+
+# This macro was introduced in autoconf 2.57g? but we currently only require 2.56
+m4_ifdef([AC_CONFIG_MACRO_DIR], [AC_CONFIG_MACRO_DIR([m4])])
+
+m4_pattern_allow([AC_PATH_PROG])
+m4_pattern_allow([AC_MSG_WARN])
+
+AC_PROG_CXX
+AC_PROG_CC_STDC
+AC_PROG_CPP
+AC_GNU_SOURCE
+AC_PROG_AWK
+AC_PROG_INSTALL
+AC_PROG_LN_S
+AC_PROG_MAKE_SET
+AC_DISABLE_STATIC
+AC_LIBTOOL_WIN32_DLL
+AM_PROG_LIBTOOL
+
+AC_CHECK_PROG(PERL, perl, perl, :)
+
+# EL-5 compatibility.  $(mkdir_p) is now obsolete.
+test -n "$MKDIR_P" || MKDIR_P="$mkdir_p"
+AC_SUBST([MKDIR_P])
+
+dnl --with-docdir since older autoconf (<2.60) does not support --docdir
+AC_ARG_WITH([docdir],
+AC_HELP_STRING([--with-docdir=DIR],
+  [Install documentation in DIR [[default: ${datadir}/doc]]]),
+  [case $withval in
+    yes|no)
+      AC_MSG_ERROR([Invalid DIR])
+      ;;
+    *)
+      docdir="$withval"
+      ;;
+  esac
+],
+[
+  if test -z "$docdir"; then
+    docdir='${datadir}/doc/${PACKAGE}'
+  fi
+])
+AC_SUBST(docdir)
+
+# Use arc for "pkgdir" instead of nordugrid-arc (@PACKAGE@)
+pkgdatadir='${datadir}/arc'
+pkgincludedir='${includedir}/arc'
+pkglibdir='${libdir}/arc'
+pkglibexecdir='${libexecdir}/arc'
+
+AC_SUBST(pkgdatadir)
+AC_SUBST(pkgincludedir)
+AC_SUBST(pkglibdir)
+AC_SUBST(pkglibexecdir)
+
+ARC_API
+
+AC_ARG_WITH(sysv-scripts-location,
+  AC_HELP_STRING([--with-sysv-scripts-location=<PATH>], [Location of the SYSV init scripts. [[autodetect]]]),
+  [ initddir="$withval" ],
+  [
+    initddir=
+    case "${host}" in
+      *linux* | *kfreebsd* | *gnu* )
+        for i in init.d rc.d/init.d rc.d; do
+          if test -d "/etc/$i" -a ! -h "/etc/$i" ; then
+            initddir="$sysconfdir/$i"
+            break
+          fi
+        done
+
+        if test -z "$initddir"; then
+          AC_MSG_WARN(could not find a suitable location for the SYSV init scripts - not installing)
+        fi
+        ;;
+    esac
+  ]
+)
+AM_CONDITIONAL([SYSV_SCRIPTS_ENABLED],[test "x$initddir" != "x"])
+AC_MSG_RESULT($initddir)
+AC_SUBST(initddir)
+
+ARC_RELATIVE_PATHS
+
+AC_ARG_WITH(cron-scripts-prefix,
+  AC_HELP_STRING([--with-cron-scripts-prefix=<PATH>], [Specify the location of the cron directory. [[SYSCONFDIR/cron.d]]]),
+  [ cronddir="$withval" ],
+  [ cronddir="$sysconfdir/cron.d" ]
+)
+AC_SUBST(cronddir)
+
+# gettext
+AM_GNU_GETTEXT([external])
+# Using Autoconf 2.60 or later you will get a warning during configure:
+#  config.status: WARNING:  'po/Makefile.in.in' seems to ignore the --datarootdir setting
+# This warning can be removed by bumping the gettext version requirement below from 0.12 to at least 0.15
+# See more: info Autoconf "Changed Directory Variables"
+AM_GNU_GETTEXT_VERSION([0.12])
+[[ -r $srcdir/po/POTFILES.in ]] || touch $srcdir/po/POTFILES.in
+
+# Portable 64bit file offsets
+AC_SYS_LARGEFILE
+
+# pkg-config needed for many checks
+AC_PATH_TOOL(PKG_CONFIG, pkg-config, no)
+if test "x$PKG_CONFIG" = "xno"; then
+        AC_MSG_ERROR([ *** pkg-config not found])
+else
+        pkgconfigdir=${libdir}/pkgconfig
+        AC_SUBST(pkgconfigdir)
+fi
+
+# Default enable/disable switches
+#  Features
+enables_ldap=yes
+enables_mysql=no
+enables_swig_python=yes
+enables_swig_java=yes
+# Features directly related to components
+enables_cppunit=yes
+enables_java=yes
+enables_junit=yes
+enables_python=yes
+enables_altpython=yes
+enables_pylint=yes
+enables_mock_dmc=no
+enables_gfal=no
+enables_xrootd=yes
+enables_argus=no
+enables_xmlsec1=yes
+enables_dbjstore=yes
+#  Libraries and plugins
+# Currently no fine-grained choice is supported.
+# Also this variable is used to check if source
+# build is needed at all because no component can
+# be built without HED.
+enables_hed=yes
+#  Services
+enables_a_rex_service=yes
+enables_gridftpd_service=yes
+enables_ldap_service=yes
+enables_giis_service=yes
+enables_cache_service=yes
+enables_datadelivery_service=yes
+enables_ldap_monitor=yes
+enables_ws_monitor=yes
+#  Clients
+enables_compute_client=yes
+enables_credentials_client=yes
+enables_echo_client=yes
+enables_data_client=yes
+enables_jura_client=yes
+enables_saml_client=yes
+enables_wsrf_client=yes
+enables_unicore_client=no
+enables_emies_client=yes
+#  Documentation
+enables_doc=yes
+# ACIX cache index
+enables_acix=yes
+# SSH (Python paramiko)
+enables_ssh=no
+
+# Handle group enable/disable switches
+AC_ARG_ENABLE(all, AC_HELP_STRING([--disable-all], [disables all buildable components. Can be overwritten with --enable-* for group or specific component. It is also possible to use --enable-all to overwrite defaults.]),
+[
+enables_a_rex_service=$enableval
+enables_gridftpd_service=$enableval
+enables_ldap_service=$enableval
+enables_giis_service=$enableval
+enables_ldap_monitor=$enableval
+enables_ws_monitor=$enableval
+enables_cache_service=$enableval
+enables_datadelivery_service=$enableval
+enables_compute_client=$enableval
+enables_credentials_client=$enableval
+enables_echo_client=$enableval
+enables_data_client=$enableval
+enables_jura_client=$enableval
+enables_saml_client=$enableval
+enables_wsrf_client=$enableval
+enables_unicore_client=$enableval
+enables_emies_client=$enableval
+enables_hed=$enableval
+enables_java=$enableval
+enables_junit=$enableval
+enables_python=$enableval
+enables_altpython=$enableval
+enables_pylint=$enableval
+enables_mock_dmc=$enableval
+enables_gfal=$enableval
+enables_xrootd=$enableval
+enables_xmlsec1=$enableval
+enables_argus=$enableval
+enables_cppunit=$enableval
+enables_doc=$enableval
+enabled_acix=$enableval
+enables_ssh=$enableval
+enables_dbjstore=$enableval
+],
+[])
+
+AC_ARG_ENABLE(all-clients, AC_HELP_STRING([--disable-all-clients], [disables all buildable client components. Can be overwritten with --enable-* for specific component. It is also possible to use --enable-all-clients to overwrite defaults and --enable-all.]),
+[
+enables_compute_client=$enableval
+enables_credentials_client=$enableval
+enables_echo_client=$enableval
+enables_data_client=$enableval
+enables_jura_client=$enableval
+enables_saml_client=$enableval
+enables_wsrf_client=$enableval
+enables_unicore_client=$enableval
+enables_emies_client=$enableval
+enables_doc=$enableval
+],
+[])
+
+AC_ARG_ENABLE(all-data-clients, AC_HELP_STRING([--disable-all-data-clients], [disables all buildable client components providing data handling abilities. Can be overwritten with --enable-* for specific component. It is also possible to use --enable-all-data-clients to overwrite defaults, --enable-all and --enable-all-clients.]),
+[
+enables_data_client=$enableval
+],
+[])
+
+AC_ARG_ENABLE(all-services, AC_HELP_STRING([--disable-all-services], [disables all buildable service componets. Can be overwritten with --enable-* for specific component. It is also possible to use --enable-all-services to overwrite defaults and --enable-all.]),
+[
+enables_a_rex_service=$enableval
+enables_gridftpd_service=$enableval
+enables_ldap_service=$enableval
+enables_giis_service=$enableval
+enables_ldap_monitor=$enableval
+enables_cache_service=$enableval
+enables_datadelivery_service=$enableval
+enabled_acix=$enableval
+],
+[])
+
+
+# Be pedantic about compiler warnings.
+AC_ARG_ENABLE(pedantic-compile, AC_HELP_STRING([--enable-pedantic-compile], [add pedantic compiler flags]),
+[enables_pedantic_compile="yes"], [enables_pedantic_compile="no"])
+if test "x$enables_pedantic_compile" = "xyes"; then
+  # This check need to be enhanced. It won't work in case of cross-compilation
+  # and if path to compiler is explicitly specified.
+  if test x"$CXX" = x"g++"; then
+    # GNU C/C++ flags
+    AM_CXXFLAGS="-Wall -Wextra -Werror -Wno-sign-compare -Wno-unused"
+    SAVE_CPPFLAGS=$CPPFLAGS
+    AC_LANG_SAVE
+    AC_LANG_CPLUSPLUS
+    CPPFLAGS="$CPPFLAGS -Wno-unused-result"
+    AC_TRY_COMPILE([],[], [
+        AM_CXXFLAGS="$AM_CXXFLAGS -Wno-unused-result"
+      ], [
+        AC_MSG_NOTICE([compilation flag -Wno-unused-result is not supported])
+      ]
+    )
+    AC_LANG_RESTORE
+    CPPFLAGS=$SAVE_CPPFLAGS
+  else
+    # TODO: set generic flags for generic compiler
+    AM_CXXFLAGS=""
+  fi
+  AC_SUBST(AM_CXXFLAGS)
+fi
+AM_CONDITIONAL([PEDANTIC_COMPILE], [test "x$enables_pedantic_compile" = "xyes"])
+
+
+# Enable/disable switches for third-party.
+
+#  Swig
+AC_ARG_ENABLE(swig-python, AC_HELP_STRING([--disable-swig-python], [disable SWIG python bindings]),
+[enables_swig_python=$enableval],[])
+AC_ARG_ENABLE(swig-java, AC_HELP_STRING([--disable-swig-java], [disable SWIG java bindings]),
+[enables_swig_java=$enableval],[])
+AC_ARG_ENABLE(swig, AC_HELP_STRING([--disable-swig], [disable all bindings through SWIG]),
+[enables_swig_python=$enableval
+ enables_swig_java=$enableval],[])
+if test "$enables_swig_python" = "yes" || test "$enables_swig_java" = "yes"; then
+  AC_CHECK_PROGS(SWIG, swig)
+  if test "x$SWIG" = "x"; then
+    enables_swig="no"
+  else
+    swigver=`$SWIG -version 2>&1 | grep Version | sed 's/.* //'`
+    swigver1=`echo $swigver | cut -d. -f1`
+    swigver2=`echo $swigver | cut -d. -f2`
+    swigver3=`echo $swigver | cut -d. -f3`
+    if test $swigver1 -lt 1 || ( test $swigver1 -eq 1 && ( \
+       test $swigver2 -lt 3 || ( test $swigver2 -eq 3 && ( \
+       test $swigver3 -lt 25 ) ) ) ) ; then
+      AC_MSG_NOTICE([swig is too old (< 1.3.25)])
+      SWIG=""
+      enables_swig="no"
+    elif test $swigver1 -eq 1 && test $swigver2 -eq 3 && test $swigver3 -eq 38 ; then
+      AC_MSG_NOTICE([swig version 1.3.38 has bug which prevents it from being used for this software. Please upgrade or downgrade.])
+      SWIG=""
+      enables_swig="no"
+    else
+      SWIG2="no"
+      if test $swigver1 -ge 2
+      then
+        SWIG2="yes"
+      fi
+      AC_SUBST(SWIG2)
+      SWIG_PYTHON_NAMING="SwigPy"
+      # In SWIG version 1.3.37 naming was changed from "PySwig" to "SwigPy".
+      if test $swigver1 -lt 1 || ( test $swigver1 -eq 1 && ( \
+         test $swigver2 -lt 3 || ( test $swigver2 -eq 3 && ( \
+         test $swigver3 -lt 37 ) ) ) ) ; then
+        SWIG_PYTHON_NAMING="PySwig"
+      fi
+      AC_SUBST(SWIG_PYTHON_NAMING)
+    fi
+  fi
+else
+  SWIG=""
+fi
+AM_CONDITIONAL([SWIG_ENABLED],[test "x$enables_swig" = "xyes"])
+
+AC_ARG_ENABLE(hed, AC_HELP_STRING([--disable-hed], [disable building HED libraries and plugins. Do not do that unless You do not want to build anything. Even in that case better use --disable-all.]),
+[enables_hed=$enableval],[])
+
+#  Java
+dnl Check if Java is explicitly disabled.
+if test "$enables_hed" = "yes"; then
+JAVAC_FLAGS=
+JDK_CFLAGS=
+AC_ARG_ENABLE(java, AC_HELP_STRING([--disable-java], [disable Java components]),
+[enables_java=$enableval
+ enables_swig_java=$enableval],[])
+if test "$enables_java" = "yes"; then
+  AC_ARG_WITH(jdk, AC_HELP_STRING([--with-jdk=(JDK)], [path to JDK. If unset the system JDK will be used]))
+
+  JPATH=
+  if test "x$with_jdk" != "x"; then
+    # User specified JDK!
+    JPATH=$with_jdk
+  else
+    # Look for system JDK.
+    for i in /usr/lib/jvm/java-*-openjdk* /usr/lib/jvm/java-*-icedtea* /usr/lib/jvm/java-*-gcj* /usr/lib/jvm/java-*-sun* /usr/lib/gcc/*-redhat-linux/*; do
+      if test -f $i/include/jni.h; then
+        JPATH=$i
+        break
+      fi
+    done
+  fi
+
+  if test "x$JPATH" != "x"; then
+    JDK_CFLAGS="-I$JPATH/include"
+
+    # Any extra includes? Look for them.
+    JAVA_EXTRA_INCLUDE=
+    case "${host}" in
+      *-pc-mingw32 | *-pc-cygwin)
+        JAVA_EXTRA_INCLUDE="win32"
+        ;;
+      *linux* | *kfreebsd* | *gnu* )
+        JAVA_EXTRA_INCLUDE="linux"
+        ;;
+      *solaris*)
+        JAVA_EXTRA_INCLUDE="solaris"
+        ;;
+    esac
+    if test "x$JAVA_EXTRA_INCLUDE" != "x" && test -d $JPATH/include/$JAVA_EXTRA_INCLUDE; then
+      JDK_CFLAGS="$JDK_CFLAGS $JDK_CFLAGS/$JAVA_EXTRA_INCLUDE"
+    fi
+
+    SAVE_CPPFLAGS=$CPPFLAGS
+    CPPFLAGS="$CPPFLAGS $JDK_CFLAGS"
+    AC_CHECK_HEADERS(jni.h,[jni_h="yes"],[jni_h="no"])
+    CPPFLAGS=$SAVE_CPPFLAGS
+
+    AC_PATH_PROGS(JAVA, java gij, , $JPATH/bin:/usr/bin)
+    AC_PATH_PROGS(JAVAC, javac gcj ecj, , $JPATH/bin:/usr/bin)
+    AC_PATH_PROGS(JAR, fastjar jar, , $JPATH/bin:/usr/bin)
+    break
+  fi
+
+  if test "x$with_jdk" = "x" && test "x$JDK_CFLAGS" = "x"; then
+    # If JDK was not found in any of the above locations try system locations.
+    AC_CHECK_HEADERS(jni.h JavaVM/jni.h,[jni_h="yes"; break],[jni_h="no"])
+    AC_CHECK_PROGS(JAVA, java gij)
+    AC_CHECK_PROGS(JAVAC, javac gcj ecj)
+    AC_CHECK_PROGS(JAR, fastjar jar)
+  fi
+
+  # Set absolute limit on Java heap size allocation instead of letting
+  # the java virtual machine and compiler (on Linux) allocate a quarter
+  # of the total memory.
+  JAVA_VM_FLAGS="-Xms50M -Xmx50M"
+  JAVAC_VM_FLAGS="-J-Xms50M -J-Xmx50M"
+
+  JAR_JFLAGS=""
+  # Old versions of fastjar does not ignore -J options
+  if test "x$JAR" != "x" && test "x`basename $JAR`" = "xjar"; then
+      JAR_JFLAGS="$JAVAC_VM_FLAGS"
+  fi
+
+  if test "x$JAVAC" != "x" && test "x`basename $JAVAC`" = "xgcj"; then
+    JAVAC_FLAGS="-C -fsource=1.5 -ftarget=1.5 --classpath=."
+  elif test "x$JAVAC" != "x" && test "x`basename $JAVAC`" = "xjavac"; then
+    JAVAC_FLAGS="$JAVAC_VM_FLAGS -source 1.5 -target 1.5 -cp ."
+  fi
+
+  if test "x$JAVA" != "x" && test "x`basename $JAVA`" = "xjava"; then
+    JAVA_FLAGS="$JAVA_VM_FLAGS"
+  fi
+
+  # Check if version is 1.5 (Iterable was first introduced in 1.5)
+  echo "public abstract class TestIterable implements Iterable< Object > {}" > TestIterable.java
+  if $JAVAC $JAVAC_FLAGS TestIterable.java >/dev/null 2>&1; then
+    java_is_15_or_above="yes"
+  fi
+  rm -f TestIterable.java TestIterable.class
+
+  if test "x$JAVAC" = "x"; then
+    AC_MSG_NOTICE([Missing Java compiler - skipping Java components])
+    enables_java="no"
+  elif test "x$JAR" = "x"; then
+    AC_MSG_NOTICE([Missing Java archiver - skipping Java components])
+    enables_java="no"
+  elif test "x$jni_h" != "xyes"; then
+    AC_MSG_NOTICE([Missing Java headers - skipping Java components])
+    enables_java="no"
+  else
+    AC_MSG_NOTICE([Java available: $JAVAC])
+  fi
+
+  if test "x$enables_java" != "xyes"; then
+    AC_MSG_NOTICE([Missing Java - skipping Java bindings])
+    enables_swig_java="no"
+  elif ! test -f java/arc_wrap.cpp && test "x$enables_swig_java" != "xyes"; then
+    AC_MSG_NOTICE([Missing pre-compiled Java wrapper and SWIG - skipping Java bindings])
+    enables_swig_java="no"
+  fi
+
+fi
+fi
+
+AC_MSG_NOTICE([Java enabled: $enables_java])
+AC_MSG_NOTICE([Java SWIG binding enabled: $enables_swig_java])
+AM_CONDITIONAL([JAVA_ENABLED],[test "x$enables_java" = "xyes"])
+AM_CONDITIONAL([JAVA_SWIG_ENABLED],[test "x$enables_swig_java" = "xyes"])
+AM_CONDITIONAL([JAVA_IS_15_OR_ABOVE], [test "x$java_is_15_or_above" = "xyes"])
+
+AC_SUBST(JAVA)
+AC_SUBST(JAR_JFLAGS)
+AC_SUBST(JAVA_FLAGS)
+AC_SUBST(JAVAC_FLAGS)
+AC_SUBST(JDK_CFLAGS)
+
+AC_ARG_WITH([jnidir],
+AC_HELP_STRING([--with-jnidir=DIR],
+  [Install jar in DIR [[default: ${libdir}/java]]]),
+  [case $withval in
+    yes|no)
+      AC_MSG_ERROR([Invalid DIR])
+      ;;
+    *)
+      jnidir="$withval"
+      ;;
+  esac
+],
+[
+  if test -z "$jnidir"; then
+    jnidir='${libdir}/java'
+  fi
+])
+AC_SUBST(jnidir)
+
+AC_ARG_WITH([jninativedir],
+AC_HELP_STRING([--with-jninativedir=DIR],
+  [Install jar in DIR [[default: ${pkglibdir}]]]),
+  [case $withval in
+    yes|no)
+      AC_MSG_ERROR([Invalid DIR])
+      ;;
+    *)
+      jninativedir="$withval"
+      ;;
+  esac
+],
+[
+  if test -z "$jninativedir"; then
+    jninativedir='${pkglibdir}'
+  fi
+])
+AC_SUBST(jninativedir)
+
+# Try to find junit - used for unit testing of Java bindings.
+dnl Check if JUnit is explicitly disabled.
+if test "$enables_hed" = "yes"; then
+AC_ARG_ENABLE(junit, AC_HELP_STRING([--disable-junit], [disable unit testing of Java bindings]),
+[enables_junit=$enableval],[])
+if test "$enables_java" = "yes" && test "$enables_junit" = "yes"; then
+  if ! test -f /usr/share/java/junit.jar; then
+    enables_junit="no"
+  fi
+else
+  enables_junit="no"
+fi
+fi
+AM_CONDITIONAL([JUNIT_ENABLED], [test "x$enables_junit" = "xyes"])
+AC_MSG_NOTICE([Java unit testing enabled: $enables_junit])
+
+
+# Python
+if test "$enables_hed" = "yes"; then
+AC_ARG_ENABLE(python,
+  AC_HELP_STRING([--disable-python], [disable Python components]),
+  [enables_python=$enableval
+   enables_swig_python=$enableval], [])
+
+if test "$enables_python" = "yes"; then
+  AC_ARG_WITH(python, AC_HELP_STRING([--with-python=(PYTHON)],
+    [specify python program from PATH]))
+
+  # We do not look for python binary when cross-compiling
+  # but we need to make the variable non-empty
+  if test "${build}" = "${host}"; then
+    AC_CHECK_PROGS(PYTHON, $with_python python)
+  else
+    PYTHON=python
+  fi
+
+  if test "X$PYTHON" != "X"; then
+    PYNAME=`basename $PYTHON`
+    PKG_CHECK_MODULES(PYTHON, $PYNAME, [
+    PYTHON_VERSION=`$PKG_CONFIG --modversion $PYNAME`
+    PYTHON_MAJOR=`echo $PYTHON_VERSION|cut -f1 -d.`
+    ],[
+    PYTHON_VERSION=`$PYTHON -c 'import sys; print(sys.version[[:3]])'`
+    PYTHON_MAJOR=`$PYTHON -c 'import sys; print(sys.version_info[[0]])'`
+    PYTHON_CFLAGS=-I`$PYTHON -c 'from distutils import sysconfig; print(sysconfig.get_python_inc())'`
+    PY_LIBS=`$PYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_vars().get('LIBS'))" | sed s/None//`
+    PY_SYSLIBS=`$PYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_vars().get('SYSLIBS'))" | sed s/None//`
+    PY_LIBDEST=`$PYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_vars().get('LIBDEST'))" | sed s/None//`
+    PYTHON_LIBS="$PY_LIBS $PY_SYSLIBS"
+    SAVE_LDFLAGS=$LDFLAGS
+    LDFLAGS="$PYTHON_LIBS $LDFLAGS"
+    AC_CHECK_LIB([python$PYTHON_VERSION], [Py_Initialize],[
+        AC_MSG_NOTICE([No additional path to python library needed])
+        PYTHON_LIBS="-lpython$PYTHON_VERSION $PYTHON_LIBS"],[
+        LDFLAGS="-L$PY_LIBDEST/config $LDFLAGS"
+        # check a different symbol or else configure will used cached value
+        AC_CHECK_LIB([python$PYTHON_VERSION], [Py_Finalize],[
+            AC_MSG_NOTICE([Adding path to python library])
+            PYTHON_LIBS="-L$PY_LIBDEST/config -lpython$PYTHON_VERSION $PYTHON_LIBS"],[
+            PYTHON_LIBS=""])])
+    LDFLAGS=$SAVE_LDFLAGS
+    ])
+    AC_SUBST(PYTHON_VERSION)
+    AC_SUBST(PYTHON_CFLAGS)
+    AC_SUBST(PYTHON_LIBS)
+
+    if test "${build}" = "${host}"; then
+        PYTHON_SOABI=`$PYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_vars().get('SOABI'))" | sed s/None//`
+    else
+        PYTHON_SOABI=""
+    fi
+    AC_SUBST(PYTHON_SOABI)
+
+    AC_ARG_WITH(python-site-arch, AC_HELP_STRING([--with-python-site-arch=directory], [Direcory where Python modules will be installed - defaults is to query the Python binary]))
+    if test "X$PYTHON_SITE_ARCH" = "X"; then
+      if test "${build}" = "${host}"; then
+        PYTHON_SITE_ARCH=`$PYTHON -c 'from distutils import sysconfig; print(sysconfig.get_python_lib(1,0,"${prefix}"))'`
+      else
+        PYTHON_SITE_ARCH="${libdir}/python${PYTHON_VERSION}/site-packages"
+      fi
+    fi
+    AC_SUBST(PYTHON_SITE_ARCH)
+
+    AC_ARG_WITH(python-site-lib, AC_HELP_STRING([--with-python-site-lib=directory], [Direcory where Python modules will be installed - defaults is to query the Python binary]))
+    if test "X$PYTHON_SITE_LIB" = "X"; then
+      if test "${build}" = "${host}"; then
+        PYTHON_SITE_LIB=`$PYTHON -c 'from distutils import sysconfig; print(sysconfig.get_python_lib(0,0,"${prefix}"))'`
+      else
+        PYTHON_SITE_LIB="${libdir}/python${PYTHON_VERSION}/site-packages"
+      fi
+    fi
+    AC_SUBST(PYTHON_SITE_LIB)
+
+    SAVE_LDFLAGS=$LDFLAGS
+    SAVE_CPPFLAGS=$CPPFLAGS
+    LDFLAGS="$LDFLAGS $PYTHON_LIBS"
+    CPPFLAGS="$CPPFLAGS $PYTHON_CFLAGS"
+
+    AC_CHECK_HEADER(Python.h, [pythonh="yes"], [pythonh="no"])
+
+    AC_TRY_COMPILE([#include <Python.h>], [Py_InitializeEx(0)],[
+        AC_MSG_NOTICE([Python includes functionality of skipping initialization registration of signal handlers])
+        AC_DEFINE(HAVE_PYTHON_INITIALIZE_EX,,[Define if you have Py_InitializeEx function])
+        enables_python_service="yes"
+    ],[
+        AC_MSG_NOTICE([Python does not include functionality of skipping initialization registration of signal handlers, since its version is below 2.4])
+        enables_python_service="no"
+    ])
+
+    LDFLAGS=$SAVE_LDFLAGS
+    CPPFLAGS=$SAVE_CPPFLAGS
+  fi
+
+  if test "X$PYTHON" = "X"; then
+    AC_MSG_NOTICE([Missing Python - skipping Python components])
+    enables_python=no
+  elif test "X$PYTHON_SITE_ARCH" = "X" || test "X$PYTHON_SITE_LIB" = "X"; then
+    AC_MSG_NOTICE([Missing python site packages location - skipping Python components])
+    enables_python=no
+  else
+    AC_MSG_NOTICE([Python available: $PYTHON_VERSION])
+  fi
+
+  if test "x$enables_python" != "xyes"; then
+    AC_MSG_NOTICE([Missing Python - skipping Python bindings])
+    enables_swig_python=no
+  elif test "X$PYTHON_LIBS" = "X"; then
+    AC_MSG_NOTICE([Missing Python library - skipping Python bindings])
+    enables_swig_python=no
+  elif test "X$pythonh" != "Xyes"; then
+    AC_MSG_NOTICE([Missing Python header - skipping Python bindings])
+    enables_swig_python=no
+  elif ! test -f python/arc_wrap.cpp && test "x$enables_swig_python" != "xyes"; then
+    AC_MSG_NOTICE([Missing pre-compiled Python wrapper and SWIG - skipping Python bindings])
+    enables_swig_python=no
+  fi
+
+fi
+fi
+
+AC_MSG_NOTICE([Python enabled: $enables_python])
+AC_MSG_NOTICE([Python SWIG bindings enabled: $enables_swig_python])
+
+AM_CONDITIONAL([PYTHON_ENABLED],[test "x$enables_python" = "xyes"])
+AM_CONDITIONAL([PYTHON3], [test "x$enables_python" = "xyes" && test "x$PYTHON_MAJOR" = "x3"])
+AM_CONDITIONAL([PYTHON_SWIG_ENABLED],[test "x$enables_swig_python" = "xyes"])
+AM_CONDITIONAL([PYTHON_SERVICE],[test "x$enables_swig_python" = "xyes" &&
+                                 test "x$enables_python_service" = "xyes"])
+
+# Alternative Python
+if test "$enables_hed" = "yes"; then
+AC_ARG_ENABLE(altpython,
+  AC_HELP_STRING([--disable-altpython], [enable alternative Python binding]),
+  [enables_altpython=$enableval], [])
+
+if test "$enables_altpython" = "yes"; then
+  AC_ARG_WITH(altpython, AC_HELP_STRING([--with-altpython=(PYTHON)],
+    [specify alternative python program from PATH]))
+
+  AC_CHECK_PROGS(ALTPYTHON, $with_altpython)
+
+  if test "X$ALTPYTHON" != "X"; then
+    ALTPYNAME=`basename $ALTPYTHON`
+    PKG_CHECK_MODULES(ALTPYTHON, $ALTPYNAME, [
+    ALTPYTHON_VERSION=`$PKG_CONFIG --modversion $ALTPYNAME`
+    ALTPYTHON_MAJOR=`echo $ALTPYTHON_VERSION|cut -f1 -d.`
+    ],[
+    ALTPYTHON_VERSION=`$ALTPYTHON -c 'import sys; print(sys.version[[:3]])'`
+    ALTPYTHON_MAJOR=`$ALTPYTHON -c 'import sys; print(sys.version_info[[0]])'`
+    ALTPYTHON_CFLAGS=-I`$ALTPYTHON -c 'from distutils import sysconfig; print(sysconfig.get_python_inc())'`
+    ALTPY_LIBS=`$ALTPYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_vars().get('LIBS'))" | sed s/None//`
+    ALTPY_SYSLIBS=`$ALTPYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_vars().get('SYSLIBS'))" | sed s/None//`
+    ALTPY_LIBDEST=`$ALTPYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_vars().get('LIBDEST'))" | sed s/None//`
+    ALTPYTHON_LIBS="$ALTPY_LIBS $ALTPY_SYSLIBS"
+    SAVE_LDFLAGS=$LDFLAGS
+    LDFLAGS="$ALTPYTHON_LIBS $LDFLAGS"
+    AC_CHECK_LIB([python$ALTPYTHON_VERSION], [Py_Initialize],[
+        AC_MSG_NOTICE([No additional path to python library needed])
+        ALTPYTHON_LIBS="-lpython$ALTPYTHON_VERSION $ALTPYTHON_LIBS"],[
+        LDFLAGS="-L$ALTPY_LIBDEST/config $LDFLAGS"
+        # check a different symbol or else configure will used cached value
+        AC_CHECK_LIB([python$ALTPYTHON_VERSION], [Py_Finalize],[
+            AC_MSG_NOTICE([Adding path to python library])
+            ALTPYTHON_LIBS="-L$ALTPY_LIBDEST/config -lpython$ALTPYTHON_VERSION $ALTPYTHON_LIBS"],[
+            ALTPYTHON_LIBS=""])])
+    LDFLAGS=$SAVE_LDFLAGS
+    ])
+    AC_SUBST(ALTPYTHON_VERSION)
+    AC_SUBST(ALTPYTHON_CFLAGS)
+    AC_SUBST(ALTPYTHON_LIBS)
+
+    ALTPYTHON_SOABI=`$ALTPYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_vars().get('SOABI'))" | sed s/None//`
+    AC_SUBST(ALTPYTHON_SOABI)
+
+    AC_ARG_WITH(altpython-site-arch, AC_HELP_STRING([--with-altpython-site-arch=directory], [Direcory where Python modules will be installed - defaults is to query the Python binary]))
+    if test "X$ALTPYTHON_SITE_ARCH" = "X"; then
+      ALTPYTHON_SITE_ARCH=`$ALTPYTHON -c 'from distutils import sysconfig; print(sysconfig.get_python_lib(1,0,"${prefix}"))'`
+    fi
+    AC_SUBST(ALTPYTHON_SITE_ARCH)
+
+    AC_ARG_WITH(altpython-site-lib, AC_HELP_STRING([--with-altpython-site-lib=directory], [Direcory where Python modules will be installed - defaults is to query the Python binary]))
+    if test "X$ALTPYTHON_SITE_LIB" = "X"; then
+      ALTPYTHON_SITE_LIB=`$ALTPYTHON -c 'from distutils import sysconfig; print(sysconfig.get_python_lib(0,0,"${prefix}"))'`
+    fi
+    AC_SUBST(ALTPYTHON_SITE_LIB)
+
+    SAVE_LDFLAGS=$LDFLAGS
+    SAVE_CPPFLAGS=$CPPFLAGS
+    LDFLAGS="$LDFLAGS $ALTPYTHON_LIBS"
+    CPPFLAGS="$CPPFLAGS $ALTPYTHON_CFLAGS"
+
+    AC_CHECK_HEADER(Python.h, [altpythonh="yes"], [altpythonh="no"])
+
+    LDFLAGS=$SAVE_LDFLAGS
+    CPPFLAGS=$SAVE_CPPFLAGS
+  fi
+
+  if test "X$ALTPYTHON" = "X"; then
+    AC_MSG_NOTICE([Missing alternative Python - skipping alternative Python])
+    enables_altpython=no
+  elif test "X$ALTPYTHON_LIBS" = "X"; then
+    AC_MSG_NOTICE([Missing alternative Python library - skipping alternative Python bindings])
+    enables_altpython=no
+  elif test "X$altpythonh" != "Xyes"; then
+    AC_MSG_NOTICE([Missing alternative Python header - skipping alternative Python bindings])
+    enables_altpython=no
+
+  elif test "X$ALTPYTHON_SITE_ARCH" = "X" || test "X$ALTPYTHON_SITE_LIB" = "X"; then
+    AC_MSG_NOTICE([Missing python site packages location - skipping Python bindings])
+    enables_altpython=no
+  else
+    AC_MSG_NOTICE([Alternative Python available: $ALTPYTHON_VERSION])
+  fi
+
+  if test "x$enables_altpython" != "xyes"; then
+    AC_MSG_NOTICE([Missing alternative Python - skipping alternative Python bindings])
+    enables_altpython=no
+  elif ! test -f python/arc_wrap.cpp && test "x$enables_swig_python" != "xyes"; then
+    AC_MSG_NOTICE([Missing pre-compiled Python wrapper and SWIG - skipping alternative Python bindings])
+    enables_altpython=no
+  fi
+
+fi
+fi
+
+AC_MSG_NOTICE([Alternative Python enabled: $enables_altpython])
+
+AM_CONDITIONAL([ALTPYTHON_ENABLED],[test "x$enables_altpython" = "xyes"])
+AM_CONDITIONAL([ALTPYTHON3], [test "x$enables_altpython" = "xyes" && test "x$ALTPYTHON_MAJOR" = "x3"])
+
+
+# check for pylint
+dnl Check if pylint is explicitly disabled.
+if test "$enables_hed" = "yes"; then
+AC_ARG_ENABLE(pylint, AC_HELP_STRING([--disable-pylint], [disable python example checking using pylint]),
+[enables_pylint=$enableval],[])
+  AC_CHECK_PROGS(PYLINT, pylint)
+  if test "x$PYLINT" = "x"; then
+    enables_pylint="no"
+  else
+    PYLINT_VERSION=`$PYLINT --version 2> /dev/null | sed -n 's/^pylint \([[0-9.]]*\).*/\1/p'`
+    # Check if pylint supports the following arguments, otherwise disable pylint (python example checking).
+    # Do not generate report
+    # Disable convention and recommendation messages - we are only interested in fatals, errors and warnings.
+    PYLINT_ARGS="--reports=no --disable=C,R"
+    if $PYLINT $PYLINT_ARGS /dev/null > /dev/null 2>&1 ; then
+       AC_MSG_NOTICE([pylint version $PYLINT_VERSION found - version ok])
+       enables_pylint="yes"
+    else
+       AC_MSG_NOTICE([pylint version $PYLINT_VERSION found - bad version])
+       enables_pylint="no"
+       PYLINT_ARGS=""
+    fi
+    AC_SUBST(PYLINT_ARGS)
+  fi
+
+  # Check if the --disable=W0221 option is supported
+  # W0221: Disable arguments differ messages since Swig uses tuple syntax (*args).
+  if test "$enables_pylint" = "yes"; then
+    PYLINT_ARGS_ARGUMENTS_DIFFER="--disable=W0221"
+    if ! $PYLINT $PYLINT_ARGS $PYLINT_ARGS_ARGUMENTS_DIFFER /dev/null > /dev/null 2>&1 ; then
+      PYLINT_ARGS_ARGUMENTS_DIFFER=""
+    fi
+    AC_SUBST(PYLINT_ARGS_ARGUMENTS_DIFFER)
+  fi
+fi
+AM_CONDITIONAL([PYLINT_ENABLED], [test "x$enables_pylint" = "xyes"])
+AC_MSG_NOTICE([Python example checking with pylint enabled: $enables_pylint])
+
+
+# check gthread
+if test "$enables_hed" = "yes"; then
+PKG_CHECK_MODULES(GTHREAD, [gthread-2.0 >= 2.4.7])
+AC_SUBST(GTHREAD_CFLAGS)
+AC_SUBST(GTHREAD_LIBS)
+fi
+
+# check glibmm
+# check for giomm which became a part of glibmm as of version 2.16
+if test "$enables_hed" = "yes"; then
+"$PKG_CONFIG" giomm-2.4
+if test "$?" = '1'; then
+  PKG_CHECK_MODULES(GLIBMM, [glibmm-2.4 >= 2.4.7])
+else
+  PKG_CHECK_MODULES(GLIBMM, [giomm-2.4])
+  AC_DEFINE(HAVE_GIOMM,, [define if giomm is supported in glibmm])
+fi
+AC_SUBST(GLIBMM_CFLAGS)
+AC_SUBST(GLIBMM_LIBS)
+SAVE_CPPFLAGS=$CPPFLAGS
+AC_LANG_SAVE
+AC_LANG_CPLUSPLUS
+CPPFLAGS="$CPPFLAGS $GLIBMM_CFLAGS"
+AC_CHECK_HEADER([glibmm/optioncontext.h], [
+  AC_TRY_COMPILE([#include <glibmm/optioncontext.h>],
+    [Glib::OptionContext ctx; ctx.set_summary("summary")], [
+      AC_DEFINE(HAVE_GLIBMM_OPTIONCONTEXT_SET_SUMMARY,,
+        [define if glibmm has Glib::OptionContext::set_summary()])
+      AC_MSG_NOTICE([using glibmm command line parsing])
+    ], [
+      AC_MSG_NOTICE([using getopt_long command line parsing])
+    ]
+  )
+  AC_TRY_COMPILE([#include <glibmm/optioncontext.h>],
+    [Glib::OptionContext ctx; ctx.get_help();],[
+      AC_DEFINE(HAVE_GLIBMM_OPTIONCONTEXT_GET_HELP,,
+        [define if glibmm has Glib::OptionContext::get_help()])
+    ], [
+    ]
+  )
+])
+AC_TRY_COMPILE([#include <glibmm.h>],[Glib::SignalChildWatch watch = Glib::signal_child_watch();],[glibmm_childwatch=yes],[glibmm_childwatch=no])
+if test "$glibmm_childwatch" = yes; then
+  AC_DEFINE(HAVE_GLIBMM_CHILDWATCH,,[define if glibmm have support for controling state of children processes])
+else
+  AC_MSG_NOTICE([WARNING: glibmm has no API for controlling children processes - result of external processes may be inconsistent])
+fi
+AC_TRY_COMPILE([#include <glibmm.h>],[Glib::ModuleFlags flags = Glib::MODULE_BIND_LOCAL;],[glibmm_bind_local=yes],[glibmm_bind_local=no])
+if test "$glibmm_bind_local" = yes; then
+  AC_DEFINE(HAVE_GLIBMM_BIND_LOCAL,,[define if glibmm have support local symbol resolution in shared libraries])
+else
+  AC_MSG_NOTICE([WARNING: glibmm has no way to limit scope of symbols of shared libraries. Make sure external libraries used by plugins have no conflicting symbols. HINT: use Globus compiled against system OpenSSL library.])
+fi
+AC_TRY_COMPILE([#include <glibmm/miscutils.h>],[Glib::getenv("");],[glibmm_getenv=yes],[glibmm_getenv=no])
+if test "$glibmm_getenv" = yes; then
+  AC_DEFINE(HAVE_GLIBMM_GETENV,,[define if glibmm have getenv operations])
+else
+  AC_MSG_NOTICE([WARNING: glibmm has no support for getenv. Usage of libc getenv is unsafe in multi-threaded applications.])
+fi
+AC_TRY_COMPILE([#include <glibmm/miscutils.h>],[Glib::setenv("", "");],[glibmm_setenv=yes],[glibmm_setenv=no])
+if test "$glibmm_setenv" = yes; then
+  AC_DEFINE(HAVE_GLIBMM_SETENV,,[define if glibmm have setenv operations])
+else
+  AC_MSG_NOTICE([WARNING: glibmm has no support for setenv. Usage of libc setenv may be unsafe in multi-threaded applications.])
+fi
+AC_TRY_COMPILE([#include <glibmm/miscutils.h>],[Glib::unsetenv("");],[glibmm_unsetenv=yes],[glibmm_unsetenv=no])
+if test "$glibmm_unsetenv" = yes; then
+  AC_DEFINE(HAVE_GLIBMM_UNSETENV,,[define if glibmm have unsetenv operations])
+else
+  AC_MSG_NOTICE([WARNING: glibmm has no support for unsetenv. Usage of libc unsetenv may be unsafe in multi-threaded applications.])
+fi
+AC_LANG_RESTORE
+CPPFLAGS=$SAVE_CPPFLAGS
+fi
+
+# check libxml
+if test "$enables_hed" = "yes"; then
+PKG_CHECK_MODULES(LIBXML2, [libxml-2.0 >= 2.4.0])
+AC_SUBST(LIBXML2_CFLAGS)
+AC_SUBST(LIBXML2_LIBS)
+fi
+
+# check openssl
+if test "$enables_hed" = "yes"; then
+PKG_CHECK_MODULES(OPENSSL, [openssl >= 0.9.7a])
+AC_SUBST(OPENSSL_CFLAGS)
+AC_SUBST(OPENSSL_LIBS)
+"$PKG_CONFIG" openssl
+if test "$?" = '1'; then
+    if test "x$OPENSSL_BIN" != "x"; then
+        OPENSSL_VERSION=`$OPENSSL_BIN version | cut -d' ' -f2`
+        AC_MSG_NOTICE([Found OpenSSL version $OPENSSL_VERSION])
+        OPENSSL_V1=`echo $OPENSSL_VERSION | cut -d'.' -f2`
+        OPENSSL_V2=`echo $OPENSSL_VERSION | cut -d'.' -f3 | tr -d [[:alpha:]]`
+        OPENSSL_V3=`echo $OPENSSL_VERSION | cut -d'.' -f3 | tr -d [[:digit:]] | od -td1 | awk 'NR==1{print $2}'`
+        OPENSSL_PROXY=no
+        if test "$OPENSSL_V1" -ge "9" && test "$OPENSSL_V2" -ge "7" && test "$OPENSSL_V3" -ge "102"; then
+            OPENSSL_PROXY=yes
+            AC_MSG_NOTICE([Found OpenSSL with PROXY support])
+        else
+            AC_MSG_NOTICE([WARNING: OpenSSL does not contain PROXY support])
+        fi
+        OPENSSL_X509_VERIFY_PARAM=no
+        if test "$OPENSSL_V1" -ge "9" && test "$OPENSSL_V2" -ge "8"; then
+            OPENSSL_X509_VERIFY_PARAM=yes
+            AC_MSG_NOTICE([Found OpenSSL with X509_VERIFY_PARAM])
+        else
+            AC_MSG_NOTICE([WARNING: OpenSSL does not contain X509_VERIFY_PARAM])
+        fi
+        OPENSSL_OLDRSA=yes
+        if test "$OPENSSL_V1" -ge "9" && test "$OPENSSL_V2" -ge "8" && test "x$OPENSSL_V3" != "x"; then
+            AC_MSG_NOTICE([No old RSA])
+            OPENSSL_OLDRSA=no
+        fi
+    else
+        AC_ERROR([Cannot determine OpenSSL version!])
+    fi
+else
+    OPENSSL_PROXY=no
+    "$PKG_CONFIG" --exists 'openssl >= 0.9.7g'
+    if test "$?" = '0' ; then
+            OPENSSL_PROXY=yes
+            AC_MSG_NOTICE([Found OpenSSL with PROXY support])
+    else
+            AC_MSG_NOTICE([WARNING: OpenSSL does not contain PROXY support])
+    fi
+    OPENSSL_X509_VERIFY_PARAM=no
+    "$PKG_CONFIG" --exists 'openssl >= 0.9.8'
+    if test "$?" = '0' ; then
+            OPENSSL_X509_VERIFY_PARAM=yes
+            AC_MSG_NOTICE([Found OpenSSL with X509_VERIFY_PARAM])
+    else
+            AC_MSG_NOTICE([WARNING: OpenSSL does not contain X509_VERIFY_PARAM])
+    fi
+    OPENSSL_OLDRSA=yes
+    "$PKG_CONFIG" --exists 'openssl >= 0.9.8'
+    if test "$?" = '0' ; then
+            AC_MSG_NOTICE([No old RSA])
+            OPENSSL_OLDRSA=no
+    fi
+fi
+fi
+
+#check mozilla nss
+enables_nss=yes
+NSS_INSTALLED=no
+dnl Check if nss lib is explicitly enabled, default is disable.
+AC_ARG_ENABLE(nss, AC_HELP_STRING([--disable-nss], [disable use of the mozilla nss library]),[enables_nss="$enableval"],[])
+if test "$enables_nss" = "yes"; then
+  PKG_CHECK_MODULES(NSS, [nss >= 3.10], [NSS_INSTALLED=yes] , [
+    AC_MSG_WARN([Cannot locate nss lib])
+    NSS_INSTALLED=no
+    enables_nss=no
+  ])
+  if test "x$NSS_INSTALLED" = "xyes" ; then
+    AC_DEFINE(HAVE_NSS,,[define if NSS is enabled and available])
+  fi
+fi
+AC_SUBST(NSS_CFLAGS)
+AC_SUBST(NSS_LIBS)
+AM_CONDITIONAL([NSS_ENABLED], test x$NSS_INSTALLED = xyes)
+
+#check emi common authentiation library
+enables_canlxx=no
+AC_ARG_ENABLE(canlxx, AC_HELP_STRING([--enable-canlxx], [enable use of EMI common authentication libraries]), [enables_canlxx="$enableval"], [])
+if test "x$enables_canlxx" = "xyes"; then
+  AC_ARG_WITH(canlxx,
+    AC_HELP_STRING([--with-canlxx=PATH], [CANL++ installation path]),
+    [
+      if test "x$PKG_CONFIG_PATH" != "x"; then
+        PKG_CONFIG_PATH="$withval/lib/pkgconfig:$PKG_CONFIG_PATH"
+      else
+        PKG_CONFIG_PATH="$withval/lib/pkgconfig"
+      fi
+    ]
+  )
+  AC_MSG_NOTICE([PKG_CONFIG_PATH for CANL++ is: $PKG_CONFIG_PATH])
+  PKG_CHECK_MODULES(CANLXX, [canl-c++], [], [
+    AC_MSG_NOTICE([Failed to find EMI common authentication libraries])
+    enables_canlxx=no
+  ])
+fi
+if test "x$enables_canlxx" = "xyes" ; then
+  AC_DEFINE(HAVE_CANLXX,,[define if CANL++ is enabled and available])
+fi
+AC_SUBST(CANLXX_CFLAGS)
+AC_SUBST(CANLXX_LIBS)
+AM_CONDITIONAL(CANLXX_ENABLED, test "x$enables_canlxx" = "xyes")
+
+# check cppunit
+if test "$enables_hed" = "yes"; then
+AC_ARG_ENABLE(cppunit, AC_HELP_STRING([--disable-cppunit], [disable cppunit-based UNIT testing of code]),[enables_cppunit=$enableval],[])
+if test "$enables_cppunit" = "yes"; then
+  PKG_CHECK_MODULES(CPPUNIT, [cppunit],[],
+    [AC_PATH_PROG(CPPUNIT_CONFIG, cppunit-config, no)
+    if test "x$CPPUNIT_CONFIG" = "xno"; then
+        AC_MSG_WARN([cppunit-config not found - no UNIT testing will be performed])
+        CPPUNIT_CFLAGS=
+        CPPUNIT_LIBS=
+        enables_cppunit="no"
+    else
+        CPPUNIT_CFLAGS="`$CPPUNIT_CONFIG --cflags`"
+        CPPUNIT_LIBS="`$CPPUNIT_CONFIG --libs`"
+    fi])
+  if test "x$CPPUNIT_CONFIG" != "xno" || test "x$CPPUNIT_PKG_ERRORS" != "x"
+  then
+    TEST_DIR=test
+  else
+    enables_cppunit=no
+    TEST_DIR=
+  fi
+fi
+AC_SUBST(CPPUNIT_CFLAGS)
+AC_SUBST(CPPUNIT_LIBS)
+AC_SUBST(TEST_DIR)
+else
+  enables_cppunit="no"
+fi
+
+##############################
+#
+# Check xmlsec1
+#
+#############################
+MACOSX=""
+case "${host}" in
+  *darwin*)
+    MACOSX="yes"
+    ;;
+esac
+
+if test "x$MACOSX" = "xyes"; then
+  AC_DEFINE(_MACOSX,,[Define if compiling for MacOSX])
+fi
+AM_CONDITIONAL([MACOSX], [ test "x$MACOSX" = "xyes"])
+
+if test "$enables_hed" = "yes"; then
+XMLSEC_MIN_VERSION="1.2.4"
+XMLSEC_OPENSSL_MIN_VERSION="1.2.4"
+XMLSEC_CONFIG="${XMLSEC1_CONFIG:-xmlsec1-config}"
+XMLSEC_CFLAGS=""
+XMLSEC_LIBS=""
+XMLSEC_INSTALLED=no
+dnl Check if xmlsec1 is explicitly disabled, default is enable.
+AC_ARG_ENABLE(xmlsec1, AC_HELP_STRING([--disable-xmlsec1], [disable features which need xmlsec1 library]),[enables_xmlsec1=$enableval],[])
+if test "x$enables_xmlsec1" = "xyes"; then
+  AC_ARG_WITH(xmlsec1, [  --with-xmlsec1=(PATH)  xmlsec1 location])
+  if test "x$with_xmlsec1" = "x" ; then
+    PKG_CHECK_MODULES(XMLSEC, [xmlsec1 >= $XMLSEC_MIN_VERSION],
+        [XMLSEC_INSTALLED=yes], [XMLSEC_INSTALLED=no])
+    if test "x$XMLSEC_INSTALLED" = "xyes" ; then
+      PKG_CHECK_MODULES(XMLSEC_OPENSSL, [xmlsec1-openssl >= $XMLSEC_OPENSSL_MIN_VERSION],
+          [XMLSEC_INSTALLED=yes],[XMLSEC_INSTALLED=no])
+    fi
+
+    # Find number of backslashes in XMLSEC_CFLAGS
+    n=$(echo $XMLSEC_CFLAGS|sed 's/.*-DXMLSEC_CRYPTO=\([[^ ]]*\).*/\1/'|tr -d '[[A-Za-z0-1\n"]]'| wc -c)
+
+    # Fixes due to bugs in pkg-config and/or xmlsec1 
+    #
+    # 0: Indicates a bug in pkg-config which removes the escaping of the quotes
+    # 2: Correct value with escaped quotes
+    # 6: Old xmlsec1 version which used 3 back-slashes to escape quotes
+    #    See eg. https://bugzilla.redhat.com/show_bug.cgi?id=675334
+
+    # Make sure that the quotes are escaped with single backslash
+    if test $n = 0 -o $n = 6; then 
+      AC_MSG_NOTICE([Working around bad combination of pkgconfig and xmlsec1 with $n back-slashes])
+      XMLSEC_CFLAGS=$(echo $XMLSEC_CFLAGS|sed 's/\(.*-DXMLSEC_CRYPTO=\)\\*"\([[^ \\"]]*\)\\*" \(.*\)/\1\\"\2\\" \3/')
+      XMLSEC_OPENSSL_CFLAGS=$(echo $XMLSEC_OPENSSL_CFLAGS|sed 's/\(.*-DXMLSEC_CRYPTO=\)\\*"\([[^ \\"]]*\)\\*" \(.*\)/\1\\"\2\\" \3/')
+    fi
+
+  fi
+
+  if test "x$XMLSEC_INSTALLED" = "xno" -a "x$MACOSX" != "xyes"; then
+      AC_MSG_CHECKING(for xmlsec1 libraries >= $XMLSEC_MIN_VERSION)
+      if test "x$with_xmlsec1" != "x" ; then
+        XMLSEC_CONFIG=$with_xmlsec1/bin/$XMLSEC_CONFIG
+      fi
+      "$XMLSEC_CONFIG" --version 2>/dev/null 1>/dev/null
+      if test "$?" != '0' ; then
+        AC_MSG_WARN(Could not find xmlsec1 anywhere; The xml security related functionality will not be compiled)
+      else
+        vers=`$XMLSEC_CONFIG --version 2>/dev/null | awk -F. '{ printf "%d", ($1 * 1000 + $2) * 1000 + $3;}'`
+        minvers=`echo $XMLSEC_MIN_VERSION | awk -F. '{ printf "%d", ($1 * 1000 + $2) * 1000 + $3;}'`
+        if test "$vers" -ge "$minvers" ; then
+          XMLSEC_LIBS="`$XMLSEC_CONFIG --libs`"
+          XMLSEC_CFLAGS="`$XMLSEC_CONFIG --cflags`"
+          #check the xmlsec1-openssl here
+          if test "x$PKG_CONFIG_PATH" != "x"; then
+            PKG_CONFIG_PATH="$with_xmlsec1/lib/pkgconfig:$PKG_CONFIG_PATH"
+          else
+            PKG_CONFIG_PATH="$with_xmlsec1/lib/pkgconfig"
+          fi
+          PKG_CHECK_MODULES(XMLSEC_OPENSSL, [xmlsec1-openssl >= $XMLSEC_OPENSSL_MIN_VERSION],
+              [XMLSEC_INSTALLED=yes],[XMLSEC_INSTALLED=no])
+        else
+          AC_MSG_WARN(You need at least xmlsec1 $XMLSEC_MIN_VERSION for this version of arc1)
+        fi
+      fi
+  elif test "x$XMLSEC_INSTALLED" = "xno" -a "x$MACOSX" = "xyes"; then
+    #MACOSX has no "ldd" which is needed by xmlsec1-config, so here simply we use PKG_CHECK_MODULES
+    if test "x$PKG_CONFIG_PATH" != "x"; then
+      PKG_CONFIG_PATH="$with_xmlsec1/lib/pkgconfig:$PKG_CONFIG_PATH"
+    else
+      PKG_CONFIG_PATH="$with_xmlsec1/lib/pkgconfig"
+    fi
+    PKG_CHECK_MODULES(XMLSEC, [xmlsec1 >= $XMLSEC_MIN_VERSION],
+        [XMLSEC_INSTALLED=yes], [XMLSEC_INSTALLED=no])
+    if test "x$XMLSEC_INSTALLED" = "xyes" ; then
+      PKG_CHECK_MODULES(XMLSEC_OPENSSL, [xmlsec1-openssl >= $XMLSEC_OPENSSL_MIN_VERSION],
+          [XMLSEC_INSTALLED=yes],[XMLSEC_INSTALLED=no])
+    fi
+  fi
+
+  AC_SUBST(XMLSEC_CFLAGS)
+  AC_SUBST(XMLSEC_LIBS)
+  AC_SUBST(XMLSEC_OPENSSL_CFLAGS)
+  AC_SUBST(XMLSEC_OPENSSL_LIBS)
+
+  #AC_SUBST(XMLSEC_CONFIG)
+  #AC_SUBST(XMLSEC_MIN_VERSION)
+  enables_xmlsec1="$XMLSEC_INSTALLED"
+fi
+else
+  enables_xmlsec1="no"
+fi
+
+#########################
+#
+# Check libmysqlclient
+#
+#########################
+MYSQL_INSTALLED=no
+if test "$enables_hed" = "yes"; then
+MYSQL_CONFIG="mysql_config"
+MYSQL_CFLAGS=""
+MYSQL_LIBS=""
+dnl Check if libmysqlclient is explicitly enabled, default is disable.
+AC_ARG_ENABLE(mysql, AC_HELP_STRING([--enable-mysql], [enable use of the MySQL client library]),[enables_mysql="$enableval"],[])
+# Ask user for path to libmysqlclient
+if test "x$enables_mysql" = "xyes"; then
+  AC_ARG_WITH(mysql, [  --with-mysql=(PATH) prefix of MySQL installation. e.g. /usr/local or /usr])
+  AC_MSG_CHECKING(for mysql client library)
+  if test "x$with_mysql" != "x" ; then
+      MYSQL_CONFIG=$with_mysql/bin/$MYSQL_CONFIG
+  fi
+  if ! $MYSQL_CONFIG --version > /dev/null 2>&1 ; then
+      AC_MSG_ERROR(Could not find mysql C library anywhere (see config.log for details).)
+  fi
+  MYSQL_LIBS="`$MYSQL_CONFIG --libs`"
+  MYSQL_CFLAGS="`$MYSQL_CONFIG --cflags`"
+  MYSQL_INSTALLED="yes"
+
+  AC_SUBST(MYSQL_LIBS)
+  AC_SUBST(MYSQL_CFLAGS)
+  enables_mysql=$MYSQL_INSTALLED
+fi
+AC_MSG_NOTICE([MySQL client library enabled: $MYSQL_INSTALLED])
+fi
+AM_CONDITIONAL([MYSQL_LIBRARY_ENABLED],[test "x$MYSQL_INSTALLED" = "xyes"])
+
+# Check ldap-monitor
+AC_ARG_ENABLE(ldap_monitor, AC_HELP_STRING([--enable-ldap-monitor], [enable use of the ldap monitor]),[enables_ldap_monitor="$enableval"],[])
+if test "x$enables_ldap_monitor" = "xyes"; then
+  AC_ARG_WITH(ldap_monitor, [  --with-ldap-monitor=(PATH) where to install the monitor, eg /var/www/ldap-monitor or /usr/share/arc/ldap-monitor])
+  AC_MSG_CHECKING(for ldap-monitor installation path)
+  if test "x$with_ldap_monitor" != "x" ; then
+      ldap_monitor_prefix=$with_ldap_monitor
+  else
+      ldap_monitor_prefix=${datadir}/arc/ldap-monitor
+  fi
+  AC_MSG_RESULT([$ldap_monitor_prefix])
+  AC_SUBST(ldap_monitor_prefix)
+fi
+
+# Check ws-monitor
+AC_ARG_ENABLE(ws_monitor, AC_HELP_STRING([--enable-ws-monitor], [enable use of the ws monitor]),[enables_ws_monitor="$enableval"],[])
+if test "x$enables_ws_monitor" = "xyes"; then
+  AC_ARG_WITH(ws_monitor, [  --with-ws-monitor=(PATH) where to install the monitor, eg /var/www/ws-monitor or /usr/share/arc/ws-monitor])
+  AC_MSG_CHECKING(for ws-monitor installation path)
+  if test "x$with_ws_monitor" != "x" ; then
+      ws_monitor_prefix=$with_ws_monitor
+  else
+      ws_monitor_prefix=${datadir}/arc/ws-monitor
+  fi
+  AC_MSG_RESULT([$ws_monitor_prefix])
+  AC_SUBST(ws_monitor_prefix)
+fi
+
+# check zlib
+ZLIB_CFLAGS=
+ZLIB_LDFLAGS=
+ZLIB_LIBS=
+if test "$enables_hed" = "yes"; then
+SAVE_CPPFLAGS=$CPPFLAGS
+SAVE_LDFLAGS=$LDFLAGS
+AC_ARG_WITH(zlib,
+  AC_HELP_STRING([--with-zlib=PATH], [where zlib is installed]),
+    [ if test -d "$withval"; then
+        ZLIB_CFLAGS="${CPPFLAGS} -I$withval/include"
+        ZLIB_LDFLAGS="${LDFLAGS} -L$withval/lib"
+      fi
+    ]
+)
+CPPFLAGS="$CPPFLAGS $ZLIB_CFLAGS"
+LDFLAGS="$LDFLAGS $ZLIB_LDFLAGS"
+AC_CHECK_HEADER([zlib.h],[ZLIB_CFLAGS="$ZLIB_CFLAGS"],AC_MSG_ERROR([unable to find zlib header files]))
+AC_CHECK_LIB([z],[deflateInit2_],[ZLIB_LIBS="$ZLIB_LDFLAGS -lz"],AC_MSG_ERROR([unable to link with zlib library]))
+CPPFLAGS=$SAVE_CPPFLAGS
+LDFLAGS=$SAVE_LDFLAGS
+fi
+AC_SUBST(ZLIB_CFLAGS)
+AC_SUBST(ZLIB_LIBS)
+
+# check ARGUS
+ARGUS_CFLAGS=
+ARGUS_LIBS=
+AC_ARG_ENABLE(argus, AC_HELP_STRING([--enable-argus], [enable use of Argus PEP V2 libraries]),[enables_argus="$enableval"],[])
+if test "x$enables_argus" = "xyes"; then
+  AC_ARG_WITH(argus,
+    AC_HELP_STRING([--with-argus=PATH], [ARGUS PEP installation path]),
+    [
+      if test "x$PKG_CONFIG_PATH" != "x"; then
+        PKG_CONFIG_PATH="$withval/lib/pkgconfig:$PKG_CONFIG_PATH"
+      else
+        PKG_CONFIG_PATH="$withval/lib/pkgconfig"
+      fi
+    ]
+  )
+  PKG_CHECK_MODULES(ARGUS, [libargus-pep >= 2.0.0], [], [
+    AC_MSG_NOTICE([Failed to find Argus PEP libraries with version >= 2])
+    enables_argus=no
+  ])
+fi
+AC_SUBST(ARGUS_CFLAGS)
+AC_SUBST(ARGUS_LIBS)
+AM_CONDITIONAL(ARGUS_ENABLED, test "x$enables_argus" = "xyes")
+
+###############################################
+#
+# Check for Berkeley DB C++
+#
+###############################################
+DBCXX_LIBS=""
+DBCXX_CPPFLAGS=
+
+if test "$enables_hed" = "yes"; then
+
+#
+# Allow the user to specify db_cxx.h location (we will still check though)
+#
+
+dbcxx_include_paths=
+AC_ARG_WITH(dbcxx-include,
+   [  --with-dbcxx-include=PATH   Specify path to db_cxx.h],
+   [
+  if test "x$withval" = "xyes" ; then
+    AC_MSG_ERROR([--with-dbcxx-include requires PATH argument])
+  fi
+  if test "x$withval" != "xno" ; then
+    dbcxx_include_paths=$withval
+  fi
+   ]
+)
+
+#
+# Allow the user to specify DB4 library location (we will still check though)
+#
+
+db4_library_path=
+AC_ARG_WITH(db4-library-path,
+   [  --with-db4-library-path=PATH   Specify path to DB4 library],
+   [
+  if test "x$withval" = "xyes" ; then
+    AC_MSG_ERROR([--with-db4-library-path requires PATH argument])
+  fi
+  if test "x$withval" != "xno" ; then
+    db4_library_path=$withval
+  fi
+   ]
+)
+
+AC_LANG_SAVE
+AC_LANG_CPLUSPLUS
+
+#
+# If user did not specify location we start by searching at the standard locations
+#
+
+if test "x$dbcxx_include_paths" = "x"
+then
+  AC_MSG_NOTICE([Looking for db_cxx.h in standard locations])
+  AC_CHECK_HEADERS(db_cxx.h,HAVE_DBCXX=yes,HAVE_DBCXX=no)
+  # If the user did not provide a location we have some good suggestions
+  dbcxx_include_paths="/usr/include/db4 /usr/include/db44 /usr/include/db43"
+else
+  HAVE_DBCXX=no
+fi
+
+#
+# Now Look for db_cxx.h in non-standard locations
+#
+
+if test "$HAVE_DBCXX" = no
+then
+  for dbcxx_dir in $dbcxx_include_paths
+  do
+    SAVE_CPPFLAGS=$CPPFLAGS
+    DBCXX_CPPFLAGS=-I$dbcxx_dir
+    CPPFLAGS="$CPPFLAGS $DBCXX_CPPFLAGS"
+    # Disable Autoconf caching
+    unset ac_cv_header_db_cxx_h
+    AC_MSG_NOTICE([Looking for db_cxx.h in $dbcxx_dir])
+    AC_CHECK_HEADERS(db_cxx.h,HAVE_DBCXX=yes,HAVE_DBCXX=no)
+    CPPFLAGS=$SAVE_CPPFLAGS
+    # If a db_cxx.h was found we break and keep the current value of DBCXX_CPPFLAGS
+    if test "$HAVE_DBCXX" = yes
+    then
+      break
+    fi
+    DBCXX_CPPFLAGS=
+  done
+fi
+AC_SUBST(DBCXX_CPPFLAGS)
+
+if test "x$db4_library_path" != "x"
+then
+  db4_library_path="-L$db4_library_path"
+fi
+
+if test "$HAVE_DBCXX" = no
+then
+  DBCXX_LIBS=""
+else
+  SAVE_LDFLAGS=$LDFLAGS
+  SAVE_CXXFLAGS=$CXXFLAGS
+
+  case $host in
+    *-*-mingw*)
+      CXXFLAGS="-I$dbcxx_dir $CXXFLAGS"
+      ;;
+    *)
+      # pthread needed for RH9
+      LDFLAGS="$LDFLAGS -lpthread"
+      ;;
+  esac
+
+  LDFLAGS="$LDFLAGS $db4_library_path"
+
+  for db_ver in "" -4.7 -4.3 -4.2
+  do
+    AC_CHECK_LIB(db_cxx$db_ver,main,DBCXX_LIBS="$db4_library_path -ldb_cxx$db_ver",DBCXX_LIBS="")
+
+    if test "$DBCXX_LIBS" = ""
+    then
+      AC_MSG_WARN([BerkeleyDB library libdb_cxx$db_ver was not found!])
+    else
+      break
+    fi
+  done
+
+  if test "$DBCXX_LIBS" = ""
+  then
+    AC_MSG_WARN([No BerkeleyDB library found!])
+  fi
+
+  LDFLAGS=$SAVE_LDFLAGS
+  CXXFLAGS=$SAVE_CXXFLAGS
+fi
+
+AC_SUBST(DBCXX_LIBS)
+if test ! "x$DBCXX_LIBS" = "x"
+then
+  # Mingw need -I$dbcxx_dir
+  AC_DEFINE(HAVE_DBCXX, , [define if Berkeley DB C++ binding is available])
+  SAVE_CXXFLAGS=$CXXFLAGS
+  CXXFLAGS="-I$dbcxx_dir $CXXFLAGS"
+  AC_DBCXX_HAVE_DBDEADLOCKEXCEPTION
+  CXXFLAGS=$SAVE_CXXFLAGS
+fi
+AC_LANG_RESTORE
+
+fi
+
+# DBJSTORE (storing jobs information in BDB)
+AC_ARG_ENABLE(dbjstore, AC_HELP_STRING([--disable-dbjstore], [disable storing local jobs information in BDB]),
+  [enables_dbjstore=$enableval],[])
+if test "$enables_dbjstore" = "yes"; then
+  if test "x$DBCXX_LIBS" = "x" ; then
+    AC_MSG_NOTICE([For storing jobs in BDB C++ API is needed (dbcxx) - disabling])
+    enables_dbjstore="no"
+  fi
+fi
+AC_MSG_NOTICE([Storing jobs in BDB enabled: $enables_dbjstore])
+AM_CONDITIONAL([DBJSTORE_ENABLED],[test "x$enables_dbjstore" = "xyes"])
+if test "x$enables_dbjstore" = "xyes"; then
+  AC_DEFINE(DBJSTORE_ENABLED,, [define if to build job information in BDB storage])
+fi
+
+# globus/gpt packages
+if test "$enables_hed" = "yes"; then
+PKG_CHECK_MODULES(GLOBUS_COMMON, [globus-common], [
+GLOBUS_COMMON_VERSION=`$PKG_CONFIG --modversion globus-common`], [
+GPT_PKG(globus_common)
+])
+AC_SUBST(GLOBUS_COMMON_CFLAGS)
+AC_SUBST(GLOBUS_COMMON_LIBS)
+
+PKG_CHECK_MODULES(GLOBUS_GSSAPI_GSI, [globus-gssapi-gsi], [
+GLOBUS_GSSAPI_GSI_VERSION=`$PKG_CONFIG --modversion globus-gssapi-gsi`], [
+GPT_PKG(globus_gssapi_gsi)
+])
+AC_SUBST(GLOBUS_GSSAPI_GSI_CFLAGS)
+AC_SUBST(GLOBUS_GSSAPI_GSI_LIBS)
+
+PKG_CHECK_MODULES(GLOBUS_GSS_ASSIST, [globus-gss-assist], [
+GLOBUS_GSS_ASSIST_VERSION=`$PKG_CONFIG --modversion globus-gss-assist`], [
+GPT_PKG(globus_gss_assist)
+])
+AC_SUBST(GLOBUS_GSS_ASSIST_CFLAGS)
+AC_SUBST(GLOBUS_GSS_ASSIST_LIBS)
+
+PKG_CHECK_MODULES(GLOBUS_GSI_CALLBACK, [globus-gsi-callback], [
+GLOBUS_GSI_CALLBACK_VERSION=`$PKG_CONFIG --modversion globus-gsi-callback`], [
+GPT_PKG(globus_gsi_callback)
+])
+AC_SUBST(GLOBUS_GSI_CALLBACK_CFLAGS)
+AC_SUBST(GLOBUS_GSI_CALLBACK_LIBS)
+
+PKG_CHECK_MODULES(GLOBUS_FTP_CLIENT, [globus-ftp-client], [
+GLOBUS_FTP_CLIENT_VERSION=`$PKG_CONFIG --modversion globus-ftp-client`], [
+GPT_PKG(globus_ftp_client)
+])
+AC_SUBST(GLOBUS_FTP_CLIENT_CFLAGS)
+AC_SUBST(GLOBUS_FTP_CLIENT_LIBS)
+
+PKG_CHECK_MODULES(GLOBUS_FTP_CONTROL, [globus-ftp-control], [
+GLOBUS_FTP_CONTROL_VERSION=`$PKG_CONFIG --modversion globus-ftp-control`], [
+GPT_PKG(globus_ftp_control)
+])
+AC_SUBST(GLOBUS_FTP_CONTROL_CFLAGS)
+AC_SUBST(GLOBUS_FTP_CONTROL_LIBS)
+
+PKG_CHECK_MODULES(GLOBUS_IO, [globus-io], [
+GLOBUS_IO_VERSION=`$PKG_CONFIG --modversion globus-io`], [
+GPT_PKG(globus_io)
+])
+AC_SUBST(GLOBUS_IO_CFLAGS)
+AC_SUBST(GLOBUS_IO_LIBS)
+
+PKG_CHECK_MODULES(GLOBUS_GSI_CERT_UTILS, [globus-gsi-cert-utils], [
+GLOBUS_GSI_CERT_UTILS_VERSION=`$PKG_CONFIG --modversion globus-gsi-cert-utils`], [
+GPT_PKG(globus_gsi_cert_utils)
+])
+AC_SUBST(GLOBUS_GSI_CERT_UTILS_CFLAGS)
+AC_SUBST(GLOBUS_GSI_CERT_UTILS_LIBS)
+
+PKG_CHECK_MODULES(GLOBUS_GSI_CREDENTIAL, [globus-gsi-credential], [
+GLOBUS_GSI_CREDENTIAL_VERSION=`$PKG_CONFIG --modversion globus-gsi-credential`], [
+GPT_PKG(globus_gsi_credential)
+])
+AC_SUBST(GLOBUS_GSI_CREDENTIAL_CFLAGS)
+AC_SUBST(GLOBUS_GSI_CREDENTIAL_LIBS)
+
+PKG_CHECK_MODULES(GLOBUS_OPENSSL_MODULE, [globus-openssl-module], [
+GLOBUS_OPENSSL_MODULE_VERSION=`$PKG_CONFIG --modversion globus-openssl-module`], [
+GPT_PKG(globus_openssl_module)
+])
+AC_SUBST(GLOBUS_OPENSSL_MODULE_CFLAGS)
+AC_SUBST(GLOBUS_OPENSSL_MODULE_LIBS)
+
+# Check for new globus thread model selection
+SAVE_CFLAGS=$CFLAGS
+SAVE_LIBS=$LIBS
+CFLAGS="$CFLAGS $GLOBUS_COMMON_CFLAGS"
+LIBS="$LIBS $GLOBUS_COMMON_LIBS"
+AC_CHECK_FUNCS(globus_thread_set_model)
+CFLAGS=$SAVE_CFLAGS
+LIBS=$SAVE_LIBS
+
+# Check for gridftp-v2
+SAVE_CFLAGS=$CFLAGS
+SAVE_LIBS=$LIBS
+CFLAGS="$CFLAGS $GLOBUS_FTP_CLIENT_CFLAGS"
+LIBS="$LIBS $GLOBUS_FTP_CLIENT_LIBS"
+AC_CHECK_FUNCS(globus_ftp_client_handleattr_set_gridftp2)
+CFLAGS=$SAVE_CFLAGS
+LIBS=$SAVE_LIBS
+
+globus_openssl_detected=
+PKG_CHECK_MODULES(GLOBUS_OPENSSL, [globus-openssl], [
+GLOBUS_OPENSSL_VERSION=`$PKG_CONFIG --modversion globus-openssl`], [
+GPT_PKG(globus_openssl)
+])
+if test ! "x$GLOBUS_OPENSSL_LIBS" = "x" ; then
+  globus_openssl_detected=`echo "$GLOBUS_OPENSSL_LIBS" | grep "lssl_$GPT_FLAVOR"`
+  if test ! "x$globus_openssl_detected" = "x" ; then
+    globus_openssl_detected="yes"
+  fi
+fi
+if test "x$globus_openssl_detected" = "xyes" ; then
+AC_MSG_RESULT([
+Globus own OpenSSL library detected.
+In order to avoid runtime conflicts following components will be disabled:
+GridFTP DMC,
+SRM DMC,
+GSI MCC.
+To enable these components use Globus compiled for system OpenSSL.
+])
+GLOBUS_FTP_CLIENT_VERSION=
+GLOBUS_FTP_CONTROL_VERSION=
+GLOBUS_IO_VERSION=
+GLOBUS_GSSAPI_GSI_VERSION=
+fi
+
+if test "x$GLOBUS_IO_VERSION" = "x"; then
+  IO_VERSION_MAJOR=0
+else
+  IO_VERSION_MAJOR=`echo "$GLOBUS_IO_VERSION" | sed 's/^\([[^.]]*\).*/\1/'`;
+fi
+AC_DEFINE_UNQUOTED(GLOBUS_IO_VERSION,$IO_VERSION_MAJOR,[Globus IO version])
+
+dnl
+dnl DEFAULT_GLOBUS_LOCATION
+dnl
+AC_MSG_CHECKING(for DEFAULT_GLOBUS_LOCATION)
+# GLOBUS_LOCATION is set by GPT macros
+DEFAULT_GLOBUS_LOCATION="$GLOBUS_LOCATION"
+AC_MSG_RESULT($DEFAULT_GLOBUS_LOCATION)
+AC_SUBST(DEFAULT_GLOBUS_LOCATION)
+
+#check lcas
+DEFAULT_LCAS_LOCATION=/opt/glite
+LCAS_LOCATION=
+LCAS_CFLAGS=
+LCAS_LIBS=
+AC_ARG_WITH(lcas-location,
+  [  --with-lcas-location=<PATH>        Specify the LCAS installation path. [[/opt/glite]]],
+  [
+    LCAS_LOCATION=$with_lcas_location
+    if test ! -d $LCAS_LOCATION; then
+      AC_MSG_WARN([LCAS_LOCATION ($LCAS_LOCATION) does not exist])
+      LCAS_LOCATION=
+    fi
+  ],[
+    if test "x$LCAS_LOCATION" = "x"; then
+      LCAS_LOCATION=$DEFAULT_LCAS_LOCATION
+    fi
+    if test ! -d $LCAS_LOCATION; then
+      LCAS_LOCATION=
+    fi
+  ]
+)
+if test "x$LCAS_LOCATION" != "x"; then
+  LCAS_CFLAGS=$LCAS_LOCATION/include/glite/security/lcas
+  if test ! -d $LCAS_CFLAGS; then
+    LCAS_CFLAGS=$LCAS_LOCATION/include/lcas
+    if test ! -d $LCAS_CFLAGS; then
+      LCAS_CFLAGS=$LCAS_LOCATION/include
+    fi
+  fi
+  LCAS_CFLAGS=-I$LCAS_CFLAGS
+  SAVE_CPPFLAGS=$CPPFLAGS
+  CPPFLAGS="$LCAS_CFLAGS $GLOBUS_GSSAPI_GSI_CFLAGS"
+  AC_CHECK_HEADERS([lcas.h],
+    LCAS_LDFLAGS=
+    if test -d $LCAS_LOCATION/lib64; then
+      LCAS_LDFLAGS="-L$LCAS_LOCATION/lib64 $GLOBUS_GSSAPI_GSI_LIBS"
+    else
+      LCAS_LDFLAGS="-L$LCAS_LOCATION/lib $GLOBUS_GSSAPI_GSI_LIBS"
+    fi
+    SAVE_LDFLAGS=$LDFLAGS
+    LDFLAGS="$LDFLAGS $LCAS_LDFLAGS"
+    AC_CHECK_LIB(lcas,lcas_init, LCAS_LIBS="$LCAS_LDFLAGS -llcas",LCAS_LOCATION="",)
+    LDFLAGS=$SAVE_LDFLAGS
+    ,
+    LCAS_LOCATION=""
+  )
+  CPPFLAGS=$SAVE_CPPFLAGS
+fi
+if test "x$LCAS_LOCATION" != "x"; then
+  AC_DEFINE(HAVE_LCAS,, [define if lcas is available])
+  AC_SUBST(LCAS_LOCATION)
+  AC_SUBST(LCAS_CFLAGS)
+  AC_SUBST(LCAS_LIBS)
+fi
+
+#check lcmaps
+DEFAULT_LCMAPS_LOCATION=/opt/glite
+LCMAPS_LOCATION=
+LCMAPS_CFLAGS=
+LCMAPS_LIBS=
+AC_ARG_WITH(lcmaps-location,
+  [  --with-lcmaps-location=<PATH>        Specify the LCMAPS installation path. [[/opt/glite]]],
+  [
+    LCMAPS_LOCATION=$with_lcmaps_location
+    if test ! -d $LCMAPS_LOCATION; then
+      AC_MSG_WARN([LCMAPS_LOCATION ($LCMAPS_LOCATION) does not exist])
+      LCMAPS_LOCATION=
+    fi
+  ],[
+    if test "x$LCMAPS_LOCATION" = "x"; then
+      LCMAPS_LOCATION=$DEFAULT_LCMAPS_LOCATION
+    fi
+    if test ! -d $LCMAPS_LOCATION; then
+      LCMAPS_LOCATION=
+    fi
+  ]
+)
+if test "x$LCMAPS_LOCATION" != "x"; then
+  LCMAPS_CFLAGS=$LCMAPS_LOCATION/include/glite/security/lcmaps
+  if test ! -d $LCMAPS_CFLAGS; then
+    LCMAPS_CFLAGS=$LCMAPS_LOCATION/include/lcmaps
+    if test ! -d $LCMAPS_CFLAGS; then
+      LCMAPS_CFLAGS=$LCMAPS_LOCATION/include
+    fi
+  fi
+  LCMAPS_CFLAGS=-I$LCMAPS_CFLAGS
+  SAVE_CPPFLAGS=$CPPFLAGS
+  CPPFLAGS="$LCMAPS_CFLAGS $GLOBUS_GSSAPI_GSI_CFLAGS"
+  AC_CHECK_HEADERS([lcmaps.h],
+    LCMAPS_LDFLAGS=
+    if test -d $LCMAPS_LOCATION/lib64; then
+      LCMAPS_LDFLAGS="-L$LCMAPS_LOCATION/lib64 $GLOBUS_GSSAPI_GSI_LIBS"
+    else
+      LCMAPS_LDFLAGS="-L$LCMAPS_LOCATION/lib $GLOBUS_GSSAPI_GSI_LIBS"
+    fi
+    SAVE_LDFLAGS=$LDFLAGS
+    LDFLAGS="$LDFLAGS $LCMAPS_LDFLAGS"
+    AC_CHECK_LIB(lcmaps,lcmaps_init, LCMAPS_LIBS="$LCMAPS_LDFLAGS -llcmaps",LCMAPS_LOCATION="",)
+    LDFLAGS=$SAVE_LDFLAGS
+    ,
+    LCMAPS_LOCATION=""
+  )
+  CPPFLAGS=$SAVE_CPPFLAGS
+fi
+if test "x$LCMAPS_LOCATION" != "x"; then
+  AC_DEFINE(HAVE_LCMAPS,, [define if lcmaps is available])
+  AC_SUBST(LCMAPS_LOCATION)
+  AC_SUBST(LCMAPS_CFLAGS)
+  AC_SUBST(LCMAPS_LIBS)
+fi
+
+# Check if mock DMC is enabled
+AC_ARG_ENABLE(mock-dmc, AC_HELP_STRING([--enable-mock-dmc], [enable mock DMC, default is disable]),[enables_mock_dmc="$enableval"],[])
+
+# Check for GFAL2
+
+AC_ARG_ENABLE(gfal, AC_HELP_STRING([--enable-gfal], [enable the GFAL support, default is disable]),[enables_gfal="$enableval"],[])
+if test "x$enables_gfal" = "xyes"; then
+  PKG_CHECK_MODULES(GFAL2, gfal_transfer, [], [enables_gfal="no"])
+  AC_SUBST(GFAL2_CFLAGS)
+  AC_SUBST(GFAL2_LIBS)
+fi
+
+# Check for xrootd (c++)
+
+AC_LANG_SAVE
+AC_LANG_CPLUSPLUS
+
+AC_ARG_ENABLE(xrootd, AC_HELP_STRING([--disable-xrootd], [disable the xrootd support, default is enable]),[enables_xrootd="$enableval"],[])
+if test "x$enables_xrootd" = "xyes"; then
+  XROOTD_CPPFLAGS="-I/usr/include/xrootd"
+  AC_ARG_WITH(xrootd, [  --with-xrootd=(PATH) Xrootd location])
+  if test ! "x$with_xrootd" = "x" ; then
+    XROOTD_LOCATION="$with_xrootd"
+    XROOTD_CPPFLAGS="-I$XROOTD_LOCATION/include/xrootd"
+    if test -d $XROOTD_LOCATION/lib64; then
+      XROOTD_LDFLAGS="-L$XROOTD_LOCATION/lib64"
+    else
+      XROOTD_LDFLAGS="-L$XROOTD_LOCATION/lib"
+    fi
+  fi
+  SAVE_CPPFLAGS=$CPPFLAGS
+  CPPFLAGS="$CPPFLAGS $XROOTD_CPPFLAGS"
+  AC_CHECK_HEADER(XrdPosix/XrdPosixXrootd.hh, [], [enables_xrootd="no"] [#include <iostream>])
+  CPPFLAGS=$SAVE_CPPFLAGS
+  SAVE_LDFLAGS=$LDFLAGS
+  LDFLAGS="$LDFLAGS $XROOTD_LDFLAGS"
+  AC_CHECK_LIB([XrdPosix], [_init],
+               [XROOTD_LIBS="$XROOTD_LDFLAGS -lXrdPosix"], [enables_xrootd="no"])
+  LDFLAGS=$SAVE_LDFLAGS
+fi
+AC_SUBST(XROOTD_CPPFLAGS)
+AC_SUBST(XROOTD_LIBS)
+fi
+
+AC_LANG_RESTORE
+
+# Setup conditionals
+AM_CONDITIONAL([GLOBUSUTILS_ENABLED], test -n "$GLOBUS_COMMON_VERSION")
+AM_CONDITIONAL([GRIDFTP_ENABLED], test -n "$GLOBUS_FTP_CLIENT_VERSION")
+AM_CONDITIONAL([MOCK_DMC_ENABLED], test x$enables_mock_dmc = xyes)
+AM_CONDITIONAL([GFAL_ENABLED], test x$enables_gfal = xyes)
+AM_CONDITIONAL([XROOTD_ENABLED], test x$enables_xrootd = xyes)
+AM_CONDITIONAL([OPENSSL_PROXY_ENABLED], test x$OPENSSL_PROXY = xyes)
+AM_CONDITIONAL([OPENSSL_X509_VERIFY_PARAM_ENABLED], test x$OPENSSL_X509_VERIFY_PARAM = xyes)
+AM_CONDITIONAL([XMLSEC_ENABLED], test x$XMLSEC_INSTALLED = xyes)
+AM_CONDITIONAL([CPPUNIT_ENABLED], test x$enables_cppunit = xyes)
+
+enables_srm_dmc=no
+if test "$enables_hed" = "yes"; then
+  enables_srm_dmc=yes
+fi
+
+if test "$enables_giis_service" = "yes"; then
+  if test "$enables_ldap_service" = "no"; then
+    enables_ldap_service="yes"
+  fi
+fi
+
+AM_CONDITIONAL([SRM_DMC_ENABLED],[test "x$enables_srm_dmc" = "xyes"])
+
+# Setup defines
+if test -n "$GLOBUS_COMMON_VERSION"; then
+    AC_DEFINE(HAVE_GLOBUS,,[define if GLOBUS is available])
+fi
+if test x"$OPENSSL_PROXY" = xyes; then
+    AC_DEFINE(HAVE_OPENSSL_PROXY,,[define if OPENSSL has PROXY capabilities])
+fi
+if test x"$OPENSSL_X509_VERIFY_PARAM" = xyes; then
+    AC_DEFINE(HAVE_OPENSSL_X509_VERIFY_PARAM,,[define if OPENSSL has X509_VERIFY_PARAM structure])
+fi
+if test x"$OPENSSL_OLDRSA" = xyes; then
+    AC_DEFINE(HAVE_OPENSSL_OLDRSA,,[define if OPENSSL has old RSA generation interface])
+fi
+if test x"$XMLSEC_INSTALLED" = xyes; then
+    AC_DEFINE(HAVE_XMLSEC,,[define if XMLSEC package is available])
+fi
+
+# Setup messages for reporting
+enables_gridftp=no
+if test -n "$GLOBUS_FTP_CLIENT_VERSION" ; then enables_gridftp=yes; fi
+enables_dbcxx=no
+if test -n "$DBCXX_LIBS" ; then enables_dbcxx=yes; fi
+
+# Check for LDAP
+
+if test "$enables_hed" = "yes"; then
+LDAP=no
+AC_ARG_ENABLE(ldap, AC_HELP_STRING([--disable-ldap], [disable the LDAP support - requires OpenLDAP]),[enables_ldap="$enableval"],[])
+if test "x$enables_ldap" = "xyes"; then
+  AC_CHECK_HEADER(ldap.h, [
+    LDAP=yes
+
+    SAVE_LDFLAGS=$LDFLAGS
+
+    case "${host}" in
+      *-*-mingw32):
+      ;;
+      *):
+        LDFLAGS=-lpthread
+      ;;
+    esac
+    AC_CHECK_LIB([ldap_r], [ldap_first_message], [
+      AC_CHECK_LIB([ldap_r], [ldap_initialize], [
+        AC_DEFINE(HAVE_LDAP_INITIALIZE,[],[Define if you have ldap_initialize function])
+      ])
+      LDAP_LIBS=-lldap_r ], [
+      AC_CHECK_LIB([ldap], [ldap_first_message], [
+        AC_CHECK_LIB([ldap], [ldap_initialize], [ AC_DEFINE(HAVE_LDAP_INITIALIZE,[],[Define if you have ldap_initialize function])
+      ])
+      LDAP_LIBS=-lldap ], [
+      LDAP=no
+    ])
+  ])
+  AC_CHECK_LIB([lber], [ber_init], [LDAP_LIBS="$LDAP_LIBS -llber"], [])
+  AC_SUBST(LDAP_LIBS)
+  LDFLAGS=$SAVE_LDFLAGS
+  ],
+
+  [
+    LDAP=no
+
+    # Try native LDAP on Win32 if OpenLDAP fails
+    case "${host}" in
+      *-*-mingw32)
+    AC_CHECK_HEADER([winldap.h],
+    [
+      AC_CHECK_LIB([wldap32], [ldap_init],
+      [
+        LDAP=yes
+        LDAP_LIBS="-lwldap32"
+        AC_DEFINE(USE_WIN32_LDAP_API,,[Define if using WIN32 LDAP API])
+      ])
+    ], [], [[#include <windows.h>]]) ;;
+    esac
+
+  ])
+
+  enables_ldap="$LDAP"
+fi
+else
+  enables_ldap="no"
+fi
+AM_CONDITIONAL([LDAP_ENABLED], test x$LDAP = xyes)
+if test "x$LDAP" = "xyes"; then
+  AC_DEFINE(HAVE_LDAP,[],[Define if OpenLDAP is available])
+fi
+
+# Check for the Perl module Inline::Python - temporary during rewrite.
+PERL5LIB_INLINE_PYTHON=
+INLINE_PYTHON_FOUND=
+AC_ARG_WITH(inline-python-location,
+  AC_HELP_STRING([--with-inline-python-location=<PATH>], [Location of the Perl Inline::Python module.]),
+  [PERL5LIB_INLINE_PYTHON="$with_inline_python_location"
+   if test -d $PERL5LIB_INLINE_PYTHON; then
+     PERL5LIB_INLINE_PYTHON="-I${PERL5LIB_INLINE_PYTHON}"
+     if `${PERL} ${PERL5LIB_INLINE_PYTHON} -e "use Inline::Python; exit;" > /dev/null 2>&1`
+     then  	 
+       INLINE_PYTHON_FOUND="yes"
+       AC_MSG_NOTICE([Inline::Python Perl module found])
+     else
+       AC_MSG_NOTICE([--with-inline-python-location given, but test failed])
+     fi
+   else
+     PERL5LIB_INLINE_PYTHON=
+     AC_MSG_ERROR([Perl module Inline::Python not found at ($PERL5LIB_INLINE_PYTHON)])
+     INLINE_PYTHON_FOUND="no"
+   fi],
+  [INLINE_PYTHON_FOUND="no"]
+)
+AC_SUBST(PERL5LIB_INLINE_PYTHON)
+AM_CONDITIONAL([INLINE_PYTHON_AVAILABLE],[test "x${INLINE_PYTHON_FOUND}" = "xyes"])
+
+# Check for SSH
+AC_ARG_ENABLE(ssh, AC_HELP_STRING([--enable-ssh], [enable the SSH support, default is disable]),[enables_ssh="$enableval"],[])
+if test "x$enables_ssh" = "xyes" -a "x$INLINE_PYTHON_FOUND" = "xyes"; then
+  if `sshfs -V > /dev/null 2>&1`
+  then
+    if `${PYTHON} -c "from paramiko.transport import Transport" > /dev/null 2>&1`
+    then
+      :
+    else
+      AC_MSG_NOTICE([--enable-ssh given, but python-paramiko not found])
+      enables_ssh="no"
+    fi
+  else
+    AC_MSG_NOTICE([--enable-ssh given, but sshfs command not found])
+    enables_ssh="no"
+  fi			   
+fi
+AC_MSG_NOTICE([SSH enabled: $enables_ssh])
+AM_CONDITIONAL([SSH_ENABLED],[test "x$enables_ssh" = "xyes"])
+
+# Check for the uuid lib
+UUID_LIBS=""
+if test "$enables_hed" = "yes"; then
+AC_CHECK_HEADER(uuid/uuid.h, [
+  AC_CHECK_FUNC([uuid_generate], [UUID_LIBS=], [
+    AC_CHECK_LIB([uuid], [uuid_generate], [UUID_LIBS=-luuid], [
+      AC_MSG_NOTICE([Can't find library containing uuid implementation])
+    ])
+  ])
+], [AC_MSG_NOTICE([Can't find uuid header])])
+AC_SUBST(UUID_LIBS)
+LIBS="$LIBS $UUID_LIBS"
+fi
+
+# Check for dlopen
+DLOPEN_LIBS=""
+if test "$enables_hed" = "yes"; then
+AC_CHECK_FUNC([dlopen], [DLOPEN_LIBS=], [
+  AC_CHECK_LIB([dl], [dlopen], [DLOPEN_LIBS=-ldl], [
+    AC_MSG_NOTICE([Can't find library containing dlopen implementation])
+  ])
+])
+AC_SUBST(DLOPEN_LIBS)
+fi
+
+# check for fsusage
+if test "$enables_hed" = "yes"; then
+gl_FSUSAGE
+fi
+
+
+if test "$enables_hed" = "yes"; then
+
+# Checks for header files.
+AC_HEADER_DIRENT
+AC_HEADER_STDC
+AC_HEADER_SYS_WAIT
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h float.h limits.h netdb.h netinet/in.h sasl.h sasl/sasl.h stdint.h stdlib.h string.h sys/file.h sys/socket.h sys/vfs.h unistd.h uuid/uuid.h getopt.h])
+AC_CXX_HAVE_SSTREAM
+
+# Checks for typedefs, structures, and compiler characteristics.
+AC_HEADER_STDBOOL
+AC_C_CONST
+AC_TYPE_UID_T
+AC_C_INLINE
+AC_TYPE_MODE_T
+AC_TYPE_OFF_T
+AC_TYPE_PID_T
+AC_TYPE_SIZE_T
+AC_CHECK_MEMBERS([struct stat.st_blksize])
+AC_HEADER_TIME
+AC_STRUCT_TM
+AC_CHECK_TYPES([ptrdiff_t])
+
+# Checks for library functions.
+AC_FUNC_CHOWN
+AC_FUNC_CLOSEDIR_VOID
+AC_FUNC_ERROR_AT_LINE
+AC_FUNC_FORK
+AC_FUNC_LSTAT
+AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
+AC_FUNC_MEMCMP
+AC_FUNC_MKTIME
+# GNU compatible *ALLOC functions are available on Windows
+# The test will however fail when cross-compiling with mingw
+case "${host}" in
+  *-*-mingw32) : ;;
+            *)
+AC_FUNC_MALLOC
+AC_FUNC_REALLOC
+;;
+esac
+AC_FUNC_SELECT_ARGTYPES
+AC_TYPE_SIGNAL
+AC_FUNC_STRERROR_R
+AC_FUNC_STAT
+AC_CHECK_FUNCS([acl dup2 floor ftruncate gethostname getdomainname getpid gmtime_r lchown localtime_r memchr memmove memset mkdir mkfifo regcomp rmdir select setenv socket strcasecmp strchr strcspn strdup strerror strncasecmp strstr strtol strtoul strtoull timegm tzset unsetenv getopt_long_only getgrouplist mkdtemp posix_fallocate readdir_r [mkstemp] mktemp])
+AC_CHECK_LIB([resolv], [res_query], [LIBRESOLV=-lresolv], [LIBRESOLV=])
+AC_CHECK_LIB([resolv], [__dn_skipname], [LIBRESOLV=-lresolv], [LIBRESOLV=])
+AC_CHECK_LIB([nsl], [gethostbyname], [LIBRESOLV="$LIBRESOLV -lnsl"], [])
+AC_CHECK_LIB([nsl], [getdomainname])
+AC_SUBST(LIBRESOLV)
+
+fi
+
+# check for platfom specific extra libraries and flags
+
+EXTRA_LIBS=""
+REGEX_LIBS=""
+SOCKET_LIBS=""
+WIN32=""
+case "${host}" in
+  *-*-mingw32)
+    WIN32="yes"
+    REGEX_LIBS="-lregex"
+    SOCKET_LIBS="-lws2_32"
+    EXTRA_LIBS="-lole32"
+    # its required to libtool generate .dlls on win32 using mingw
+    LDFLAGS="$LDFLAGS -no-undefined"
+    AC_DEFINE(HAVE_GETDOMAINNAME,,[windows has gethostname method])
+    AC_CHECK_PROGS(WINDRES, windres.exe ${host}-windres)
+    ;;
+  *solaris*)
+    SOCKET_LIBS="-lsocket"
+    CFLAGS="$CFLAGS -D_POSIX_PTHREAD_SEMANTICS"
+    CXXFLAGS="$CXXFLAGS -D_POSIX_PTHREAD_SEMANTICS"
+    ;;
+  *)
+    AC_DEFINE(HAVE_GETDOMAINNAME,,[let's suppose the unix-alike (except solaris) has gethostname method])
+    ;;
+esac
+AC_SUBST(EXTRA_LIBS)
+AC_SUBST(REGEX_LIBS)
+AC_SUBST(SOCKET_LIBS)
+AM_CONDITIONAL([WIN32], [ test "x$WIN32" = "xyes" ])
+
+case " $LDFLAGS " in
+     " -Wl,--no-undefined ") ;;
+     " -Wl,-no-undefined ") ;;
+     " -Wl,-z -Wl,defs ") ;;
+     " -Wl,-z,defs ") ;;
+     *)
+        case "${host}" in
+            *darwin*);;
+            *solaris*);;
+            *) LDFLAGS="$LDFLAGS -Wl,--no-undefined" ;;
+        esac
+        ;;
+esac
+
+AC_CHECK_PROGS(PDFLATEX, pdflatex)
+AC_CHECK_PROGS(DOXYGEN, doxygen)
+AC_CHECK_PROGS(DOT, dot)
+
+# Check if user asks to skip documentation build
+AC_ARG_ENABLE(doc, AC_HELP_STRING([--disable-doc], [disable building documentation (requires doxygen and pdflatex)]),[enables_doc=$enableval],[])
+#if test "x$enables_doc" = "xyes"; then
+#  There is no point disabling docs due to missing tools since the pdf
+#  files are both in svn and in the dist tarball
+#  if test "x$PDFLATEX" = "x"; then
+#    enables_doc="no"
+#    AC_MSG_NOTICE([WARNING: Missing pdflatex - documentation won't be built])
+#  elif test "x$DOXYGEN" = "x"; then
+#    enables_doc="no"
+#    AC_MSG_NOTICE([WARNING: Missing doxygen - documentation won't be built])
+#  elif test "x$DOT" = "x"; then
+#    enables_doc="no"
+#    AC_MSG_NOTICE([WARNING: Missing dot - documentation won't be built])
+#  fi
+#fi
+AC_MSG_NOTICE([Documentation enabled: $enables_doc])
+AM_CONDITIONAL([DOC_ENABLED],[test "x$enables_doc" = "xyes"])
+
+AM_CONDITIONAL([PYDOXYGEN],[test -f python/python/arc/index.xml -o "x$DOXYGEN" != "x"])
+AM_CONDITIONAL([ALTPYDOXYGEN],[test -f python/altpython/arc/index.xml -o "x$DOXYGEN" != "x"])
+
+# Check for explicitly and implicitely disabled services
+if test "x$WIN32" = "xyes" ; then
+  AC_MSG_NOTICE([In WIN32 environment many (all) services are not supported yet])
+fi
+# A-Rex
+AC_ARG_ENABLE(a_rex_service, AC_HELP_STRING([--disable-a-rex-service], [disable building A-Rex service]),
+  [enables_a_rex_service=$enableval],[])
+if test "$enables_a_rex_service" = "yes"; then
+  if test "x$WIN32" = "xyes" ; then
+    AC_MSG_NOTICE([A-Rex can't be built for WIN32 environment - disabling])
+    enables_a_rex_service="no"
+  elif test "x$DBCXX_LIBS" = "x" ; then
+    AC_MSG_NOTICE([A-Rex can't be built without C++ API for DB4.x - disabling])
+    enables_a_rex_service="no"
+  fi
+fi
+AC_MSG_NOTICE([A-Rex service enabled: $enables_a_rex_service])
+AM_CONDITIONAL([A_REX_SERVICE_ENABLED],[test "x$enables_a_rex_service" = "xyes"])
+
+# Gridftpd
+AC_ARG_ENABLE(gridftpd_service, AC_HELP_STRING([--disable-gridftpd-service], [disable building Gridftpd service]),
+  [enables_gridftpd_service=$enableval],[])
+if test "$enables_gridftpd_service" = "yes"; then
+  if test "x$WIN32" = "xyes" ; then
+    AC_MSG_NOTICE([Gridftpd can not be built for WIN32 environment - disabling])
+    enables_gridftpd_service="no"
+  fi
+  gridftpd_service_globus_pkgs="globus-common globus-io globus-gsi-credential globus-openssl-module globus-ftp-control"
+  gridftpd_service_globus_pkgs_missing=""
+  for pkg in $gridftpd_service_globus_pkgs
+  do
+      var=`echo '$'$pkg|tr '[\-a-z]' '[_A-Z]'|sed 's/$/_VERSION/'`
+      if test -z "`eval echo $var`"
+      then
+        gridftpd_service_globus_pkgs_missing="$gridftpd_service_globus_pkgs_missing $pkg"
+      fi
+  done
+
+
+  if test -n "$gridftpd_service_globus_pkgs_missing" ; then
+    AC_MSG_NOTICE([GridFTP service can not be built (missing development packages for$gridftpd_service_globus_pkgs_missing) - disabling])
+    enables_gridftpd_service="no"
+  fi
+
+  #check for struct statfs
+  AC_CHECK_FUNCS([fstatfs])
+  AC_CHECK_HEADERS([sys/param.h sys/statfs.h sys/mount.h sys/vfs.h])dnl
+  AC_CHECK_MEMBERS([struct statfs.f_type],,,
+    [$ac_includes_default
+     #if HAVE_SYS_STATFS_H
+     #include <sys/statfs.h>
+     #endif
+     #if HAVE_SYS_MOUNT_H
+     #include <sys/mount.h>
+     #endif
+     #if HAVE_SYS_VFS_H
+     #include <sys/vfs.h>
+     #endif])
+fi
+AC_MSG_NOTICE([Gridftpd service enabled: $enables_gridftpd_service])
+AM_CONDITIONAL([GRIDFTPD_SERVICE_ENABLED],[test "x$enables_gridftpd_service" = "xyes"])
+
+# LDAP service
+AC_ARG_ENABLE(ldap_service, AC_HELP_STRING([--disable-ldap-service], [disable building LDAP Infosystem Service]),
+  [enables_ldap_service=$enableval],[])
+if test "$enables_ldap_service" = "yes"; then
+  if test "x$WIN32" = "xyes" ; then
+    AC_MSG_NOTICE([LDAP infosystem can't be built for WIN32 environment - disabling])
+    enables_ldap_service="no"
+  fi
+fi
+
+AC_MSG_NOTICE([LDAP Infosystem service enabled: $enables_ldap_service])
+AM_CONDITIONAL([LDAP_SERVICE_ENABLED],[test "x$enables_ldap_service" = "xyes"])
+
+# GIIS service
+AC_ARG_ENABLE(giis_service, AC_HELP_STRING([--disable-giis-service], [disable building GIIS Service]),
+  [enables_giis_service=$enableval],[])
+if test "$enables_giis_service" = "yes"; then
+  if test "x$WIN32" = "xyes" ; then
+    AC_MSG_NOTICE([GIIS can't be built for WIN32 environment - disabling])
+    enables_giis_service="no"
+  fi
+  AC_CHECK_HEADERS(lber.h, [],[enables_giis_service=no])
+  AC_CHECK_HEADERS(ldap_features.h, [],[enables_giis_service=no])
+fi
+if test "$enables_ldap_service" = "no"; then
+  if test "$enables_giis_service" = "yes"; then
+    enables_giis_service="no"
+    AC_MSG_NOTICE([WARNING: GIIS service can't be enabled without LDAP Infosys, disabling GIIS])
+  fi
+fi
+AC_MSG_NOTICE([GIIS service enabled: $enables_giis_service])
+AM_CONDITIONAL([GIIS_SERVICE_ENABLED],[test "x$enables_giis_service" = "xyes"])
+
+# LDAP monitor
+AC_ARG_ENABLE(ldap_monitor, AC_HELP_STRING([--disable-ldap-monitor], [disable building LDAP Monitor]),
+  [enables_ldap_monitor=$enableval],[])
+
+AC_MSG_NOTICE([LDAP Monitor enabled: $enables_ldap_monitor])
+AM_CONDITIONAL([LDAP_MONITOR_ENABLED],[test "x$enables_ldap_monitor" = "xyes"])
+
+# WS monitor
+AC_ARG_ENABLE(ws_monitor, AC_HELP_STRING([--disable-ws-monitor], [disable building WS Monitor]),
+  [enables_ws_monitor=$enableval],[])
+
+AC_MSG_NOTICE([WS Monitor enabled: $enables_ws_monitor])
+AM_CONDITIONAL([WS_MONITOR_ENABLED],[test "x$enables_ws_monitor" = "xyes"])
+
+# Cache service
+AC_ARG_ENABLE(cache_service, AC_HELP_STRING([--disable-cache-service], [disable building cache service]),
+  [enables_cache_service=$enableval],[])
+if test "$enables_cache_service" = "yes"; then
+  if test "x$WIN32" = "xyes" ; then
+    enables_cache_service="no"
+    AC_MSG_NOTICE([Cache service can't be built for WIN32 environment - disabling])
+  elif test ! "x$enables_a_rex_service" = "xyes" ; then
+    enables_cache_service="no"
+    AC_MSG_NOTICE([Cache service can't be built without A-REX - disabling])
+  fi
+fi
+AC_MSG_NOTICE([Cache service enabled: $enables_cache_service])
+AM_CONDITIONAL([CACHE_SERVICE_ENABLED],[test "x$enables_cache_service" = "xyes"])
+AM_CONDITIONAL([CACHE_WEBSERVICE_ENABLED],[test "x$enables_cache_service" = "xyes"])
+
+# DataDelivery service
+AC_ARG_ENABLE(datadelivery_service, AC_HELP_STRING([--disable-datadelivery-service], [disable building DataDelivery service]),
+  [enables_datadelivery_service=$enableval],[])
+if test "$enables_datadelivery_service" = "yes"; then
+  if test "x$WIN32" = "xyes" ; then
+    enables_datadelivery_service="no"
+    AC_MSG_NOTICE([DataDelivery service can't be built for WIN32 environment - disabling])
+  fi
+fi
+AC_MSG_NOTICE([DataDelivery service enabled: $enables_datadelivery_service])
+AM_CONDITIONAL([DATADELIVERY_SERVICE_ENABLED],[test "x$enables_datadelivery_service" = "xyes"])
+
+# ACIX service
+AC_ARG_ENABLE(acix, AC_HELP_STRING([--disable-acix], [disable building ACIX service]),
+  [enables_acix=$enableval],[])
+dnl AM_PATH_PYTHON([2.4], [], [enables_acix="no"])
+if test "x$PYTHON_VERSION" = "x2.2" -o "x$PYTHON_VERSION" = "x2.3"
+then
+  enables_acix="no"
+fi
+AC_MSG_NOTICE([ACIX enabled: $enables_acix])
+AM_CONDITIONAL([ACIX_ENABLED],[test "x$enables_acix" = "xyes"])
+
+# trial command (from python-twisted-core) is used for acix unittests
+AC_CHECK_PROGS(TRIAL, trial)
+if test "x$TRIAL" = "x"; then
+  AC_MSG_NOTICE([trial not found - ACIX unit tests will be skipped])
+fi
+# unit tests also require python >=2.6
+AM_CONDITIONAL([ACIX_TESTS_ENABLED], [test "x$TRIAL" != "x" && test "x$PYTHON_VERSION" != "x2.4" && test "x$PYTHON_VERSION" != "x2.5"])
+
+# Check for explicitly and implicitely disabled clients
+AC_ARG_ENABLE(compute_client, AC_HELP_STRING([--disable-compute-client], [disable building compute (job management) client tools]),
+  [enables_compute_client=$enableval],[])
+AC_MSG_NOTICE([Compute client tools enabled: $enables_compute_client])
+AM_CONDITIONAL([COMPUTE_CLIENT_ENABLED],[test "x$enables_compute_client" = "xyes"])
+
+AC_ARG_ENABLE(credentials_client, AC_HELP_STRING([--disable-credentials-client], [disable building client tools for handling X.509 credentials]),
+  [enables_credentials_client=$enableval],[])
+AC_MSG_NOTICE([Credentials client tools enabled: $enables_credentials_client])
+AM_CONDITIONAL([CREDENTIALS_CLIENT_ENABLED],[test "x$enables_credentials_client" = "xyes"])
+
+AC_ARG_ENABLE(echo_client, AC_HELP_STRING([--disable-echo-client], [disable building client tools for communicationg with Echo service]),
+  [enables_echo_client=$enableval],[])
+AC_MSG_NOTICE([Echo client tool enabled: $enables_echo_client])
+AM_CONDITIONAL([ECHO_CLIENT_ENABLED],[test "x$enables_echo_client" = "xyes"])
+
+AC_ARG_ENABLE(data_client, AC_HELP_STRING([--disable-data-client], [disable building generic client tools for handling data]),
+  [enables_data_client=$enableval],[])
+AC_MSG_NOTICE([Data client tools enabled: $enables_data_client])
+AM_CONDITIONAL([DATA_CLIENT_ENABLED],[test "x$enables_data_client" = "xyes"])
+
+AC_ARG_ENABLE(jura_client, AC_HELP_STRING([--disable-jura-client], [disable building client tool for communicating JURA]),
+  [enables_jura_client=$enableval],[])
+AC_MSG_NOTICE([JURA client tool enabled: $enables_jura_client])
+AM_CONDITIONAL([JURA_CLIENT_ENABLED],[test "x$enables_jura_client" = "xyes"])
+
+AC_ARG_ENABLE(saml_client, AC_HELP_STRING([--disable-saml-client], [disable building client tool for communicating SAML-based VOMS service]),
+  [enables_saml_client=$enableval],[])
+if test "$enables_saml_client" = "yes"; then
+  if test "$enables_xmlsec1" != "yes" ; then
+    enables_saml_client="no"
+    AC_MSG_NOTICE([SAML client requires xmlsec1 - disabling])
+  fi
+fi
+AC_MSG_NOTICE([SAML client tool enabled: $enables_saml_client])
+AM_CONDITIONAL([SAML_CLIENT_ENABLED],[test "x$enables_saml_client" = "xyes"])
+
+AC_ARG_ENABLE(wsrf_client, AC_HELP_STRING([--disable-wsrf-client], [disable building client tools for querying WSRF-enabled services.]),
+  [enables_wsrf_client=$enableval],[])
+AC_MSG_NOTICE([WSRF client tool enabled: $enables_wsrf_client])
+AM_CONDITIONAL([WSRF_CLIENT_ENABLED],[test "x$enables_wsrf_client" = "xyes"])
+
+AC_ARG_ENABLE(unicore_client, AC_HELP_STRING([--enable-unicore-client], [enables building UNICORE-related plugins.]),
+  [enables_unicore_client=$enableval],[])
+AC_MSG_NOTICE([UNICORE plugin(s) enabled: $enables_unicore_client])
+AM_CONDITIONAL([UNICORE_ENABLED],[test "x$enables_unicore_client" = "xyes"])
+
+AC_ARG_ENABLE(emies_client, AC_HELP_STRING([--disable-emies-client], [disables building EMI ES-related client plugins.]),
+  [enables_emies_client=$enableval],[])
+AC_MSG_NOTICE([EMI ES plugin(s) enabled: $enables_emies_client])
+AM_CONDITIONAL([EMIES_ENABLED],[test "x$enables_emies_client" = "xyes"])
+
+
+# Check for consistency among disabled components
+if test "$enables_hed" = "no"; then
+  if test "$enables_a_rex_service" = "yes" -o \
+          "$enables_cache_service" = "yes" -o \
+          "$enables_datadelivery_service" = "yes" -o \
+          "$enables_compute_client" = "yes" -o \
+          "$enables_credentials_client" = "yes" -o \
+          "$enables_echo_client" = "yes" -o \
+          "$enables_data_client" = "yes" -o \
+          "$enables_jura_client" = "yes" -o \
+          "$enables_saml_client" = "yes" -o \
+          "$enables_wsrf_client" = "yes" -o \
+          ; then
+    AC_MSG_ERROR(HED is needed for building any of the client or service tools. Please enable HED by using --enable-hed.)
+  fi
+fi
+AM_CONDITIONAL([HED_ENABLED],[test "x$enables_hed" = "xyes"])
+
+# A-Rex specific hack for backend scripts
+
+pbs_bin_path=/usr/bin
+pbs_log_path=/var/spool/pbs/server_logs
+tmp_dir=/tmp
+gnu_time=/usr/bin/time
+
+case "${host}" in
+    *solaris* | *darwin* )
+        # hostname -f does not work on Solaris, OS X
+        nodename="hostname" ;;
+    *)
+        nodename="/bin/hostname -f" ;;
+esac
+
+arc_location=$prefix
+
+AC_SUBST(arc_location)
+AC_SUBST(pbs_bin_path)
+AC_SUBST(pbs_log_path)
+AC_SUBST(tmp_dir)
+AC_SUBST(gnu_time)
+AC_SUBST(nodename)
+
+# Shell for the job control scripts
+
+case $host_os in
+
+  solaris* )
+      posix_shell='/usr/xpg4/bin/sh'
+      ;;
+  * )
+      posix_shell='/bin/sh'
+      ;;
+esac
+
+AC_SUBST(posix_shell)
+
+DATE=`date +%Y-%m-%d`
+AC_SUBST(DATE)
+#DATER=`date -R`
+DATER=`date +'%a, %d %b %Y %H:%M:%S %z'`
+AC_SUBST(DATER)
+SPECDATE=`LANG=C date +"%a %b %d %Y"`
+AC_SUBST(SPECDATE)
+
+AH_BOTTOM([#ifdef WIN32
+#include <arc/win32.h>
+#endif])
+
+AC_CONFIG_FILES([Makefile
+                 src/Makefile
+                 src/external/Makefile
+                 src/external/cJSON/Makefile
+                 src/hed/Makefile
+                 src/hed/libs/compute/Makefile
+                 src/hed/libs/compute/test/Makefile
+                 src/hed/libs/compute/examples/Makefile
+                 src/hed/libs/common/Makefile
+                 src/hed/libs/common/test/Makefile
+                 src/hed/libs/communication/Makefile
+                 src/hed/libs/credential/Makefile
+                 src/hed/libs/credential/test/Makefile
+                 src/hed/libs/credentialmod/Makefile
+                 src/hed/libs/crypto/Makefile
+                 src/hed/libs/cryptomod/Makefile
+                 src/hed/libs/data/Makefile
+                 src/hed/libs/data/cache-clean
+                 src/hed/libs/data/cache-clean.1
+                 src/hed/libs/data/cache-list
+                 src/hed/libs/data/cache-list.1
+                 src/hed/libs/data/test/Makefile
+                 src/hed/libs/data/examples/Makefile
+                 src/hed/libs/Makefile
+                 src/hed/libs/loader/Makefile
+                 src/hed/libs/loader/schema/Makefile
+                 src/hed/libs/loader/test/Makefile
+                 src/hed/libs/message/Makefile
+                 src/hed/libs/message/test/Makefile
+                 src/hed/libs/security/Makefile
+                 src/hed/libs/security/ArcPDP/Makefile
+                 src/hed/libs/security/ArcPDP/attr/Makefile
+                 src/hed/libs/security/ArcPDP/policy/Makefile
+                 src/hed/libs/security/ArcPDP/alg/Makefile
+                 src/hed/libs/security/ArcPDP/fn/Makefile
+                 src/hed/libs/credentialstore/Makefile
+                 src/hed/libs/wsrf/Makefile
+                 src/hed/libs/ws-addressing/Makefile
+                 src/hed/libs/ws-security/Makefile
+                 src/hed/libs/ws-security/test/Makefile
+                 src/hed/libs/infosys/Makefile
+                 src/hed/libs/infosys/schema/Makefile
+                 src/hed/libs/infosys/test/Makefile
+                 src/hed/libs/delegation/Makefile
+                 src/hed/libs/delegation/test/Makefile
+                 src/hed/libs/ws/Makefile
+                 src/hed/libs/xmlsec/Makefile
+                 src/hed/libs/globusutils/Makefile
+                 src/hed/daemon/Makefile
+                 src/hed/daemon/scripts/Makefile
+                 src/hed/daemon/schema/Makefile
+                 src/hed/daemon/unix/Makefile
+                 src/hed/daemon/win32/Makefile
+                 src/hed/mcc/Makefile
+                 src/hed/mcc/soap/Makefile
+                 src/hed/mcc/tcp/Makefile
+                 src/hed/mcc/tcp/schema/Makefile
+                 src/hed/mcc/http/Makefile
+                 src/hed/mcc/http/schema/Makefile
+                 src/hed/mcc/tls/Makefile
+                 src/hed/mcc/tls/schema/Makefile
+                 src/hed/mcc/msgvalidator/Makefile
+                 src/hed/mcc/msgvalidator/schema/Makefile
+                 src/hed/acc/Makefile
+                 src/hed/acc/ARC0/Makefile
+                 src/hed/acc/ARC1/Makefile
+                 src/hed/acc/ARC1/test/Makefile
+                 src/hed/acc/EMIES/Makefile
+                 src/hed/acc/EMIES/arcemiestest.1
+                 src/hed/acc/EMIES/schema/Makefile
+                 src/hed/acc/CREAM/Makefile
+                 src/hed/acc/UNICORE/Makefile
+                 src/hed/acc/Broker/Makefile
+                 src/hed/acc/Broker/test/Makefile
+                 src/hed/acc/PythonBroker/Makefile
+                 src/hed/acc/JobDescriptionParser/Makefile
+                 src/hed/acc/JobDescriptionParser/test/Makefile
+                 src/hed/acc/SER/Makefile
+                 src/hed/acc/ldap/Makefile
+                 src/hed/acc/TEST/Makefile
+                 src/hed/dmc/Makefile
+                 src/hed/dmc/file/Makefile
+                 src/hed/dmc/gridftp/Makefile
+                 src/hed/dmc/http/Makefile
+                 src/hed/dmc/ldap/Makefile
+                 src/hed/dmc/srm/Makefile
+                 src/hed/dmc/srm/srmclient/Makefile
+                 src/hed/dmc/gfal/Makefile
+                 src/hed/dmc/xrootd/Makefile
+                 src/hed/dmc/mock/Makefile
+                 src/hed/dmc/acix/Makefile
+                 src/hed/dmc/rucio/Makefile
+                 src/hed/profiles/general/general.xml
+                 src/hed/shc/Makefile
+                 src/hed/shc/arcpdp/Makefile
+                 src/hed/shc/arcpdp/schema/Makefile
+                 src/hed/shc/xacmlpdp/Makefile
+                 src/hed/shc/xacmlpdp/schema/Makefile
+                 src/hed/shc/delegationpdp/Makefile
+                 src/hed/shc/delegationpdp/schema/Makefile
+                 src/hed/shc/gaclpdp/Makefile
+                 src/hed/shc/pdpserviceinvoker/Makefile
+                 src/hed/shc/pdpserviceinvoker/schema/Makefile
+                 src/hed/shc/allowpdp/Makefile
+                 src/hed/shc/denypdp/Makefile
+                 src/hed/shc/simplelistpdp/Makefile
+                 src/hed/shc/simplelistpdp/schema/Makefile
+                 src/hed/shc/arcauthzsh/Makefile
+                 src/hed/shc/arcauthzsh/schema/Makefile
+                 src/hed/shc/usernametokensh/Makefile
+                 src/hed/shc/usernametokensh/schema/Makefile
+                 src/hed/shc/x509tokensh/Makefile
+                 src/hed/shc/x509tokensh/schema/Makefile
+                 src/hed/shc/samltokensh/Makefile
+                 src/hed/shc/samltokensh/schema/Makefile
+                 src/hed/shc/saml2sso_assertionconsumersh/Makefile
+                 src/hed/shc/delegationsh/Makefile
+                 src/hed/shc/delegationsh/schema/Makefile
+                 src/hed/shc/legacy/Makefile
+                 src/hed/shc/legacy/schema/Makefile
+                 src/hed/identitymap/Makefile
+                 src/hed/identitymap/schema/Makefile
+                 src/libs/Makefile
+                 src/libs/data-staging/Makefile
+                 src/libs/data-staging/test/Makefile
+                 src/libs/data-staging/examples/Makefile
+                 src/services/Makefile
+                 src/services/a-rex/Makefile
+                 src/services/a-rex/a-rex
+                 src/services/a-rex/grid-manager/arc-vomsac-check.8
+                 src/services/a-rex/grid-manager/arc-blahp-logger.8
+                 src/services/a-rex/grid-manager/gm-jobs.8
+                 src/services/a-rex/delegation/Makefile
+                 src/services/a-rex/grid-manager/Makefile
+                 src/services/a-rex/grid-manager/conf/Makefile
+                 src/services/a-rex/grid-manager/files/Makefile
+                 src/services/a-rex/grid-manager/jobs/Makefile
+                 src/services/a-rex/grid-manager/jobplugin/Makefile
+                 src/services/a-rex/grid-manager/loaders/Makefile
+                 src/services/a-rex/grid-manager/log/Makefile
+                 src/services/a-rex/grid-manager/mail/Makefile
+                 src/services/a-rex/grid-manager/misc/Makefile
+                 src/services/a-rex/grid-manager/run/Makefile
+                 src/services/a-rex/grid-manager/arc-config-check.1
+                 src/services/a-rex/infoproviders/Makefile
+                 src/services/a-rex/infoproviders/CEinfo.pl
+                 src/services/a-rex/infoproviders/se.pl
+                 src/services/a-rex/infoproviders/test/Makefile
+                 src/services/a-rex/jura/Makefile
+                 src/services/a-rex/jura/jura.1
+                 src/services/a-rex/jura/ssm/Makefile
+                 src/services/a-rex/ldif/Makefile
+                 src/services/a-rex/lrms/Makefile
+		 src/services/a-rex/lrms/python/Makefile
+                 src/services/a-rex/lrms/python/common/Makefile
+		 src/services/a-rex/lrms/sceapi/Makefile
+                 src/services/a-rex/lrms/submit_common.sh
+                 src/services/a-rex/lrms/scan_common.sh
+                 src/services/a-rex/lrms/condor/Makefile
+                 src/services/a-rex/lrms/condor/scan-condor-job
+                 src/services/a-rex/lrms/condor/cancel-condor-job
+                 src/services/a-rex/lrms/condor/submit-condor-job
+                 src/services/a-rex/lrms/fork/Makefile
+                 src/services/a-rex/lrms/fork/scan-fork-job
+                 src/services/a-rex/lrms/fork/submit-fork-job
+                 src/services/a-rex/lrms/fork/cancel-fork-job
+                 src/services/a-rex/lrms/ll/Makefile
+                 src/services/a-rex/lrms/ll/submit-ll-job
+                 src/services/a-rex/lrms/ll/cancel-ll-job
+                 src/services/a-rex/lrms/ll/scan-ll-job
+                 src/services/a-rex/lrms/lsf/Makefile
+                 src/services/a-rex/lrms/lsf/submit-lsf-job
+                 src/services/a-rex/lrms/lsf/cancel-lsf-job
+                 src/services/a-rex/lrms/lsf/scan-lsf-job
+                 src/services/a-rex/lrms/pbs/Makefile
+                 src/services/a-rex/lrms/pbs/submit-pbs-job
+                 src/services/a-rex/lrms/pbs/cancel-pbs-job
+                 src/services/a-rex/lrms/pbs/scan-pbs-job
+                 src/services/a-rex/lrms/pbs/configure-pbs-env.sh
+                 src/services/a-rex/lrms/sge/Makefile
+                 src/services/a-rex/lrms/sge/submit-sge-job
+                 src/services/a-rex/lrms/sge/scan-sge-job
+                 src/services/a-rex/lrms/sge/cancel-sge-job
+                 src/services/a-rex/lrms/slurm/Makefile
+                 src/services/a-rex/lrms/slurm/submit-SLURM-job
+                 src/services/a-rex/lrms/slurm/scan-SLURM-job
+                 src/services/a-rex/lrms/slurm/cancel-SLURM-job
+                 src/services/a-rex/lrms/dgbridge/Makefile
+                 src/services/a-rex/lrms/dgbridge/submit-DGBridge-job
+                 src/services/a-rex/lrms/dgbridge/scan-DGBridge-job
+                 src/services/a-rex/lrms/dgbridge/cancel-DGBridge-job
+                 src/services/a-rex/lrms/boinc/Makefile
+                 src/services/a-rex/lrms/boinc/submit-boinc-job
+                 src/services/a-rex/lrms/boinc/scan-boinc-job
+                 src/services/a-rex/lrms/boinc/cancel-boinc-job
+                 src/services/a-rex/schema/Makefile
+                 src/services/acix/Makefile
+                 src/services/acix/cacheserver/Makefile
+                 src/services/acix/cacheserver/test/Makefile
+                 src/services/acix/core/Makefile
+                 src/services/acix/core/test/Makefile
+                 src/services/acix/indexserver/Makefile
+                 src/services/acix/indexserver/test/Makefile
+                 src/services/cache_service/Makefile
+                 src/services/cache_service/arc-cache-service
+                 src/services/data-staging/Makefile
+                 src/services/data-staging/arc-datadelivery-service
+                 src/services/gridftpd/Makefile
+                 src/services/gridftpd/gridftpd.init
+                 src/services/gridftpd/gridftpd.8
+                 src/services/gridftpd/auth/Makefile
+                 src/services/gridftpd/conf/Makefile
+                 src/services/gridftpd/misc/Makefile
+                 src/services/gridftpd/run/Makefile
+                 src/services/gridftpd/fileplugin/Makefile
+                 src/services/ldap-infosys/Makefile
+                 src/services/ldap-infosys/create-bdii-config
+                 src/services/ldap-infosys/create-inforeg-config
+                 src/services/ldap-infosys/create-slapd-config
+                 src/services/ldap-infosys/nordugrid-arc-bdii
+                 src/services/ldap-infosys/nordugrid-arc-egiis
+                 src/services/ldap-infosys/nordugrid-arc-inforeg
+                 src/services/ldap-infosys/nordugrid-arc-ldap-infosys
+                 src/services/ldap-infosys/nordugrid-arc-slapd
+                 src/services/ldap-infosys/giis/Makefile
+                 src/services/ldap-infosys/giis/arc-infoindex-relay.8
+                 src/services/ldap-infosys/giis/arc-infoindex-server.8
+                 src/services/ldap-monitor/Makefile
+                 src/services/ldap-monitor/ldap-monitor
+                 src/services/ldap-monitor/README
+                 src/services/ldap-monitor/man/Makefile
+                 src/services/ldap-monitor/man/ldap-monitor.7
+                 src/services/ldap-monitor/includes/Makefile
+                 src/services/ldap-monitor/mon-icons/Makefile
+                 src/services/ldap-monitor/lang/Makefile
+                 src/services/ws-monitor/Makefile
+                 src/services/ws-monitor/ws-monitor
+                 src/services/ws-monitor/README
+                 src/services/ws-monitor/man/Makefile
+                 src/services/ws-monitor/man/ws-monitor.7
+                 src/services/ws-monitor/includes/Makefile
+                 src/services/ws-monitor/mon-icons/Makefile
+                 src/services/ws-monitor/lang/Makefile
+                 src/services/examples/Makefile
+                 src/services/examples/echo_java/Makefile
+                 src/services/examples/echo_python/Makefile
+                 src/services/wrappers/Makefile
+                 src/services/wrappers/java/Makefile
+                 src/services/wrappers/java/schema/Makefile
+                 src/services/wrappers/python/Makefile
+                 src/services/wrappers/python/schema/Makefile
+                 src/clients/Makefile
+                 src/clients/data/Makefile
+                 src/clients/data/arccp.1
+                 src/clients/data/arcls.1
+                 src/clients/data/arcrm.1
+                 src/clients/data/arcmkdir.1
+                 src/clients/data/arcrename.1
+                 src/clients/echo/Makefile
+                 src/clients/echo/arcecho.1
+                 src/clients/credentials/Makefile
+                 src/clients/credentials/arcproxy.1
+                 src/clients/saml/Makefile
+                 src/clients/saml/saml_assertion_init.1
+                 src/clients/compute/Makefile
+                 src/clients/compute/arcstat.1
+                 src/clients/compute/arcinfo.1
+                 src/clients/compute/arcsub.1
+                 src/clients/compute/arcclean.1
+                 src/clients/compute/arckill.1
+                 src/clients/compute/arcget.1
+                 src/clients/compute/arccat.1
+                 src/clients/compute/arcresub.1
+                 src/clients/compute/arcsync.1
+                 src/clients/compute/arcrenew.1
+                 src/clients/compute/arcresume.1
+                 src/clients/compute/arctest.1
+                 src/clients/wsrf/arcwsrf.1
+                 src/clients/wsrf/Makefile
+                 src/tests/Makefile
+                 src/tests/echo/Makefile
+                 src/tests/echo/perftest.1
+                 src/tests/echo/echo_service.xml.example
+                 src/tests/echo/schema/Makefile
+                 src/tests/policy-delegation/Makefile
+                 src/tests/delegation/Makefile
+                 src/tests/translator/Makefile
+                 src/tests/xpath/Makefile
+                 src/tests/arcpolicy/Makefile
+                 src/tests/perf/Makefile
+                 src/tests/perf/arcperftest.1
+                 src/tests/client/Makefile
+                 src/utils/hed/wsdl2hed.1
+                 src/utils/hed/arcplugin.1
+                 src/utils/hed/Makefile
+                 src/utils/gridmap/nordugridmap.cron
+                 src/utils/gridmap/nordugridmap.8
+                 src/utils/gridmap/Makefile
+                 src/utils/Makefile
+                 src/doc/Makefile
+                 src/doc/arc.conf.5
+                 swig/Makefile
+                 java/Makefile
+                 java/test/Makefile
+                 java/test/strip_test_file_name_and_run_junit
+                 java/examples/Makefile
+                 python/Makefile
+                 python/Doxyfile.api
+                 python/python/Makefile
+                 python/python/arc/Makefile
+                 python/altpython/Makefile
+                 python/altpython/arc/Makefile
+                 python/test/Makefile
+                 python/test/python/Makefile
+                 python/test/altpython/Makefile
+                 python/examples/Makefile
+                 po/Makefile.in
+                 include/Makefile
+                 debian/Makefile
+                 debian/changelog.deb
+                 nordugrid-arc.spec
+                 mingw-nordugrid-arc.spec
+                 src/hed/daemon/arched.8
+                 src/hed/daemon/scripts/arched
+                 arcbase.pc
+                 nsis/Makefile
+                 nsis/arc.nsis
+                 src/doxygen/Makefile
+])
+AC_OUTPUT
+
+AC_MSG_RESULT([
+Unit testing:       ${enables_cppunit}
+Java binding:       ${enables_swig_java}
+Python binding:     ${enables_swig_python} ($PYTHON_VERSION)
+Alt.Python binding: ${enables_altpython} ($ALTPYTHON_VERSION)
+
+Available third-party features:
+
+GridFTP:            ${enables_gridftp}
+GFAL:               ${enables_gfal}
+Xrootd:             ${enables_xrootd}
+MYSQL CLIENT LIB:   ${enables_mysql}
+LDAP:               ${enables_ldap}
+xmlsec1:            ${enables_xmlsec1}
+ARGUS:              ${enables_argus}
+NSS:                ${enables_nss}
+CANL++:             ${enables_canlxx}
+BDB C++:            ${enables_dbcxx}
+SSH:		    ${enables_ssh}
+
+Enabled features:
+
+Local jobs info in BDB: ${enables_dbjstore}
+
+LRMS rewrite dependency:
+Inline::Python Perl module: ${INLINE_PYTHON_FOUND}
+
+Included components:
+HED:                ${enables_hed}
+
+A-REX service:      ${enables_a_rex_service}
+GRIDFTPD service:   ${enables_gridftpd_service}
+LDAP Info service:  ${enables_ldap_service}
+GIIS service:       ${enables_giis_service}
+CACHE service:      ${enables_cache_service}
+DATADELIVERY service: ${enables_datadelivery_service}
+ACIX service:       ${enables_acix}
+
+COMPUTE clients:    ${enables_compute_client}
+DATA clients:       ${enables_data_client}
+CREDENTIAL clients: ${enables_credentials_client}
+ECHO client:        ${enables_echo_client}
+JURA client:        ${enables_jura_client}
+SAML VOMS client:   ${enables_saml_client}
+WSRF client:        ${enables_wsrf_client}
+
+UNICORE client (ACC): ${enables_unicore_client}
+EMI ES client (ACC): ${enables_emies_client}
+SRM client (DMC):   ${enables_srm_dmc}
+
+Documentation:      ${enables_doc}
+
+Monitoring:
+LDAP Monitor        ${enables_ldap_monitor}
+WS Monitor          ${enables_ws_monitor}
+])
+
+if test "$enables_hed" = "yes"; then
+if test ! "X$OPENSSL_PROXY" = "Xyes"; then
+AC_MSG_RESULT([
+
+OpenSSL contains no support for proxy credentials.
+You will have to use certificate/private key pairs directly.
+Make sure private keys are not protected by password before
+using them.
+It is advisable to update OpenSSL version to at least 0.9.7g
+to avoid this situation.
+
+])
+fi
+fi
+

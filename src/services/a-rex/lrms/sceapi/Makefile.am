@@ -1,0 +1,1 @@
+pkgdata_SCRIPTS = *.py
