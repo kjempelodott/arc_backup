@@ -1,0 +1,817 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link REL="SHORTCUT ICON" HREF="http//www.nordugrid.org/favicon.ico">
+    <link rel="STYLESHEET" href="../../_static/pygments.css" type="text/css" />
+    <link rel="STYLESHEET" href="../../_static/nordugrid_wrapper.css" type="text/css" />
+    <title>NorduGrid | Python LRMS backends</title>
+  </head>
+  
+  <body class="LONG">
+    <div class="MAIN">
+      <h1 class="TITLE">Python LRMS backends</h1>
+      
+      <h1>Source code for lrms.slurm</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Functions for SLURM job handling.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">common.cancel</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">common.common</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">common.config</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">common.proc</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">common.scan</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">common.submit</span> <span class="kn">import</span> <span class="o">*</span>
+
+<div class="viewcode-block" id="set_slurm"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.set_slurm">[docs]</a><span class="k">def</span> <span class="nf">set_slurm</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Fill :py:data:`~lrms.common.common.Config` with SLURM-specific options.</span>
+
+<span class="sd">    :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)</span>
+<span class="sd">    :type cfg: :py:class:`ConfigParser.ConfigParser`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">Config</span><span class="o">.</span><span class="n">slurm_bin_path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;slurm_bin_path&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span> <span class="k">if</span> \
+                            <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;slurm_bin_path&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="s">&#39;/usr/bin&#39;</span>
+    <span class="n">Config</span><span class="o">.</span><span class="n">slurm_wakeupperiod</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">getint</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;slurm_wakeupperiod&#39;</span><span class="p">)</span> <span class="k">if</span> \
+                                <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;slurm_wakeupperiod&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="mi">30</span>
+
+            
+<span class="c">#---------------------</span>
+<span class="c"># Submit methods</span>
+<span class="c">#---------------------</span>
+</div>
+<div class="viewcode-block" id="Submit"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.Submit">[docs]</a><span class="k">def</span> <span class="nf">Submit</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">jobdescs</span><span class="p">,</span> <span class="n">jc</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Submit a job to SLURM.</span>
+
+<span class="sd">    :param str config: path to arc.conf</span>
+<span class="sd">    :param jobdescs: job description list object</span>
+<span class="sd">    :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
+<span class="sd">    :param jc: job container object</span>
+<span class="sd">    :type jc: :py:class:`arc.compute.JobContainer (Swig Object of type Arc::EntityContainer&lt; Arc::Job &gt; *&#39;)`</span>
+<span class="sd">    :return: ``True`` if successfully submitted, else ``False``</span>
+<span class="sd">    :rtype: :py:obj:`bool`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">cfg</span> <span class="o">=</span> <span class="n">get_parsed_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+    <span class="n">set_common</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">set_gridmanager</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">set_cluster</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">set_queue</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">set_slurm</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span> <span class="ow">and</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
+        <span class="n">ssh_connect</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">private_key</span><span class="p">)</span>
+
+    <span class="n">jd</span> <span class="o">=</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">validate_attributes</span><span class="p">(</span><span class="n">jd</span><span class="p">)</span>
+        
+    <span class="c"># Run RTE stage0</span>
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- starting slurmSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="n">RTE_stage0</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">,</span> <span class="s">&#39;SLURM&#39;</span><span class="p">,</span> <span class="n">SBATCH_ACCOUNT</span> <span class="o">=</span> <span class="s">&#39;OtherAttributes.SBATCH_ACCOUNT&#39;</span><span class="p">)</span>
+
+    <span class="c"># Create script file and write job script</span>
+    <span class="n">jobscript</span> <span class="o">=</span> <span class="n">get_job_script</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+    <span class="n">script_file</span> <span class="o">=</span> <span class="n">write_script_file</span><span class="p">(</span><span class="n">jobscript</span><span class="p">)</span>
+
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;SLURM jobname: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">jd</span><span class="o">.</span><span class="n">Identification</span><span class="o">.</span><span class="n">JobName</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;SLURM job script built&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----------------- BEGIN job script -----&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">jobscript</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">):</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="n">line</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----------------- END job script -----&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s">&#39;ONLY_WRITE_JOBSCRIPT&#39;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s">&#39;ONLY_WRITE_JOBSCRIPT&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;yes&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">False</span>
+
+    <span class="c">#######################################</span>
+    <span class="c">#  Submit the job</span>
+    <span class="c">######################################</span>
+
+    <span class="n">execute</span> <span class="o">=</span> <span class="n">excute_local</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">else</span> <span class="n">execute_remote</span>
+    <span class="n">directory</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">]</span>
+
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Session directory: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">directory</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+
+    <span class="n">SLURM_TRIES</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">sbatch_handle</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="k">while</span> <span class="n">SLURM_TRIES</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">:</span>
+
+        <span class="n">args</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/sbatch </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">slurm_bin_path</span><span class="p">,</span> <span class="n">script_file</span><span class="p">)</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">,</span> <span class="s">&#39;Executing </span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;</span><span class="s"> on </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> 
+            <span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">else</span> <span class="s">&#39;localhost&#39;</span><span class="p">),</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+        <span class="n">sbatch_handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sbatch_handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">break</span>
+
+        <span class="k">if</span> <span class="n">sbatch_handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="mi">198</span> <span class="ow">or</span> <span class="n">wait_for_queue</span><span class="p">(</span><span class="n">sbatch_handle</span><span class="p">):</span>
+            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Waiting for queue to decrease&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">60</span><span class="p">)</span>
+            <span class="n">SLURM_TRIES</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">continue</span>
+
+        <span class="k">break</span> <span class="c"># Other error than full queue</span>
+
+    <span class="k">if</span> <span class="n">sbatch_handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+
+        <span class="c"># TODO: Test what happens when the jobqueue is full or when the slurm</span>
+        <span class="c"># ctld is not responding. SLURM 1.x and 2.2.x outputs the jobid into </span>
+        <span class="c"># STDERR and STDOUT respectively. Concat them, and let sed sort it out. </span>
+        <span class="c"># From the exit code we know that the job was submitted, so this</span>
+        <span class="c"># is safe. Ulf Tigerstedt &lt;tigerste@csc.fi&gt; 1.5.2011 </span>
+
+        <span class="n">jobID</span> <span class="o">=</span> <span class="n">get_job_id</span><span class="p">(</span><span class="n">sbatch_handle</span><span class="p">)</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Job submitted successfully!&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Local job id: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">jobID</span><span class="p">),</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- exiting submitSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+
+        <span class="n">endpointURL</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_endpoint</span><span class="p">)</span>
+        <span class="n">newJob</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">Job</span><span class="p">()</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">JobID</span> <span class="o">=</span> <span class="n">endpointURL</span><span class="o">.</span><span class="n">Host</span><span class="p">()</span> <span class="o">+</span> <span class="s">&#39;:&#39;</span> <span class="o">+</span> <span class="n">jobID</span> <span class="k">if</span> <span class="n">endpointURL</span><span class="o">.</span><span class="n">Host</span><span class="p">()</span> <span class="k">else</span> <span class="n">jobID</span>
+        <span class="c"># TODO: What interface name to use?</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">ServiceInformationInterfaceName</span> <span class="o">=</span> <span class="s">&#39;org.nordugrid.slurm.sbatch&#39;</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">JobStatusInterfaceName</span> <span class="o">=</span> <span class="s">&#39;org.nordugrid.slurm.sbatch&#39;</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">JobManagementInterfaceName</span> <span class="o">=</span> <span class="s">&#39;org.nordugrid.slurm.sbatch&#39;</span>
+        <span class="c"># TODO: Change returned endpoints for job. </span>
+        <span class="c"># Currently these URLs are not usable.</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">ServiceInformationURL</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="s">&#39;test://localhost&#39;</span><span class="p">)</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">JobStatusURL</span> <span class="o">=</span> <span class="n">endpointURL</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">JobManagementURL</span> <span class="o">=</span> <span class="n">endpointURL</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">SessionDir</span>  <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="s">&#39;file://&#39;</span> <span class="o">+</span> <span class="n">directory</span><span class="p">)</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">StageInDir</span>  <span class="o">=</span> <span class="n">newJob</span><span class="o">.</span><span class="n">SessionDir</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">StageOutDir</span> <span class="o">=</span> <span class="n">newJob</span><span class="o">.</span><span class="n">SessionDir</span>
+        <span class="n">newJob</span><span class="o">.</span><span class="n">IDFromEndpoint</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">jobID</span><span class="p">)</span>
+        <span class="n">jc</span><span class="o">.</span><span class="n">addEntity</span><span class="p">(</span><span class="n">newJob</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">True</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;job *NOT* submitted successfully!&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;got error code from sbatch: </span><span class="si">%d</span><span class="s"> !&#39;</span> <span class="o">%</span> <span class="n">sbatch_handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Output is:&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sbatch_handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">),</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Error output is:&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sbatch_handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">),</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- exiting slurmSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="bp">False</span>
+
+</div>
+<div class="viewcode-block" id="wait_for_queue"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.wait_for_queue">[docs]</a><span class="k">def</span> <span class="nf">wait_for_queue</span><span class="p">(</span><span class="n">handle</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check if queue is full.</span>
+
+<span class="sd">    :param handle: list of job description objects</span>
+<span class="sd">    :type handle: :py:class:`subprocess.Popen` or :py:data:`~lrms.common.common.Config`</span>
+<span class="sd">    :return: ``True`` if queue is full, else ``False``</span>
+<span class="sd">    :rtype: :py:obj:`bool`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span> <span class="n">handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="s">&quot;maximum number of jobs&quot;</span> <span class="ow">in</span> <span class="n">line</span> <span class="ow">or</span>
+                <span class="c"># A rare SLURM error, but may cause chaos in the </span>
+                <span class="c"># information/accounting system</span>
+                <span class="s">&quot;unable to accept job&quot;</span> <span class="ow">in</span> <span class="n">line</span><span class="p">):</span>
+                <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">return</span> <span class="bp">False</span>
+
+</div>
+<div class="viewcode-block" id="get_job_id"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.get_job_id">[docs]</a><span class="k">def</span> <span class="nf">get_job_id</span><span class="p">(</span><span class="n">handle</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get local job ID from sbtach stdout or stderr.</span>
+
+<span class="sd">    :param handle: list of job description objects</span>
+<span class="sd">    :type handle: :py:obj:`subprocess.Popen` or :py:data:`~lrms.common.common.Config`</span>
+<span class="sd">    :return: local ID</span>
+<span class="sd">    :rtype: :py:obj:`str`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span> <span class="n">handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">r&#39;Submitted batch job (\d+)&#39;</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Job ID not found in stdout or stderr&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="get_job_script"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.get_job_script">[docs]</a><span class="k">def</span> <span class="nf">get_job_script</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the complete sbatch job script.</span>
+
+<span class="sd">    :param jobdescs: list of job description objects</span>
+<span class="sd">    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription (Swig Object of type Arc::JobDescription *&#39;)` ... ]</span>
+<span class="sd">    :return: job script</span>
+<span class="sd">    :rtype: :py:obj:`str`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">set_req_mem</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+
+    <span class="c"># TODO: Maybe change way in which JobDescriptionParserSLURM is loaded.</span>
+    <span class="n">ok</span><span class="p">,</span> <span class="n">jobscript</span> <span class="o">=</span> <span class="n">JobDescriptionParserSLURM</span><span class="o">.</span><span class="n">Assemble</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ok</span><span class="p">:</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Unable to assemble SLURM job options&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Submit&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">False</span>
+
+    <span class="n">jd</span> <span class="o">=</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">jobscript</span> <span class="o">+=</span> \
+        <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;# Overide umask of execution node &#39;</span> \
+        <span class="s">&#39;(sometime values are really strange)</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;umask 077</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39; </span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;# source with arguments for DASH shells</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;sourcewithargs() {</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;script=$1</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;shift</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;. $script</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;}</span><span class="se">\n</span><span class="s">&#39;</span>
+
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">add_user_env</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+    <span class="n">jobsessiondir</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="p">)</span>
+    <span class="n">gridid</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;gridid&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span><span class="p">:</span>
+        <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">setup_local_transfer</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">shared_filesystem</span><span class="p">:</span>
+        <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">setup_runtime_env</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">runtime_stdin</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">jobsessiondir</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span> \
+                        <span class="k">if</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">jobsessiondir</span> <span class="o">+</span><span class="s">&#39;/&#39;</span><span class="p">)</span> \
+                        <span class="k">else</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span>
+        <span class="k">if</span> <span class="n">runtime_stdin</span>  <span class="o">!=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span><span class="p">:</span>
+            <span class="n">runtime_stdin</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">,</span> <span class="n">runtime_stdin</span><span class="p">)</span>
+
+        <span class="n">runtime_stdout</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">jobsessiondir</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span> \
+                         <span class="k">if</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">jobsessiondir</span> <span class="o">+</span> <span class="s">&#39;/&#39;</span><span class="p">)</span> \
+                         <span class="k">else</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span>
+        <span class="k">if</span> <span class="n">runtime_stdout</span> <span class="o">!=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="p">:</span>
+            <span class="n">runtime_stdout</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">,</span> <span class="n">runtime_stdout</span><span class="p">)</span>
+
+        <span class="n">runtime_stderr</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">jobsessiondir</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span> \
+                         <span class="k">if</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">jobsessiondir</span> <span class="o">+</span> <span class="s">&#39;/&#39;</span><span class="p">)</span> \
+                         <span class="k">else</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span>
+        <span class="k">if</span> <span class="n">runtime_stderr</span> <span class="o">!=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="p">:</span>
+            <span class="n">runtime_stderr</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">,</span> <span class="n">runtime_stderr</span><span class="p">)</span>
+
+        <span class="n">scratchdir</span> <span class="o">=</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">)</span>
+        <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;RUNTIME_JOB_DIR=</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">scratchdir</span> <span class="o">+</span> \
+                     <span class="s">&#39;RUNTIME_JOB_DIAG=</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">.diag</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">scratchdir</span> <span class="o">+</span> \
+                     <span class="s">&#39;RUNTIME_JOB_STDIN=&quot;</span><span class="si">%s</span><span class="s">&quot;</span><span class="se">\n</span><span class="s">&#39;</span>  <span class="o">%</span> <span class="n">runtime_stdin</span> <span class="o">+</span> \
+                     <span class="s">&#39;RUNTIME_JOB_STDOUT=&quot;</span><span class="si">%s</span><span class="s">&quot;</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">runtime_stdout</span> <span class="o">+</span> \
+                     <span class="s">&#39;RUNTIME_JOB_STDERR=&quot;</span><span class="si">%s</span><span class="s">&quot;</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">runtime_stderr</span>
+
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">move_files_to_node</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">RESULT=0</span><span class="se">\n\n</span><span class="s">&#39;</span>
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span><span class="p">:</span>
+        <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">download_input_files</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;if [ &quot;$RESULT&quot; = </span><span class="se">\&#39;</span><span class="s">0</span><span class="se">\&#39;</span><span class="s"> ] ; then</span><span class="se">\n</span><span class="s">&#39;</span>
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">RTE_stage1</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+    <span class="n">jobscript</span> <span class="o">+=</span> \
+        <span class="s">&#39;echo &quot;runtimeenvironments=$runtimeenvironments&quot; &gt;&gt; &#39;</span> \
+        <span class="s">&#39;&quot;$RUNTIME_JOB_DIAG&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;if [ ! &quot;X$SLURM_NODEFILE&quot; = </span><span class="se">\&#39;</span><span class="s">X</span><span class="se">\&#39;</span><span class="s"> ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;  if [ -r &quot;$SLURM_NODEFILE&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;    cat &quot;$SLURM_NODEFILE&quot; | sed </span><span class="se">\&#39;</span><span class="s">s/\(.*\)/nodename=</span><span class="se">\\</span><span class="s">1/</span><span class="se">\&#39;</span><span class="s"> &gt;&gt; &#39;</span> \
+        <span class="s">&#39;&quot;$RUNTIME_JOB_DIAG&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;  else</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;    SLURM_NODEFILE=</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;  fi</span><span class="se">\n</span><span class="s">fi</span><span class="se">\n</span><span class="s">&#39;</span> \
+        <span class="s">&#39;if [ &quot;$RESULT&quot; = </span><span class="se">\&#39;</span><span class="s">0</span><span class="se">\&#39;</span><span class="s"> ] ; then</span><span class="se">\n</span><span class="s">&#39;</span>
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">cd_and_run</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;fi</span><span class="se">\n</span><span class="s">fi</span><span class="se">\n</span><span class="s">&#39;</span>
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">configure_runtime</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span><span class="p">:</span>
+        <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">upload_output_files</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c"># There is no sense to keep trash till GM runs uploader</span>
+        <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;if [ ! -z  &quot;$RUNTIME_LOCAL_SCRATCH_DIR&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span>
+        <span class="c"># Delete all files except listed in job.#.output</span>
+        <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;  find ./ -type l -exec rm -f &quot;{}&quot; &quot;;&quot;</span><span class="se">\n</span><span class="s">&#39;</span>
+        <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;  find ./ -type f -exec chmod u+w &quot;{}&quot; &quot;;&quot;</span><span class="se">\n</span><span class="s">&#39;</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">controldir</span> <span class="o">+</span> <span class="s">&#39;/job.&#39;</span> <span class="o">+</span> <span class="n">gridid</span> <span class="o">+</span> <span class="s">&#39;.output&#39;</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">outputfile</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">outputfile</span><span class="p">:</span>
+                    <span class="n">name</span> <span class="o">=</span> <span class="p">(</span>
+                            <span class="c"># Replace escaped back-slashes (\). </span>
+                            <span class="c"># Note: Backslash escapes in 2 argument </span>
+                            <span class="c"># are processed. Pattern explained: First</span>
+                            <span class="c"># look for escaped backslashes (8x\), then </span>
+                            <span class="c"># look for other escaped chars (4x\).</span>
+                            <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s">r&#39;</span><span class="se">\\\\\\\\</span><span class="s">|</span><span class="se">\\\\</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\\\</span><span class="s">&#39;</span><span class="p">,</span>
+
+                            <span class="c"># Remove possible remote destination (URL).</span>
+                            <span class="c"># Take spaces and escaping into account.</span>
+                            <span class="c"># URL is the first string which is preceded by </span>
+                            <span class="c"># a space which is not escaped.</span>
+                            <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s">r&#39;([^</span><span class="se">\\</span><span class="s">](</span><span class="se">\\\\</span><span class="s">)*) .*&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\</span><span class="s">1&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span><span class="o">.</span>
+
+                            <span class="c"># Replace escaped spaces and single quotes</span>
+                            <span class="n">replace</span><span class="p">(</span><span class="s">&#39;\ &#39;</span><span class="p">,</span> <span class="s">&#39; &#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s">&quot;&#39;</span><span class="se">\\</span><span class="s">&#39;&#39;&quot;</span><span class="p">)</span><span class="o">.</span>
+
+                            <span class="c"># Strip leading slashes (/).</span>
+                            <span class="n">lstrip</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="p">))</span>
+                            <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">name</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;@&#39;</span><span class="p">:</span>
+                        <span class="n">jobscript</span> <span class="o">+=</span> \
+                            <span class="s">&#39;  dynlist=</span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">name</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="o">+</span> \
+                            <span class="s">&#39;  chmod -R u-w &quot;./$dynlist&quot; 2&gt;/dev/null</span><span class="se">\n</span><span class="s">&#39;</span> \
+                            <span class="s">&#39;  cat &quot;./$dynlist&quot; | &#39;</span> \
+                            <span class="s">&#39;while read name rest; do</span><span class="se">\n</span><span class="s">&#39;</span> \
+                            <span class="s">&#39;    chmod -R u-w &quot;./$name&quot; 2&gt;/dev/null</span><span class="se">\n</span><span class="s">&#39;</span> \
+                            <span class="s">&#39;  done</span><span class="se">\n</span><span class="s">&#39;</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;  chmod -R u-w &quot;$RUNTIME_JOB_DIR&quot;/</span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;</span><span class="s"> 2&gt;/dev/null</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;  find ./ -type f -perm /200 -exec rm -f &quot;{}&quot; &quot;;&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
+                     <span class="s">&#39;  find ./ -type f -exec chmod u+w &quot;{}&quot; &quot;;&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
+                     <span class="s">&#39;fi</span><span class="se">\n</span><span class="s">&#39;</span>
+
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span>
+    <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">move_files_to_frontend</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">jobscript</span>
+
+
+<span class="c">#---------------------</span>
+<span class="c"># Cancel methods</span>
+<span class="c">#---------------------</span>
+</div>
+<div class="viewcode-block" id="Cancel"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.Cancel">[docs]</a><span class="k">def</span> <span class="nf">Cancel</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">jobid</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Cancel a SLURM job.</span>
+
+<span class="sd">    :param str config: path to arc.conf</span>
+<span class="sd">    :param str jobid: local job ID</span>
+<span class="sd">    :return: ``True`` if successfully cancelled, else ``False``</span>
+<span class="sd">    :rtype: :py:obj:`bool`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">verify_job_id</span><span class="p">(</span><span class="n">jobid</span><span class="p">)</span>
+    <span class="n">cfg</span> <span class="o">=</span> <span class="n">get_parsed_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+    <span class="n">set_gridmanager</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">set_slurm</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span> <span class="ow">and</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
+        <span class="n">ssh_connect</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">private_key</span><span class="p">)</span>
+
+    <span class="n">cmd</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/scancel </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">slurm_bin_path</span><span class="p">,</span> <span class="n">jobid</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">cancel</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">jobid</span><span class="p">,</span> <span class="s">&#39;slurm&#39;</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_endpoint</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="verify_job_id"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.verify_job_id">[docs]</a><span class="k">def</span> <span class="nf">verify_job_id</span><span class="p">(</span><span class="n">jobid</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Verify that the local job ID is an :py:obj:`int`, \</span>
+<span class="sd">    else raise an :py:class:`~lrms.common.common.ArcError`.</span>
+
+<span class="sd">    :param str jobid: local job ID</span>
+<span class="sd">    :rtype: :py:obj:`bool`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">jobid</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Job id is not set, or it contains non-numeric characters (</span><span class="si">%s</span><span class="s">)&#39;</span> <span class="o">%</span> <span class="n">jobid</span><span class="p">,</span>
+                       <span class="s">&#39;slurm.Cancel&#39;</span><span class="p">)</span>
+
+
+<span class="c">#---------------------</span>
+<span class="c"># Scan methods</span>
+<span class="c">#---------------------</span>
+    </div>
+<div class="viewcode-block" id="Scan"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.Scan">[docs]</a><span class="k">def</span> <span class="nf">Scan</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">ctr_dirs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Scan and update status of SLURM jobs.</span>
+
+<span class="sd">    :param str config: path to arc.conf</span>
+<span class="sd">    :param ctr_dirs: list of paths to control directories </span>
+<span class="sd">    :type ctr_dirs: :py:obj:`list` [ :py:obj:`str` ... ]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+
+    <span class="n">cfg</span> <span class="o">=</span> <span class="n">get_parsed_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+    <span class="n">set_gridmanager</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">set_slurm</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">scanscriptlog</span><span class="p">:</span>
+        <span class="n">scanlogfile</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">LogFile</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scanscriptlog</span><span class="p">)</span>
+        <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Logger_getRootLogger</span><span class="p">()</span><span class="o">.</span><span class="n">addDestination</span><span class="p">(</span><span class="n">scanlogfile</span><span class="p">)</span>
+
+    <span class="n">jobs</span> <span class="o">=</span> <span class="n">get_jobs</span><span class="p">(</span><span class="n">ctr_dirs</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span> <span class="ow">and</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
+        <span class="c"># NOTE: Assuming 2 kB of TCP window needed for each job</span>
+        <span class="n">ssh_connect</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">private_key</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span> <span class="o">&lt;&lt;</span> <span class="mi">10</span><span class="p">)</span><span class="o">*</span><span class="nb">len</span><span class="p">(</span><span class="n">jobs</span><span class="p">))</span>
+
+    <span class="n">process_jobs</span><span class="p">(</span><span class="n">jobs</span><span class="p">)</span>
+   
+    <span class="n">kicklist</span> <span class="o">=</span> <span class="p">[</span><span class="n">job</span> <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="n">jobs</span><span class="o">.</span><span class="n">itervalues</span><span class="p">()</span> <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">state</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">RUNNING</span><span class="p">]</span>
+    <span class="n">kicklist</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">job</span> <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="n">jobs</span><span class="o">.</span><span class="n">itervalues</span><span class="p">()</span> <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">state</span> <span class="o">==</span> <span class="s">&#39;CANCELLED&#39;</span><span class="p">])</span> <span class="c"># kick twice</span>
+    <span class="n">gm_kick</span><span class="p">(</span><span class="n">kicklist</span><span class="p">)</span>
+        
+</div>
+<div class="viewcode-block" id="process_jobs"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.process_jobs">[docs]</a><span class="k">def</span> <span class="nf">process_jobs</span><span class="p">(</span><span class="n">jobs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check if jobs are still running. If job is finished, get the exit code,</span>
+<span class="sd">    update the ``lrms_done_file`` and write to the ``comments_file``.</span>
+
+<span class="sd">    :param job: list of job objects (from :py:meth:`~lrms.common.scan.get_jobs`)</span>
+<span class="sd">    :type job: :py:obj:`list` [ :py:class:`~lrms.common.common.Object` ... ]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">jobs</span><span class="p">:</span>
+        <span class="k">return</span>
+ 
+    <span class="n">slurm_bin_path</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">slurm_bin_path</span>
+    <span class="n">execute</span> <span class="o">=</span> <span class="n">execute_local</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">else</span> <span class="n">execute_remote</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">slurm_bin_path</span> <span class="o">+</span> <span class="s">&#39;/squeue -a -h -o </span><span class="si">%i</span><span class="s">:%T -t all -j &#39;</span> <span class="o">+</span> <span class="s">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">jobs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">has_key</span><span class="p">(</span><span class="s">&#39;__SLURM_TEST&#39;</span><span class="p">):</span>
+        <span class="n">handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Got error code </span><span class="si">%i</span><span class="s"> from squeue&#39;</span> <span class="o">%</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">,</span> <span class="s">&#39;slurm.Scan&#39;</span><span class="p">)</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Error output is:&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Scan&#39;</span><span class="p">)</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">),</span> <span class="s">&#39;slurm.Scan&#39;</span><span class="p">)</span>
+
+    <span class="c"># Slurm can report StartTime and EndTime in at least these two formats:</span>
+    <span class="c"># 2010-02-15T15:30:29 (MDS)</span>
+    <span class="c"># 02/15-15:25:15</span>
+    <span class="c"># Python does not support duplicate named groups.</span>
+    <span class="c"># Have to use separate regex if we want to use named groups.</span>
+    <span class="n">date_MDS</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">r&#39;^(?P&lt;YYYY&gt;\d\d\d\d)-(?P&lt;mm&gt;\d\d)-(?P&lt;dd&gt;\d\d)T(?P&lt;HH&gt;\d\d):(?P&lt;MM&gt;\d\d):(?P&lt;SS&gt;\d\d)$&#39;</span><span class="p">)</span>
+    <span class="n">date_2</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">r&#39;^(?P&lt;mm&gt;\d\d)/(?P&lt;dd&gt;\d\d)-(?P&lt;HH&gt;\d\d):(?P&lt;MM&gt;\d\d):(?P&lt;SS&gt;\d\d)$&#39;</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">localid</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">line</span><span class="p">:</span>
+                <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Failed to parse squeue line: &#39;</span> <span class="o">+</span> <span class="n">line</span><span class="p">,</span> <span class="s">&#39;slurm.Scan&#39;</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">job</span> <span class="o">=</span> <span class="n">jobs</span><span class="p">[</span><span class="n">localid</span><span class="p">]</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">state</span> 
+        <span class="k">if</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">RUNNING</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">state</span><span class="p">:</span>
+            <span class="n">set_exit_code_from_diag</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="n">MESSAGES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+
+        <span class="n">args</span> <span class="o">=</span> <span class="n">slurm_bin_path</span> <span class="o">+</span> <span class="s">&#39;/scontrol -o show job </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">localid</span>
+        <span class="n">scontrol_handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">scontrol_handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Got error code </span><span class="si">%i</span><span class="s"> from scontrol&#39;</span> <span class="o">%</span> <span class="n">scontrol_handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">,</span> <span class="s">&#39;slurm.Scan&#39;</span><span class="p">)</span>
+            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Error output is:&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Scan&#39;</span><span class="p">)</span>
+            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">scontrol_handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">),</span> <span class="s">&#39;slurm.Scan&#39;</span><span class="p">)</span>
+
+        <span class="c"># now = arc.common.Time()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">scontrol_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;=&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">re</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39; (?=[^ =]+=)&#39;</span><span class="p">,</span> <span class="n">scontrol_handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+            <span class="n">job</span> <span class="o">=</span> <span class="n">jobs</span><span class="p">[</span><span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;JobId&#39;</span><span class="p">]]</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Failed to parse scontrol line: &#39;</span> <span class="o">+</span> <span class="n">line</span><span class="p">,</span> <span class="s">&#39;slurm.Scan&#39;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="s">&#39;ExitCode&#39;</span> <span class="ow">in</span> <span class="n">scontrol_dict</span><span class="p">:</span>
+            <span class="n">ec1</span><span class="p">,</span> <span class="n">ec2</span> <span class="o">=</span> <span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;ExitCode&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">)</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">exitcode</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ec2</span><span class="p">)</span> <span class="o">+</span> <span class="mi">256</span> <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">ec2</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">ec1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">exitcode</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="s">&#39;COMPLETED&#39;</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">state</span> <span class="o">==</span> <span class="s">&#39;NODE_FAIL&#39;</span> <span class="ow">or</span> <span class="n">state</span> <span class="o">==</span> <span class="s">&#39;CANCELLED&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="s">&#39;ExitCode&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">scontrol_dict</span> <span class="ow">or</span> <span class="n">job</span><span class="o">.</span><span class="n">exitcode</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">exitcode</span> <span class="o">=</span> <span class="mi">15</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="s">&#39;Job was cancelled by SLURM&#39;</span>
+
+        <span class="k">if</span> <span class="s">&#39;StartTime&#39;</span> <span class="ow">in</span> <span class="n">scontrol_dict</span><span class="p">:</span>
+            <span class="n">match</span> <span class="o">=</span> <span class="n">date_MDS</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;StartTime&#39;</span><span class="p">])</span> <span class="ow">or</span> <span class="n">date_2</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;StartTime&#39;</span><span class="p">])</span>
+            <span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;StartTime&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_MDS</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">groupdict</span><span class="p">())</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">LRMSStartTime</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span><span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;StartTime&#39;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="s">&#39;EndTime&#39;</span> <span class="ow">in</span> <span class="n">scontrol_dict</span><span class="p">:</span>
+            <span class="n">match</span> <span class="o">=</span> <span class="n">date_MDS</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;EndTime&#39;</span><span class="p">])</span> <span class="ow">or</span> <span class="n">date_2</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;EndTime&#39;</span><span class="p">])</span>
+            <span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;EndTime&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_MDS</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">groupdict</span><span class="p">())</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">LRMSEndTime</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span><span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;EndTime&#39;</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="s">&#39;StartTime&#39;</span> <span class="ow">in</span> <span class="n">scontrol_dict</span> <span class="ow">and</span> <span class="s">&#39;EndTime&#39;</span> <span class="ow">in</span> <span class="n">scontrol_dict</span><span class="p">:</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">WallTime</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">LRMSEndTime</span> <span class="o">-</span> <span class="n">job</span><span class="o">.</span><span class="n">LRMSStartTime</span>
+
+        <span class="k">if</span> <span class="s">&#39;NumCPUs&#39;</span> <span class="ow">in</span> <span class="n">scontrol_dict</span><span class="p">:</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">Processors</span> <span class="o">=</span> <span class="n">scontrol_dict</span><span class="p">[</span><span class="s">&#39;NumCPUs&#39;</span><span class="p">]</span>
+            
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">lrms_done_file</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%d</span><span class="s"> </span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">exitcode</span><span class="p">,</span> <span class="n">job</span><span class="o">.</span><span class="n">message</span><span class="p">))</span>
+        <span class="n">write_comments</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+        <span class="n">update_diag</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+
+
+<span class="c">### \mapname slurm_sbatch SLURM sbatch options</span>
+<span class="c">### SLURM sbatch options.</span></div>
+<div class="viewcode-block" id="JobDescriptionParserSLURM"><a class="viewcode-back" href="../../python-lrms.html#lrms.slurm.JobDescriptionParserSLURM">[docs]</a><span class="k">class</span> <span class="nc">JobDescriptionParserSLURM</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    SLURM v2.4 sbatch options not supported:</span>
+<span class="sd">    --acctg-freq=&lt;seconds&gt;</span>
+<span class="sd">    -B --extra-node-info=&lt;sockets[:cores[:threads]]&gt;</span>
+<span class="sd">    --begin=&lt;time&gt;</span>
+<span class="sd">    --checkpoint=&lt;time&gt;</span>
+<span class="sd">    --checkpoint-dir=&lt;directory&gt;</span>
+<span class="sd">    --comment=&lt;string&gt;</span>
+<span class="sd">    -C, --constraint=&lt;list&gt;</span>
+<span class="sd">    --contiguous</span>
+<span class="sd">    --cores-per-socket=&lt;cores&gt;</span>
+<span class="sd">    --cpu_bind=[{quiet,verbose},]type</span>
+<span class="sd">    -d, --dependency=&lt;dependency_list&gt;</span>
+<span class="sd">    -D, --workdir=&lt;directory&gt;</span>
+<span class="sd">    --export=&lt;environment variables | ALL | NONE&gt;</span>
+<span class="sd">    --export-file=&lt;filename | fd&gt;</span>
+<span class="sd">    -F, --nodefile=&lt;node file&gt;</span>
+<span class="sd">    --gid=&lt;group&gt;</span>
+<span class="sd">    --gres=&lt;list&gt;</span>
+<span class="sd">    -H, --hold</span>
+<span class="sd">    -h, --help</span>
+<span class="sd">    --hint=&lt;type&gt;</span>
+<span class="sd">    -I, --immediate</span>
+<span class="sd">    -i, --input=&lt;filename pattern&gt;</span>
+<span class="sd">    --jobid=&lt;jobid&gt;</span>
+<span class="sd">    -k, --no-kill</span>
+<span class="sd">    -L, --licenses=&lt;license&gt;</span>
+<span class="sd">    -M, --clusters=&lt;string&gt;</span>
+<span class="sd">    -m, --distribution=</span>
+<span class="sd">    --mail-type=&lt;type&gt;</span>
+<span class="sd">    --mail-user=&lt;user&gt;</span>
+<span class="sd">    --mem=&lt;MB&gt;</span>
+<span class="sd">    --mem-per-cpu=&lt;MB&gt;</span>
+<span class="sd">    --mem_bind=[{quiet,verbose},]type</span>
+<span class="sd">    --mincpus=&lt;n&gt;</span>
+<span class="sd">    -N, --nodes=&lt;minnodes[-maxnodes]&gt;</span>
+<span class="sd">    --network=&lt;type&gt;</span>
+<span class="sd">    --nice[=adjustment]</span>
+<span class="sd">    -c, --cpus-per-task=&lt;ncpus&gt;</span>
+<span class="sd">    --ntasks-per-core=&lt;ntasks&gt;</span>
+<span class="sd">    --ntasks-per-socket=&lt;ntasks&gt;</span>
+<span class="sd">    --ntasks-per-node=&lt;ntasks&gt;</span>
+<span class="sd">    -O, --overcommit</span>
+<span class="sd">    --open-mode=append|truncate</span>
+<span class="sd">    --propagate[=rlimits]</span>
+<span class="sd">    -Q, --quiet</span>
+<span class="sd">    --qos=&lt;qos&gt;</span>
+<span class="sd">    --requeue</span>
+<span class="sd">    --reservation=&lt;name&gt;</span>
+<span class="sd">    -s, --share</span>
+<span class="sd">    --signal=&lt;sig_num&gt;[@&lt;sig_time&gt;]</span>
+<span class="sd">    --sockets-per-node=&lt;sockets&gt;</span>
+<span class="sd">    --switches=&lt;count&gt;[@&lt;max-time&gt;]</span>
+<span class="sd">    --tasks-per-node=&lt;n&gt;</span>
+<span class="sd">    --threads-per-core=&lt;threads&gt;</span>
+<span class="sd">    --time-min=&lt;time&gt;</span>
+<span class="sd">    --tmp=&lt;MB&gt;</span>
+<span class="sd">    -u, --usage</span>
+<span class="sd">    --uid=&lt;user&gt;</span>
+<span class="sd">    -V, --version</span>
+<span class="sd">    -v, --verbose</span>
+<span class="sd">    -w, --nodelist=&lt;node name list&gt;</span>
+<span class="sd">    --wait-all-nodes=&lt;value&gt;</span>
+<span class="sd">    --wckey=&lt;wckey&gt;</span>
+<span class="sd">    --wrap=&lt;command string&gt;</span>
+<span class="sd">    -x, --exclude=&lt;node name list&gt;</span>
+<span class="sd">    --blrts-image=&lt;path&gt;</span>
+<span class="sd">    --cnload-image=&lt;path&gt;</span>
+<span class="sd">    --conn-type=&lt;type&gt;</span>
+<span class="sd">    -g, --geometry=&lt;XxYxZ&gt;</span>
+<span class="sd">    --ioload-image=&lt;path&gt;</span>
+<span class="sd">    --linux-image=&lt;path&gt;</span>
+<span class="sd">    --mloader-image=&lt;path&gt;</span>
+<span class="sd">    -R, --no-rotate</span>
+<span class="sd">    --ramdisk-image=&lt;path&gt;</span>
+<span class="sd">    --reboot</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+        
+    <span class="c">#def UnParse</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">Assemble</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="n">language</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="p">,</span> <span class="n">dialect</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="p">):</span>
+        <span class="c"># TODO: What about localtransfer, adjusting working directory,</span>
+        <span class="c">#       diagnostics, and uploading output files. These should</span>
+        <span class="c">#       probably be handled by submisison script.</span>
+        
+        <span class="c"># First check if the job description is valid.</span>
+        <span class="c">#~ if not j.Application.Executable.Path:</span>
+        <span class="c">#~    logger.msg(arc.DEBUG, &quot;Missing executable&quot;)</span>
+        <span class="c">#~    return (False, &quot;&quot;)</span>
+    
+        <span class="n">product</span>  <span class="o">=</span> <span class="s">&quot;#!/bin/bash -l</span><span class="se">\n</span><span class="s">&quot;</span>
+        <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;# SLURM batch job script built by grid-manager</span><span class="se">\n</span><span class="s">&quot;</span> <span class="c"># &lt;&lt; TODO</span>
+        
+        <span class="c"># TODO: Make configurable    </span>
+        <span class="c"># rerun is handled by GM, do not let SLURM requeue jobs itself.</span>
+        <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH --no-requeue</span><span class="se">\n</span><span class="s">&quot;</span>
+    
+        <span class="c"># TODO: Description is missing</span>
+        <span class="c"># TODO: Maybe output and error file paths should be passed using</span>
+        <span class="c"># the separately map, instead of using the session_directory key.</span>
+        <span class="c"># write SLURM output to &#39;comment&#39; file</span>
+        <span class="k">if</span> <span class="s">&quot;joboption;directory&quot;</span> <span class="ow">in</span> <span class="n">j</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">:</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -e &quot;</span> <span class="o">+</span> <span class="n">j</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&quot;joboption;directory&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;.comment</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -o &quot;</span> <span class="o">+</span> <span class="n">j</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&quot;joboption;directory&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;.comment</span><span class="se">\n</span><span class="s">&quot;</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+        
+        <span class="c">### Choose queue ###</span>
+        <span class="c"># SLURM v2.3 option description: -p, --partition=&lt;partition_names&gt;</span>
+        <span class="c"># Request a specific partition for the resource allocation. If not</span>
+        <span class="c"># specified, the default behavior is to allow the slurm controller to</span>
+        <span class="c"># select the default partition as designated by the system </span>
+        <span class="c"># administrator. If the job can use more than one partition, specify</span>
+        <span class="c"># their names in a comma separate list and the one offering earliest</span>
+        <span class="c"># initiation will be used.</span>
+        <span class="c">### \mapattr --partition &lt;- QueueName</span>
+        <span class="k">if</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">QueueName</span><span class="p">:</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -p &quot;</span> <span class="o">+</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">QueueName</span> <span class="o">+</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+        
+        <span class="c">### Project name for accounting ###</span>
+        <span class="c"># SLURM v2.4 option description: -A, --account=&lt;account&gt;</span>
+        <span class="c"># Charge resources used by this job to specified account. The account is</span>
+        <span class="c"># an arbitrary string. The account name may be changed after job</span>
+        <span class="c"># submission using the scontrol command.</span>
+        <span class="c">#</span>
+        <span class="c"># The short option was renamed from &#39;-U&#39; to &#39;-A&#39; in SLURM v2.1.</span>
+        <span class="c">### \mapattr --account &lt;- OtherAttributes</span>
+        <span class="k">if</span> <span class="s">&quot;joboption;rsl_project&quot;</span> <span class="ow">in</span> <span class="n">j</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">:</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -A &quot;</span> <span class="o">+</span> <span class="n">j</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&quot;joboption;rsl_project&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+        <span class="k">elif</span> <span class="s">&#39;SBATCH_ACCOUNT&#39;</span> <span class="ow">in</span> <span class="n">j</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">:</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -A &quot;</span> <span class="o">+</span> <span class="n">j</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;SBATCH_ACCOUNT&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+
+        <span class="c">### Job name for convenience ###</span>
+        <span class="c"># SLURM v2.3 option description: -J, --job-name=&lt;jobname&gt;</span>
+        <span class="c"># Specify a name for the job allocation. The specified name will appear</span>
+        <span class="c"># along with the job id number when querying running jobs on the system.</span>
+        <span class="c"># The default is the name of the batch script, or just &quot;sbatch&quot; if the</span>
+        <span class="c"># script is read on sbatch&#39;s standard input.</span>
+        <span class="c">### \mapattr --job-name &lt;- JobName</span>
+        <span class="k">if</span> <span class="n">j</span><span class="o">.</span><span class="n">Identification</span><span class="o">.</span><span class="n">JobName</span><span class="p">:</span>
+            <span class="c"># TODO: is this necessary? do parts of the infosys need these </span>
+            <span class="c"># limitations? # &#39;s/^\([^[:alpha:]]\)/N\1/&#39; # Prefix with &#39;N&#39; if </span>
+            <span class="c"># starting with non-alpha character. &#39;s/[^[:alnum:]]/_/g&#39; </span>
+            <span class="c"># Replace all non-letters and numbers with &#39;_&#39;.</span>
+            <span class="c"># &#39;s/\(...............\).*/\1/&#39; # Limit to 15 characters.</span>
+            <span class="n">prefix</span> <span class="o">=</span> <span class="s">&#39;N&#39;</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">j</span><span class="o">.</span><span class="n">Identification</span><span class="o">.</span><span class="n">JobName</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">isalpha</span><span class="p">()</span> <span class="k">else</span> <span class="s">&#39;&#39;</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -J &#39;&quot;</span> <span class="o">+</span>  <span class="n">prefix</span> <span class="o">+</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s">r&#39;\W&#39;</span><span class="p">,</span> <span class="s">&#39;_&#39;</span><span class="p">,</span> <span class="n">j</span><span class="o">.</span><span class="n">Identification</span><span class="o">.</span><span class="n">JobName</span><span class="p">)[:</span><span class="mi">15</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">prefix</span><span class="p">)]</span> <span class="o">+</span> <span class="s">&quot;&#39;</span><span class="se">\n</span><span class="s">&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -J &#39;gridjob&#39;</span><span class="se">\n</span><span class="s">&quot;</span>
+    
+    
+        <span class="c"># Set up the user&#39;s environment on the compute node where the script is</span>
+        <span class="c"># executed. SLURM v2.3 option description: </span>
+        <span class="c"># --get-user-env[=timeout][mode]. This option will tell sbatch to </span>
+        <span class="c"># retrieve the login environment variables for the user specified in the</span>
+        <span class="c"># --uid option. The environment variables are retrieved by running </span>
+        <span class="c"># something of this sort: &quot;su - &lt;username&gt; -c /usr/bin/env&quot; and parsing </span>
+        <span class="c"># the output. Be aware that any environment variables already</span>
+        <span class="c"># set in sbatch&#39;s environment will take precedence over any environment</span>
+        <span class="c"># variables in the user&#39;s login environment. Clear any environment</span>
+        <span class="c"># variables before calling sbatch that you do not want propagated to the</span>
+        <span class="c"># spawned program. The optional timeout value is in seconds. Default </span>
+        <span class="c"># value is 8 seconds. The optional mode value control the &quot;su&quot; options. </span>
+        <span class="c"># With a mode value of &quot;S&quot;, &quot;su&quot; is executed without the &quot;-&quot; option. </span>
+        <span class="c"># With a mode value of &quot;L&quot;, &quot;su&quot; is executed with the &quot;-&quot; option, </span>
+        <span class="c"># replicating the login environment. If mode not specified, the mode</span>
+        <span class="c"># established at SLURM build time is used. Example of use include </span>
+        <span class="c"># &quot;--get-user-env&quot;, &quot;--get-user-env=10&quot;, &quot;--get-user-env=10L&quot;, and</span>
+        <span class="c"># &quot;--get-user-env=S&quot;. This option was originally created for use by </span>
+        <span class="c"># Moab.</span>
+        <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH --get-user-env=10L</span><span class="se">\n</span><span class="s">&quot;</span>
+
+
+        <span class="c">### (non-)parallel jobs ###</span>
+        <span class="c"># SLURM v2.3 option description: -n, --ntasks=&lt;number&gt;</span>
+        <span class="c"># sbatch does not launch tasks, it requests an allocation of resources</span>
+        <span class="c"># and submits a batch script. This option advises the SLURM controller</span>
+        <span class="c"># that job steps run within the allocation will launch a maximum of</span>
+        <span class="c"># number tasks and to provide for sufficient resources. The default is</span>
+        <span class="c"># one task per node, but note that the --cpus-per-task option will</span>
+        <span class="c"># change this default.</span>
+        <span class="c">### \mapattr --ntasks &lt;- NumberOfSlots</span>
+        <span class="n">nslots</span> <span class="o">=</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span> \
+            <span class="k">if</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mi">1</span>
+        <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -n &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">nslots</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+
+
+        <span class="c">### SLURM v2.3 option description: --ntasks-per-node=&lt;ntasks&gt;</span>
+        <span class="c"># Request the maximum ntasks be invoked on each node. Meant to be used</span>
+        <span class="c"># with the --nodes option. This is related to --cpus-per-task=ncpus,</span>
+        <span class="c"># but does not require knowledge of the actual number of cpus on each</span>
+        <span class="c"># node. In some cases, it is more convenient to be able to request that</span>
+        <span class="c"># no more than a specific number of tasks be invoked on each node.</span>
+        <span class="c"># Examples of this include submitting a hybrid MPI/OpenMP app where only</span>
+        <span class="c"># one MPI &quot;task/rank&quot; should be assigned to each node while allowing the</span>
+        <span class="c"># OpenMP portion to utilize all of the parallelism present in the node,</span>
+        <span class="c"># or submitting a single setup/cleanup/monitoring job to each node of a</span>
+        <span class="c"># pre-existing allocation as one step in a larger job script.</span>
+        <span class="c">### \mapattr --ntasks-per-node &lt;- SlotsPerHost</span>
+        <span class="k">if</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">SlotsPerHost</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH --ntasks-per-node &quot;</span> <span class="o">+</span> \
+                <span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">SlotsPerHost</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+
+
+        <span class="c"># Node properties: Set by e.g. RTE script in stage 0.</span>
+        <span class="k">if</span> <span class="s">&quot;joboption;nodeproperty&quot;</span> <span class="ow">in</span> <span class="n">j</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">:</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH &quot;</span> <span class="o">+</span> <span class="n">j</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&quot;joboption;nodeproperty&quot;</span><span class="p">]</span>
+        <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+
+
+        <span class="c"># SLURM v2.3 option description: --exclusive</span>
+        <span class="c"># The job allocation can not share nodes with other running jobs. This</span>
+        <span class="c"># is the opposite of --share, whichever option is seen last on the</span>
+        <span class="c"># command line will be used. The default shared/exclusive behavior</span>
+        <span class="c"># depends on system configuration and the partition&#39;s Shared option take</span>
+        <span class="c"># s precedence over the job&#39;s option.</span>
+        <span class="c">### \mapattr --exclusive &lt;- ExclusiveExecution</span>
+        <span class="k">if</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">ExclusiveExecution</span><span class="p">:</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH --exclusive</span><span class="se">\n</span><span class="s">&quot;</span>
+
+
+        <span class="c">### Execution times (minutes) ###</span>
+        <span class="c"># SLURM v2.4 option description: -t, --time=&lt;time&gt;</span>
+        <span class="c"># Set a limit on the total run time of the job allocation. If the</span>
+        <span class="c"># requested time limit exceeds the partition&#39;s time limit, the job will</span>
+        <span class="c"># lbe eft in a PENDING state (possibly indefinitely). The default time</span>
+        <span class="c"># limit is the partition&#39;s default time limit. When the time limit is</span>
+        <span class="c"># reached, each task in each job step is sent SIGTERM followed by</span>
+        <span class="c"># SIGKILL. The interval between signals is specified by the SLURM</span>
+        <span class="c"># configuration parameter KillWait. A time limit of zero requests that</span>
+        <span class="c"># no time limit be imposed. Acceptable time formats include &quot;minutes&quot;,</span>
+        <span class="c"># &quot;minutes:seconds&quot;, &quot;hours:minutes:seconds&quot;, &quot;days-hours&quot;,</span>
+        <span class="c"># &quot;days-hours:minutes&quot; and &quot;days-hours:minutes:seconds&quot;.</span>
+        <span class="c">#</span>
+        <span class="c"># Mapping-wise it seems that &#39;total run time of the job allocation&#39; is</span>
+        <span class="c"># equivalent with wall-clock time, i.e. IndividualWallTime.</span>
+
+        <span class="c"># Benchmark must not be set, since we are currently not able to</span>
+        <span class="c"># scale at this level.</span>
+        <span class="k">if</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualWallTime</span><span class="o">.</span><span class="n">benchmark</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">ERROR</span><span class="p">,</span> <span class="s">&quot;Unable to scale &#39;IndividualWallTime&#39; to specified benchmark&quot;</span>
+                <span class="s">&quot;&#39;{0}&#39;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualWallTime</span><span class="o">.</span><span class="n">benchmark</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+                <span class="s">&#39;slurm.JobDescriptionParserSLURM&#39;</span><span class="p">,</span> <span class="s">&#39;slurm.Assemble&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">(</span><span class="bp">False</span><span class="p">,</span> <span class="s">&quot;&quot;</span><span class="p">)</span>
+        <span class="c">### TODO: Expression: \mapattr --time &lt;- TotalCPUTime/NumberOfSlots</span>
+        <span class="k">if</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">TotalCPUTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span> 
+            <span class="c"># TODO: Check for benchmark</span>
+            <span class="n">individualCPUTime</span> <span class="o">=</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">TotalCPUTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span><span class="o">/</span><span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span>
+            <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -t {0}:{1}</span><span class="se">\n</span><span class="s">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">individualCPUTime</span><span class="o">/</span><span class="mi">60</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">individualCPUTime</span><span class="o">%</span><span class="mi">60</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualWallTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">n</span><span class="p">,</span> <span class="n">m</span> <span class="o">=</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualWallTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span><span class="o">/</span><span class="mi">60</span><span class="p">),</span>
+                        <span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualWallTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span><span class="o">%</span><span class="mi">60</span><span class="p">))</span>
+                <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -t {0}:{1}</span><span class="se">\n</span><span class="s">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="n">m</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH -t {0}:{1}</span><span class="se">\n</span><span class="s">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">individualCPUTime</span><span class="o">/</span><span class="mi">60</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">individualCPUTime</span><span class="o">%</span><span class="mi">60</span><span class="p">))</span>
+        <span class="c">### TODO: Note ordering</span>
+        <span class="c">### \mapattr --time &lt;- IndividualWallTime</span>
+        <span class="k">elif</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualWallTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">n</span><span class="p">,</span> <span class="n">m</span> <span class="o">=</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualWallTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span><span class="o">/</span><span class="mi">60</span><span class="p">),</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualWallTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span><span class="o">%</span><span class="mi">60</span><span class="p">))</span>
+            <span class="n">product</span> <span class="o">+=</span> \
+                <span class="s">&quot;#SBATCH -t {0}:{1}</span><span class="se">\n</span><span class="s">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="n">m</span><span class="p">)</span>
+        <span class="c">### \mapattr --time &lt;- IndividualCPUTime</span>
+        <span class="k">elif</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualCPUTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span> 
+            <span class="c"># TODO: Check for benchmark</span>
+            <span class="c"># IndividualWallTime not set, use IndividualCPUTime instead.</span>
+            <span class="n">n</span><span class="p">,</span> <span class="n">m</span> <span class="o">=</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualCPUTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span><span class="o">/</span><span class="mi">60</span><span class="p">),</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualCPUTime</span><span class="o">.</span><span class="n">range</span><span class="o">.</span><span class="n">max</span><span class="o">%</span><span class="mi">60</span><span class="p">))</span>
+            <span class="n">product</span> <span class="o">+=</span> \
+                <span class="s">&quot;#SBATCH -t {0}:{1}</span><span class="se">\n</span><span class="s">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="n">m</span><span class="p">)</span>
+        
+        <span class="c"># SLURM v2.4 option description: --mem-per-cpu=&lt;MB&gt;</span>
+        <span class="c"># Mimimum memory required per allocated CPU in MegaBytes. Default</span>
+        <span class="c"># value is DefMemPerCPU and the maximum value is MaxMemPerCPU (see</span>
+        <span class="c"># exception below). If configured, both of parameters can be seen </span>
+        <span class="c"># using the scontrol show config command. Note that if the job&#39;s </span>
+        <span class="c"># --mem-per-cpu value exceeds the configured MaxMemPerCPU, then the</span>
+        <span class="c"># user&#39;s limit will be treated as a memory limit per task; </span>
+        <span class="c"># --mem-per-cpu will be reduced to a value no larger than MaxMemPerCPU;</span>
+        <span class="c"># --cpus-per-task will be set and value of --cpus-per-task multiplied by</span>
+        <span class="c"># the new --mem-per-cpu value will equal the original --mem-per-cpu</span>
+        <span class="c"># value specified by the user. This parameter would generally be used </span>
+        <span class="c"># if individual processors are allocated to jobs </span>
+        <span class="c"># (SelectType=select/cons_res). Also see --mem. --mem and</span>
+        <span class="c"># --mem-per-cpu are mutually exclusive.</span>
+        <span class="c">### \mapattr --mem-per-cpu &lt;- IndividualPhysicalMemory</span>
+        <span class="n">memPerCPU</span> <span class="o">=</span> <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="k">if</span> \
+            <span class="n">j</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">1000</span>
+        <span class="n">product</span> <span class="o">+=</span> <span class="s">&quot;#SBATCH --mem-per-cpu=&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">memPerCPU</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span>
+        
+        <span class="k">return</span> <span class="p">(</span><span class="bp">True</span><span class="p">,</span> <span class="n">product</span><span class="p">)</span>
+        </div>
+</pre></div>
+
+    </div>
+    
+    <DIV>
+      <OBJECT type="text/html" data="http//www.nordugrid.org/styles/ngfooter.html" width="100%">
+	<center><a href="http//www.nordugrid.org">Nordugrid homepage</a></center>
+      </OBJECT>
+    </DIV>
+  </body>
+</html>

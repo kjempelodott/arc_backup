@@ -1,0 +1,41 @@
+@import url("basic.css");
+@import url("nordugrid.css");
+
+div.viewcode-block
+{
+  font-family: monospace;
+}
+
+h1
+{
+  margin-left: 0;
+  font-size: 14pt; font-weight:bold; font-style:normal; color:#CC0000;
+  font-family: sans-serif;
+}
+
+table.field-list
+{
+  background-color:#FFEEEE;
+  border: 1px dashed #cccccc;
+  color: #000000;
+  font-size: 11pt;
+  font-family: sans-serif;
+  text-align: left;
+  letter-spacing: 110%;
+  vertical-align: top;
+}
+
+dl.function
+{
+  margin-top: 2em
+}
+
+code.descname
+{
+  font-size: 11pt;
+}
+
+code.xref
+{
+  font-size: 11pt;
+}

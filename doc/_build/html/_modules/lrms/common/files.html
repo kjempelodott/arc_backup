@@ -1,0 +1,95 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link REL="SHORTCUT ICON" HREF="http//www.nordugrid.org/favicon.ico">
+    <link rel="STYLESHEET" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="STYLESHEET" href="../../../_static/nordugrid_wrapper.css" type="text/css" />
+    <title>NorduGrid | Python LRMS backends</title>
+  </head>
+  
+  <body class="LONG">
+    <div class="MAIN">
+      <h1 class="TITLE">Python LRMS backends</h1>
+      
+      <h1>Source code for lrms.common.files</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Functions for reading and writing files.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">import</span> <span class="nn">tools</span>
+
+
+<div class="viewcode-block" id="read"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.files.read">[docs]</a><span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">tail</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;                               </span>
+<span class="sd">    Read content from file.</span>
+
+<span class="sd">    :param str path: path to file   </span>
+<span class="sd">    :param int tail: number of lines to read (from end), entire file if 0</span>
+<span class="sd">    :return: ``True`` and the file content (:py:meth:file.readlines()) if read was successful, else ``False`` and an error message</span>
+<span class="sd">    :rtype: :py:obj:`tuple` ( :py:obj:`bool`, [ :py:obj:`str` ... ] )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">tail</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">tools</span><span class="o">.</span><span class="n">tail</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">os</span><span class="o">.</span><span class="n">fdopen</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">O_RDONLY</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">O_NONBLOCK</span><span class="p">))</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Cannot read file at </span><span class="si">%s</span><span class="s">:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.files&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+</div>
+<div class="viewcode-block" id="write"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.files.write">[docs]</a><span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">mode</span> <span class="o">=</span> <span class="mo">0644</span><span class="p">,</span> <span class="n">append</span> <span class="o">=</span> <span class="bp">False</span><span class="p">,</span> <span class="n">remote_host</span> <span class="o">=</span> <span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Write buffer to file.</span>
+<span class="sd">  </span>
+<span class="sd">    :param str path: path to file </span>
+<span class="sd">    :param str buf: string buffer to be written                          </span>
+<span class="sd">    :param int mode: file mode        </span>
+<span class="sd">    :param bool append: ``True`` if buffer should be appended to existing file</span>
+<span class="sd">    :param bool remote_host: file will be opened with sftp at the specified hostname</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">w_or_a</span> <span class="o">=</span> <span class="s">&#39;a&#39;</span> <span class="k">if</span> <span class="n">append</span> <span class="k">else</span> <span class="s">&#39;w&#39;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">remote_host</span><span class="p">:</span>
+            <span class="n">open_file</span> <span class="o">=</span> <span class="n">SSHSession</span><span class="p">[</span><span class="n">remote_host</span><span class="p">]</span><span class="o">.</span><span class="n">open_sftp_client</span><span class="p">()</span><span class="o">.</span><span class="n">file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">w_or_a</span><span class="p">)</span>
+            <span class="n">open_file</span><span class="o">.</span><span class="n">chmod</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
+            <span class="n">open_file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+            <span class="n">open_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">os</span><span class="o">.</span><span class="n">fdopen</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">O_WRONLY</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">O_CREAT</span><span class="p">,</span> <span class="n">mode</span> <span class="o">|</span> <span class="mh">0x8000</span><span class="p">),</span> <span class="n">w_or_a</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Cannot write to file at </span><span class="si">%s</span><span class="s">:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.files&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">False</span>
+
+    <span class="k">return</span> <span class="bp">True</span>
+
+</div>
+<div class="viewcode-block" id="getmtime"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.files.getmtime">[docs]</a><span class="k">def</span> <span class="nf">getmtime</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;                               </span>
+<span class="sd">    Get modification time of a file.</span>
+
+<span class="sd">    :param str path: path to file</span>
+<span class="sd">    :return str: modification time</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">getmtime</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Failed to stat file: </span><span class="si">%s</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.files&#39;</span><span class="p">)</span></div>
+</pre></div>
+
+    </div>
+    
+    <DIV>
+      <OBJECT type="text/html" data="http//www.nordugrid.org/styles/ngfooter.html" width="100%">
+	<center><a href="http//www.nordugrid.org">Nordugrid homepage</a></center>
+      </OBJECT>
+    </DIV>
+  </body>
+</html>

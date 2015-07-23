@@ -1,0 +1,361 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link REL="SHORTCUT ICON" HREF="http//www.nordugrid.org/favicon.ico">
+    <link rel="STYLESHEET" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="STYLESHEET" href="../../../_static/nordugrid_wrapper.css" type="text/css" />
+    <title>NorduGrid | Python LRMS backends</title>
+  </head>
+  
+  <body class="LONG">
+    <div class="MAIN">
+      <h1 class="TITLE">Python LRMS backends</h1>
+      
+      <h1>Source code for lrms.common.parse</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Classes for parsing GRAMI files.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
+
+<div class="viewcode-block" id="SimpleGramiParser"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.parse.SimpleGramiParser">[docs]</a><span class="k">class</span> <span class="nc">SimpleGramiParser</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Read grami file and set each option as a class attribute.</span>
+
+<span class="sd">    :param str grami: path to grami file</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">grami</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="n">grami</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">grami</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span><span class="p">():</span>
+                    <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;=&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Failed to read job description file </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">grami</span><span class="p">,</span>
+                           <span class="s">&#39;common.parse.SimpleGramiParser&#39;</span><span class="p">)</span>
+
+    <span class="nd">@property</span> 
+    <span class="k">def</span> <span class="nf">jobid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get local ID from grami or job local file.</span>
+
+<span class="sd">        :return: local ID</span>
+<span class="sd">        :rtype: :py:obj:`str`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">joboption_jobid</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s">/job.</span><span class="si">%s</span><span class="s">.local&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_controldir</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_gridid</span><span class="p">))</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">line</span><span class="p">[:</span><span class="mi">7</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;localid&#39;</span><span class="p">:</span>
+                            <span class="n">jobid</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="mi">8</span><span class="p">:]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">joboption_jobid</span> <span class="o">=</span> <span class="n">jobid</span>
+                            <span class="k">return</span> <span class="n">jobid</span>
+                <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Can</span><span class="se">\&#39;</span><span class="s">t find local ID of job&#39;</span><span class="p">,</span> <span class="s">&#39;common.parse.SimpleGramiParser&#39;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Local description of job </span><span class="si">%s</span><span class="s"> not found &#39;</span>
+                               <span class="s">&#39;at </span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_gridid</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_controldir</span><span class="p">()),</span>
+                               <span class="s">&#39;common.parse.SimpleGramiParser&#39;</span><span class="p">)</span>
+
+    <span class="nd">@property</span> 
+    <span class="k">def</span> <span class="nf">gridid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get GRID (global) job ID from grami.</span>
+
+<span class="sd">        :return: GRID job ID</span>
+<span class="sd">        :rtype: :py:obj:`str`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">joboption_gridid</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">gridid</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s">&#39;job.(\w+).grami&#39;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">joboption_gridid</span> <span class="o">=</span> <span class="n">gridid</span>
+            <span class="k">return</span> <span class="n">gridid</span>
+
+    <span class="nd">@property</span> 
+    <span class="k">def</span> <span class="nf">controldir</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get control directory from grami.</span>
+
+<span class="sd">        :return: control directory</span>
+<span class="sd">        :rtype: :py:obj:`str`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">joboption_controldir</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">cd</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">)</span> <span class="o">==</span> <span class="s">&#39;.&#39;</span> <span class="k">else</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">joboption_controldir</span> <span class="o">=</span> <span class="n">cd</span>
+            <span class="k">return</span> <span class="n">cd</span>
+
+    <span class="nd">@property</span> 
+    <span class="k">def</span> <span class="nf">arg_code</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get expected exit code from grami.</span>
+
+<span class="sd">        :return: arg code</span>
+<span class="sd">        :rtype: :py:obj:`int`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">joboption_arg_code</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">joboption_arg_code</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">return</span> <span class="mi">0</span>
+
+</div>
+<div class="viewcode-block" id="RTE0EnvCreator"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.parse.RTE0EnvCreator">[docs]</a><span class="k">class</span> <span class="nc">RTE0EnvCreator</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    .. todo:: Add docstring</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># TODO: Parse joboption_pre_#_#, joboption_pre_#_code, </span>
+    <span class="c"># joboption_post_#_#, joboption_post_#_code</span>
+    <span class="c"># TODO: Parse joboption_penv_type, joboption_penv_version,</span>
+    <span class="c"># joboption_penv_processesperhost, joboption_penv_threadsperprocess</span>
+    <span class="n">_shToPy</span> <span class="o">=</span> \
+        <span class="p">{</span>
+        <span class="s">&quot;RUNTIME_FRONTEND_SEES_NODE&quot;</span> <span class="p">:</span> <span class="s">&quot;config.shared_scratch&quot;</span><span class="p">,</span>
+        <span class="s">&quot;RUNTIME_NODE_SEES_FRONTEND&quot;</span> <span class="p">:</span> <span class="s">&quot;config.shared_filesystem&quot;</span><span class="p">,</span> 
+        <span class="s">&quot;RUNTIME_LOCAL_SCRATCH_DIR&quot;</span>  <span class="p">:</span> <span class="s">&quot;config.scratchdir&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_directory&quot;</span>        <span class="p">:</span> <span class="s">&quot;config.sessiondir&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_controldir&quot;</span>       <span class="p">:</span> <span class="s">&quot;config.controldir&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_localtransfer&quot;</span>    <span class="p">:</span> <span class="s">&quot;config.localtransfer&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_arg_#&quot;</span>            <span class="p">:</span> <span class="s">&quot;Application.Executable&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_env_#&quot;</span>            <span class="p">:</span> <span class="s">&quot;Application.Environment&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_stdin&quot;</span>            <span class="p">:</span> <span class="s">&quot;Application.Input&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_stdout&quot;</span>           <span class="p">:</span> <span class="s">&quot;Application.Output&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_stderr&quot;</span>           <span class="p">:</span> <span class="s">&quot;Application.Error&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_starttime&quot;</span>        <span class="p">:</span> <span class="s">&quot;Application.ProcessingStartTime&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_cputime&quot;</span>          <span class="p">:</span> <span class="s">&quot;Resources.TotalCPUTime.range.max&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_walltime&quot;</span>         <span class="p">:</span> <span class="s">&quot;Resources.IndividualWallTime.range.max&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_memory&quot;</span>           <span class="p">:</span> <span class="s">&quot;Resources.IndividualPhysicalMemory.max&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_virtualmemory&quot;</span>    <span class="p">:</span> <span class="s">&quot;Resources.IndividualVirtualMemory.max&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_count&quot;</span>            <span class="p">:</span> <span class="s">&quot;Resources.SlotRequirement.NumberOfSlots&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_countpernode&quot;</span>     <span class="p">:</span> <span class="s">&quot;Resources.SlotRequirement.SlotsPerHost&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_exclusivenode&quot;</span>    <span class="p">:</span> <span class="s">&quot;Resources.SlotRequirement.ExclusiveExecution&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_runtime_#&quot;</span>        <span class="p">:</span> <span class="s">&quot;Resources.RunTimeEnvironment&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_jobname&quot;</span>          <span class="p">:</span> <span class="s">&quot;Identification.JobName&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_queue&quot;</span>            <span class="p">:</span> <span class="s">&quot;Resources.QueueName&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_inputfile_#&quot;</span>      <span class="p">:</span> <span class="s">&quot;DataStaging.InputFiles&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_outputfile_#&quot;</span>     <span class="p">:</span> <span class="s">&quot;DataStaging.OutputFiles&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_nodeproperty_#&quot;</span>   <span class="p">:</span> <span class="s">&quot;OtherAttributes.joboption;nodeproperty&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_rsl_project     &quot;</span> <span class="p">:</span> <span class="s">&quot;OtherAttributes.joboption;rsl_project&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_rsl_architecture&quot;</span> <span class="p">:</span> <span class="s">&quot;OtherAttributes.joboption;rsl_architecture&quot;</span><span class="p">,</span>
+        <span class="s">&quot;joboption_gridid&quot;</span>           <span class="p">:</span> <span class="s">&quot;OtherAttributes.joboption;gridid&quot;</span>
+                <span class="p">}</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">jobdesc</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">mappingUpdate</span> <span class="o">=</span> <span class="p">{}):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">jobdesc</span><span class="p">,</span> <span class="n">config</span>
+        <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_shToPy</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">mappingUpdate</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">getShEnv</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="n">stage0_environ</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span>
+        <span class="k">for</span> <span class="n">shEnv</span><span class="p">,</span> <span class="n">pyKey</span> <span class="ow">in</span> <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_shToPy</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="n">obj</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_getPyAttr</span><span class="p">(</span><span class="n">pyKey</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">obj</span><span class="p">:</span>
+                <span class="n">obj</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="nb">int</span> <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="nb">bool</span><span class="p">:</span>
+                    <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">]</span> <span class="o">=</span> <span class="s">&quot;yes&quot;</span> <span class="k">if</span> <span class="n">obj</span> <span class="k">else</span> <span class="s">&quot;no&quot;</span>
+                <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Time</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">obj</span><span class="o">.</span><span class="n">GetTime</span><span class="p">()</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                        <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">str</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">MDSTime</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">ExecutableType</span><span class="p">:</span>
+                    <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;0&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">Path</span>
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">Argument</span><span class="p">)):</span>
+                        <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">Argument</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                    <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;code&quot;</span><span class="p">]</span> <span class="o">=</span> \
+                        <span class="nb">str</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">SuccessExitCode</span><span class="o">.</span><span class="n">second</span><span class="p">)</span> \
+                        <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">SuccessExitCode</span><span class="o">.</span><span class="n">first</span> <span class="k">else</span> <span class="s">&quot;&quot;</span>
+                <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">StringPairList</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="p">)):</span>
+                        <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> \
+                            <span class="s">&quot;&#39;&quot;</span> <span class="o">+</span> <span class="p">(</span><span class="s">&quot;</span><span class="si">%s</span><span class="s">=</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">obj</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="o">+</span> <span class="s">&quot;&#39;&quot;</span>
+                <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">SoftwareRequirement</span><span class="p">:</span>
+                    <span class="n">rtes</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">getSoftwareList</span><span class="p">()</span>
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">rtes</span><span class="p">)):</span>
+                        <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">rtes</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">rtes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">getOptions</span><span class="p">())):</span>
+                            <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="o">+</span> \
+                                               <span class="s">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="o">+</span><span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> \
+                                               <span class="n">rtes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">getOptions</span><span class="p">()[</span><span class="n">j</span><span class="p">]</span>
+                <span class="k">elif</span> <span class="n">pyKey</span> <span class="o">==</span> <span class="s">&quot;DataStaging.InputFiles&quot;</span><span class="p">:</span>
+                    <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+                    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">DataStaging</span><span class="o">.</span><span class="n">InputFiles</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">f</span><span class="o">.</span><span class="n">Sources</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+                            <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> \
+                                <span class="n">f</span><span class="o">.</span><span class="n">Sources</span><span class="o">.</span><span class="n">front</span><span class="p">()</span><span class="o">.</span><span class="n">str</span><span class="p">()</span>
+                            <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">elif</span> <span class="n">pyKey</span> <span class="o">==</span> <span class="s">&quot;DataStaging.OutputFiles&quot;</span><span class="p">:</span>
+                    <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+                    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">DataStaging</span><span class="o">.</span><span class="n">OutputFiles</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">f</span><span class="o">.</span><span class="n">Targets</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+                            <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span> <span class="o">=</span> \
+                                <span class="n">f</span><span class="o">.</span><span class="n">Targets</span><span class="o">.</span><span class="n">front</span><span class="p">()</span><span class="o">.</span><span class="n">str</span><span class="p">()</span>
+                            <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+                
+        <span class="k">return</span> <span class="n">stage0_environ</span>
+        
+    <span class="k">def</span> <span class="nf">setPyEnv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage0_environ</span><span class="p">):</span>
+
+        <span class="n">old_inputfiles</span> <span class="o">=</span> \
+           <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">InputFileTypeList</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">DataStaging</span><span class="o">.</span><span class="n">InputFiles</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">DataStaging</span><span class="o">.</span><span class="n">InputFiles</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">old_outputfiles</span> <span class="o">=</span> \
+           <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">OutputFileTypeList</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">DataStaging</span><span class="o">.</span><span class="n">OutputFiles</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">DataStaging</span><span class="o">.</span><span class="n">OutputFiles</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">shEnv</span><span class="p">,</span> <span class="n">pyKey</span> <span class="ow">in</span> <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_shToPy</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="n">pObj</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_getPyAttr</span><span class="p">(</span><span class="n">pyKey</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">pObj</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">pObj</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+            <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">ExecutableType</span><span class="p">:</span>
+                <span class="n">obj</span><span class="o">.</span><span class="n">Path</span> <span class="o">=</span> <span class="n">stage0_environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;0&quot;</span><span class="p">,</span> <span class="s">&quot;&quot;</span><span class="p">)</span>
+                <span class="n">obj</span><span class="o">.</span><span class="n">Path</span> <span class="o">=</span> <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_removeQuotes</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">Path</span><span class="p">)</span>
+                <span class="k">while</span> <span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="ow">in</span> <span class="n">stage0_environ</span> \
+                        <span class="ow">or</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">Argument</span><span class="p">):</span>
+                    <span class="n">arg</span> <span class="o">=</span> <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)]</span>
+                    <span class="n">arg</span> <span class="o">=</span> <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_removeQuotes</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">Argument</span><span class="p">)</span> <span class="o">==</span> <span class="n">i</span><span class="p">:</span>
+                        <span class="n">obj</span><span class="o">.</span><span class="n">Argument</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">obj</span><span class="o">.</span><span class="n">Argument</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">arg</span>
+                    <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">stage0_environ</span> \
+                        <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">Argument</span><span class="p">):</span>
+                    <span class="n">obj</span><span class="o">.</span><span class="n">Argument</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;code&quot;</span> <span class="ow">in</span> <span class="n">stage0_environ</span><span class="p">:</span>
+                    <span class="n">obj</span><span class="o">.</span><span class="n">SuccessExitCode</span><span class="o">.</span><span class="n">first</span> <span class="o">=</span> \
+                        <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;code&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">SuccessExitCode</span><span class="o">.</span><span class="n">first</span><span class="p">:</span>
+                        <span class="n">obj</span><span class="o">.</span><span class="n">SuccessExitCode</span><span class="o">.</span><span class="n">second</span> <span class="o">=</span> \
+                            <span class="nb">int</span><span class="p">(</span><span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="s">&quot;code&quot;</span><span class="p">])</span>
+            <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">StringPairList</span><span class="p">:</span>
+                <span class="c"># shEnv = joboption_env_#</span>
+                <span class="k">while</span> <span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="ow">in</span> <span class="n">stage0_environ</span> <span class="ow">or</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+                    <span class="n">envPair</span> <span class="o">=</span> <span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]</span>
+                    <span class="n">envPair</span> <span class="o">=</span> \
+                        <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_removeQuotes</span><span class="p">(</span><span class="n">envPair</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;=&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="n">i</span><span class="p">:</span>
+                        <span class="n">obj</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">envPair</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">obj</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">envPair</span>
+                    <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">SoftwareRequirement</span><span class="p">:</span>
+                <span class="n">swr</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">SoftwareRequirement</span><span class="p">()</span>
+                <span class="k">while</span> <span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="ow">in</span> <span class="n">stage0_environ</span><span class="p">:</span>
+                    <span class="n">sw</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">Software</span><span class="p">(</span><span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_removeQuotes</span><span class="p">(</span><span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)]))</span>
+                    <span class="n">j</span> <span class="o">=</span> <span class="mi">1</span>
+                    <span class="k">while</span> <span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="p">)</span> <span class="ow">in</span> <span class="n">stage0_environ</span><span class="p">:</span>
+                        <span class="n">sw</span><span class="o">.</span><span class="n">addOption</span><span class="p">(</span><span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_removeQuotes</span><span class="p">(</span><span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">j</span><span class="p">)]))</span>
+                        <span class="n">j</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">swr</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">sw</span><span class="p">,</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">Software</span><span class="o">.</span><span class="n">EQUAL</span><span class="p">)</span>
+                    <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span> <span class="o">=</span> <span class="n">swr</span>
+            <span class="k">elif</span> <span class="n">pyKey</span> <span class="o">==</span> <span class="s">&quot;DataStaging.InputFiles&quot;</span><span class="p">:</span>
+                <span class="k">while</span> <span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="ow">in</span> <span class="n">stage0_environ</span><span class="p">:</span>
+                    <span class="n">path</span> <span class="o">=</span> <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_removeQuotes</span><span class="p">(</span><span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)])</span>
+                    <span class="n">f</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">InputFileType</span><span class="p">()</span>
+                    <span class="c"># TODO: Are there any options at the end of value? If so maybe those should be removed.</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">Name</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s">&quot;/&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">Sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">SourceType</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+                    <span class="n">obj</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">old_inputfiles</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+                        <span class="n">old_inputfiles</span><span class="o">.</span><span class="n">pop_front</span><span class="p">()</span>
+                    <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">elif</span> <span class="n">pyKey</span> <span class="o">==</span> <span class="s">&quot;DataStaging.OutputFiles&quot;</span><span class="p">:</span>
+                <span class="k">while</span> <span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="ow">in</span> <span class="n">stage0_environ</span><span class="p">:</span>
+                    <span class="n">path</span> <span class="o">=</span> <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_removeQuotes</span><span class="p">(</span><span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)])</span>
+                    <span class="n">f</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">OutputFileType</span><span class="p">()</span>
+                    <span class="c"># TODO: Are there any options at the end of value? If so maybe those should be removed.</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">Name</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s">&quot;/&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">Targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">TargetType</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+                    <span class="n">obj</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">old_outputfiles</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+                        <span class="n">old_outputfiles</span><span class="o">.</span><span class="n">pop_front</span><span class="p">()</span>
+                    <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">pObj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">StringStringMap</span> <span class="ow">and</span> <span class="n">shEnv</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s">&quot;#&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">obj</span><span class="p">:</span>
+                    <span class="n">pObj</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="s">&quot;&quot;</span>
+                <span class="k">while</span> <span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="ow">in</span> <span class="n">stage0_environ</span><span class="p">:</span>
+                    <span class="n">pObj</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">+=</span> <span class="s">&quot; &quot;</span> <span class="o">+</span> <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_removeQuotes</span><span class="p">(</span><span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)])</span>
+                    <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">elif</span> <span class="n">shEnv</span> <span class="ow">in</span> <span class="n">stage0_environ</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">RTE0EnvCreator</span><span class="o">.</span><span class="n">_removeQuotes</span><span class="p">(</span><span class="n">stage0_environ</span><span class="p">[</span><span class="n">shEnv</span><span class="p">])</span>
+                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">pObj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">StringStringMap</span><span class="p">:</span>
+                    <span class="n">pObj</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="nb">int</span><span class="p">:</span>
+                    <span class="nb">setattr</span><span class="p">(</span><span class="n">pObj</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="nb">bool</span><span class="p">:</span>
+                    <span class="nb">setattr</span><span class="p">(</span><span class="n">pObj</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="o">!=</span> <span class="s">&quot;no&quot;</span> <span class="ow">and</span> <span class="n">value</span> <span class="o">!=</span> <span class="s">&quot;&quot;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="nb">str</span><span class="p">:</span>
+                    <span class="nb">setattr</span><span class="p">(</span><span class="n">pObj</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">==</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Time</span><span class="p">:</span>
+                    <span class="nb">setattr</span><span class="p">(</span><span class="n">pObj</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span><span class="n">value</span> <span class="k">if</span> <span class="n">value</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+        
+        <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">old_inputfiles</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">DataStaging</span><span class="o">.</span><span class="n">InputFiles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">old_outputfiles</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">DataStaging</span><span class="o">.</span><span class="n">OutputFiles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">_getPyAttr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pyKey</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">pyKey</span> <span class="o">==</span> <span class="s">&quot;none&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pyKey</span><span class="p">[:</span><span class="mi">7</span><span class="p">]</span> <span class="o">==</span> <span class="s">&quot;config.&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">pyKey</span><span class="p">[</span><span class="mi">7</span><span class="p">:]):</span>
+                <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">pyKey</span><span class="p">[</span><span class="mi">7</span><span class="p">:])</span>
+            <span class="k">return</span> <span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">obj</span><span class="p">,</span> <span class="n">keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span><span class="p">,</span> <span class="n">pyKey</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;.&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
+                    <span class="n">obj</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">keys</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_removeQuotes</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+      <span class="k">return</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s">r&quot;^&#39;(.*)&#39;$&quot;</span><span class="p">,</span> <span class="s">&quot;</span><span class="se">\\</span><span class="s">1&quot;</span><span class="p">,</span> <span class="n">text</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="JobDescriptionParserGRAMi"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.parse.JobDescriptionParserGRAMi">[docs]</a><span class="k">class</span> <span class="nc">JobDescriptionParserGRAMi</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    .. todo:: Add docstring</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+      
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">Parse</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">jobdescs</span><span class="p">,</span> <span class="n">language</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="p">,</span> <span class="n">dialect</span> <span class="o">=</span> <span class="s">&quot;&quot;</span><span class="p">):</span>
+        
+        <span class="n">mapping</span> <span class="o">=</span> <span class="p">{</span>
+                   <span class="s">&quot;RUNTIME_FRONTEND_SEES_NODE&quot;</span> <span class="p">:</span> <span class="s">&quot;none&quot;</span><span class="p">,</span>
+                   <span class="s">&quot;RUNTIME_NODE_SEES_FRONTEND&quot;</span> <span class="p">:</span> <span class="s">&quot;none&quot;</span><span class="p">,</span> 
+                   <span class="s">&quot;RUNTIME_LOCAL_SCRATCH_DIR&quot;</span>  <span class="p">:</span> <span class="s">&quot;none&quot;</span><span class="p">,</span>
+                   <span class="s">&quot;joboption_directory&quot;</span>        <span class="p">:</span> <span class="s">&quot;OtherAttributes.joboption;directory&quot;</span><span class="p">,</span>
+                   <span class="s">&quot;joboption_controldir&quot;</span>       <span class="p">:</span> <span class="s">&quot;OtherAttributes.joboption;controldir&quot;</span><span class="p">,</span>
+                   <span class="s">&quot;joboption_localtransfer&quot;</span>    <span class="p">:</span> <span class="s">&quot;OtherAttributes.joboption;localtransfer&quot;</span><span class="p">,</span>
+                   <span class="p">}</span>
+        <span class="n">j</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">JobDescription</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\\\\</span><span class="s">&quot;</span><span class="p">,</span> <span class="s">&quot;</span><span class="se">\\</span><span class="s">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;=&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">r&quot;^\s*(#|$)&quot;</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span> <span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="n">RTE0EnvCreator</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="n">Object</span><span class="p">(),</span> <span class="n">mapping</span><span class="p">)</span><span class="o">.</span><span class="n">setPyEnv</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+        <span class="n">jobdescs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">j</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">True</span></div>
+</pre></div>
+
+    </div>
+    
+    <DIV>
+      <OBJECT type="text/html" data="http//www.nordugrid.org/styles/ngfooter.html" width="100%">
+	<center><a href="http//www.nordugrid.org">Nordugrid homepage</a></center>
+      </OBJECT>
+    </DIV>
+  </body>
+</html>

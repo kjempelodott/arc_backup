@@ -1,0 +1,94 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link REL="SHORTCUT ICON" HREF="http//www.nordugrid.org/favicon.ico">
+    <link rel="STYLESHEET" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="STYLESHEET" href="../../../_static/nordugrid_wrapper.css" type="text/css" />
+    <title>NorduGrid | Python LRMS backends</title>
+  </head>
+  
+  <body class="LONG">
+    <div class="MAIN">
+      <h1 class="TITLE">Python LRMS backends</h1>
+      
+      <h1>Source code for lrms.common.tools</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Tools and helper functions.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="lremove"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.tools.lremove">[docs]</a><span class="k">def</span> <span class="nf">lremove</span><span class="p">(</span><span class="n">string</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Remove sub-string from beginning of string.</span>
+
+<span class="sd">    :param str string: string to be edited</span>
+<span class="sd">    :param str prefix: remove this from beginning of string if exact match</span>
+<span class="sd">    :return: string (without prefix if exact match)</span>
+<span class="sd">    :rtype: :py:obj:`str`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">string</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">string</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">prefix</span><span class="p">):]</span>
+    <span class="k">return</span> <span class="n">string</span>
+
+</div>
+<div class="viewcode-block" id="rremove"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.tools.rremove">[docs]</a><span class="k">def</span> <span class="nf">rremove</span><span class="p">(</span><span class="n">string</span><span class="p">,</span> <span class="n">suffix</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Remove sub-string from end of string.</span>
+
+<span class="sd">    :param str string: string to be edited</span>
+<span class="sd">    :param str sufffix: remove this from end of string if exact match</span>
+<span class="sd">    :return: string (without suffix if exact match)</span>
+<span class="sd">    :rtype: :py:obj:`str`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">string</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">suffix</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">string</span><span class="p">[:</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">suffix</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="n">string</span>
+
+</div>
+<div class="viewcode-block" id="tail"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.tools.tail">[docs]</a><span class="k">def</span> <span class="nf">tail</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">BUFSIZ</span> <span class="o">=</span> <span class="mi">4096</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Similar to GNU tail -n [N].</span>
+<span class="sd">    </span>
+<span class="sd">    :param str path: path to file</span>
+<span class="sd">    :param int n: number of lines to read</span>
+<span class="sd">    :param int BUFSIZ: chunk size in bytes (default: 4096)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="kn">import</span> <span class="nn">os</span>
+    <span class="n">fsize</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path</span><span class="p">)[</span><span class="mi">6</span><span class="p">]</span>
+    <span class="n">block</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+    <span class="k">with</span> <span class="n">os</span><span class="o">.</span><span class="n">fdopen</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">O_RDONLY</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">O_NONBLOCK</span><span class="p">),</span> <span class="s">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+        <span class="k">while</span> <span class="n">pos</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">lines</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">pos</span> <span class="o">-</span> <span class="n">BUFSIZ</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="c"># seek back one BUFSIZ</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">block</span><span class="o">*</span><span class="n">BUFSIZ</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+                <span class="c"># read buffer</span>
+                <span class="n">new_data</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">BUFSIZ</span><span class="p">)</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">new_data</span> <span class="o">+</span> <span class="n">data</span>
+                <span class="n">lines</span> <span class="o">+=</span> <span class="n">new_data</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c"># file too small, start from beginning</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">)</span>
+                <span class="c"># only read what was not read</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="o">+</span> <span class="n">data</span>
+                <span class="k">break</span>
+            <span class="n">pos</span> <span class="o">-=</span> <span class="n">BUFSIZ</span>
+            <span class="n">block</span> <span class="o">-=</span> <span class="mi">1</span>
+    <span class="c"># return n last lines of file</span>
+    <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)[</span><span class="o">-</span><span class="n">n</span><span class="p">:]</span>
+</pre></div></div>
+
+    </div>
+    
+    <DIV>
+      <OBJECT type="text/html" data="http//www.nordugrid.org/styles/ngfooter.html" width="100%">
+	<center><a href="http//www.nordugrid.org">Nordugrid homepage</a></center>
+      </OBJECT>
+    </DIV>
+  </body>
+</html>

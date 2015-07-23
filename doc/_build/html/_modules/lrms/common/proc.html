@@ -1,0 +1,169 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link REL="SHORTCUT ICON" HREF="http//www.nordugrid.org/favicon.ico">
+    <link rel="STYLESHEET" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="STYLESHEET" href="../../../_static/nordugrid_wrapper.css" type="text/css" />
+    <title>NorduGrid | Python LRMS backends</title>
+  </head>
+  
+  <body class="LONG">
+    <div class="MAIN">
+      <h1 class="TITLE">Python LRMS backends</h1>
+      
+      <h1>Source code for lrms.common.proc</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Classes for executing commands locally or via SSH.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">subprocess</span> <span class="kn">import</span> <span class="n">Popen</span>
+
+<div class="viewcode-block" id="execute_local"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.proc.execute_local">[docs]</a><span class="k">def</span> <span class="nf">execute_local</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">env</span> <span class="o">=</span> <span class="p">{}):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Execute a command locally using :py:class:`subprocess.Popen`</span>
+<span class="sd">    with ``shell=True``.</span>
+<span class="sd">    </span>
+<span class="sd">    :param str args: command with arguments (e.g. &#39;sbatch myjob.sh&#39;)</span>
+<span class="sd">    :param dict env: environment variables  (default: {})</span>
+<span class="sd">    :return: handle object</span>
+<span class="sd">    :rtype: :py:class:`subprocess.Popen`</span>
+<span class="sd">    :note: ``wait()`` is called, and ``stdout`` and ``stderr`` is read.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># TODO: What if args longer than kernel ARG_MAX (e.g. scan millions of jobs)?</span>
+    <span class="kn">from</span> <span class="nn">tempfile</span> <span class="kn">import</span> <span class="n">TemporaryFile</span>
+    <span class="c"># Note: PIPE will cause deadlock if output is larger than 65K</span>
+    <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span> <span class="o">=</span> <span class="n">TemporaryFile</span><span class="p">(),</span> <span class="n">TemporaryFile</span><span class="p">()</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">Popen</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">stdout</span> <span class="o">=</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span> <span class="o">=</span> <span class="n">stderr</span><span class="p">,</span> <span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="p">,</span> <span class="n">shell</span> <span class="o">=</span> <span class="bp">True</span><span class="p">)</span>
+    <span class="n">handle</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+    <span class="n">handle</span><span class="o">.</span><span class="n">stdout</span> <span class="o">=</span> <span class="n">stdout</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="n">stdout</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
+    <span class="n">handle</span><span class="o">.</span><span class="n">stderr</span> <span class="o">=</span> <span class="n">stderr</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="n">stderr</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">handle</span>
+
+</div>
+<div class="viewcode-block" id="execute_remote"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.proc.execute_remote">[docs]</a><span class="k">def</span> <span class="nf">execute_remote</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">host</span> <span class="o">=</span> <span class="bp">None</span><span class="p">,</span> <span class="n">timeout</span> <span class="o">=</span> <span class="mi">10</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Execute a command on the remote host using the SSH protocol.</span>
+<span class="sd">    </span>
+<span class="sd">    :param str args: command with arguments (e.g. &#39;sbatch myjob.sh&#39;)</span>
+<span class="sd">    :return: object with attributes ``stdout``, ``stderr`` \</span>
+<span class="sd">    and ``returncode``</span>
+<span class="sd">    :rtype: :py:class:`~lrms.common.common.Object`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># TODO: What if args longer than kernel ARG_MAX (e.g. scan millions of jobs)?</span>
+    <span class="kn">from</span> <span class="nn">time</span> <span class="kn">import</span> <span class="n">sleep</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">Config</span><span class="p">,</span> <span class="s">&#39;ssh_timeout&#39;</span><span class="p">):</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">ssh_timeout</span>
+
+    <span class="k">def</span> <span class="nf">is_timeout</span><span class="p">(</span><span class="n">test</span><span class="p">):</span>
+        <span class="n">wait_time</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="n">test</span><span class="p">():</span>
+            <span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+            <span class="n">wait_time</span> <span class="o">+=</span> <span class="mf">0.5</span>
+            <span class="k">if</span> <span class="n">wait_time</span> <span class="o">&gt;</span> <span class="n">timeout</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">True</span>
+        <span class="k">return</span> <span class="bp">False</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">Object</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">SSHSession</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;There is no active SSH session! Run lrms.common.common.ssh_connect&#39;</span><span class="p">,</span> <span class="s">&#39;common.proc&#39;</span><span class="p">)</span>
+        <span class="n">session</span> <span class="o">=</span> <span class="n">SSHSession</span><span class="p">[</span><span class="n">host</span> <span class="k">if</span> <span class="n">host</span> <span class="k">else</span> <span class="n">SSHSession</span><span class="o">.</span><span class="n">keys</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span><span class="o">.</span><span class="n">open_session</span><span class="p">()</span>
+        <span class="n">session</span><span class="o">.</span><span class="n">exec_command</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_timeout</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">exit_status_ready</span><span class="p">):</span>
+            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Session timed out. Some output might not be received. Guessing exit code from stderr.&#39;</span><span class="p">,</span> <span class="s">&#39;common.proc&#39;</span><span class="p">)</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">returncode</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">exit_status</span>
+
+        <span class="n">chnksz</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">&lt;&lt;</span> <span class="mi">9</span>
+
+        <span class="n">stdout</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">chnksz</span><span class="p">)</span>
+        <span class="k">while</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">stdout</span> <span class="o">+=</span> <span class="n">data</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">chnksz</span><span class="p">)</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">stdout</span> <span class="o">=</span> <span class="n">stdout</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+        
+        <span class="n">stderr</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">recv_stderr</span><span class="p">(</span><span class="n">chnksz</span><span class="p">)</span>
+        <span class="k">while</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">stderr</span> <span class="o">+=</span> <span class="n">data</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">recv_stderr</span><span class="p">(</span><span class="n">chnksz</span><span class="p">)</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">stderr</span> <span class="o">=</span> <span class="n">stderr</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+            <span class="n">p</span><span class="o">.</span><span class="n">returncode</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">stderr</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">p</span>
+
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Failed to execute command </span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;</span><span class="s">:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.proc&#39;</span><span class="p">)</span>
+
+
+<span class="c"># class SSHSubprocess_libssh(object):</span>
+<span class="c">#     &quot;&quot;&quot;</span>
+<span class="c">#     Execute commands and send files via SSH.</span>
+
+<span class="c">#     :param endpoint_URL: URL object with protocol *ssh*.</span>
+<span class="c">#     :type endpoint_URL: :py:class:`arc.URL (Swig Object of type &#39;Arc::URL *&#39;)`</span>
+<span class="c">#     &quot;&quot;&quot;</span>
+
+<span class="c">#     def __init__(self, endpoint_URL, pkey = None):</span>
+<span class="c">#         if not endpoint_URL or endpoint_URL.Protocol() != &#39;ssh&#39; or not endpoint_URL.Host():</span>
+<span class="c">#             raise ArcError(&#39;Invalid URL given to SSHSubprocess: &#39; + endpoint_URL.FullPath(), </span>
+<span class="c">#                            &#39;common.proc.SSHSubprocess&#39;)</span>
+<span class="c">#         if not pkey: </span>
+<span class="c">#             pkey = Config.private_key </span>
+<span class="c">#         self.sshClient = arc.ssh.SSHClient(endpoint_URL, UserConfig, pkey)</span>
+        
+<span class="c">#     def execute(self, args):</span>
+<span class="c">#         &quot;&quot;&quot;</span>
+<span class="c">#         Execute a command via SSH using the ``execute`` method of \  </span>
+<span class="c">#         :py:class:`arc.SSHChannel (Swig Object of type &#39;Arc::SSHChannel&#39;)`.</span>
+
+<span class="c">#         :param str args: command with arguments (e.g. &#39;sbatch myjob.sh&#39;)</span>
+<span class="c">#         :return: object with attributes ``stdout``, ``stderr`` \</span>
+<span class="c">#         and ``returncode``</span>
+<span class="c">#         :rtype: :py:class:`~lrms.common.common.Object`</span>
+<span class="c">#         &quot;&quot;&quot;</span>
+
+<span class="c">#         p = Object()</span>
+<span class="c">#         p.sshChannel = arc.SSHChannel()</span>
+<span class="c">#         status = self.sshClient.openSessionChannel(p.sshChannel)</span>
+<span class="c">#         if not status:</span>
+<span class="c">#             raise ArcError(&#39;Failed to open SSH channel. Status: %i&#39; % status,</span>
+<span class="c">#                            &#39;common.proc.SSHSubprocess&#39;)</span>
+<span class="c">#         status = p.sshChannel.execute(args, True)</span>
+<span class="c">#         # First element is the exit code</span>
+<span class="c">#         p.returncode = p.sshChannel.getExitStatus()</span>
+<span class="c">#         p.stdout = p.sshChannel.readStdOut()[1].split(&#39;\n&#39;)</span>
+<span class="c">#         p.stderr = p.sshChannel.readStdError()[1].split(&#39;\n&#39;)</span>
+<span class="c">#         return p</span>
+
+<span class="c">#     def push_file(self, fname, mode, dest = None):</span>
+<span class="c">#         &quot;&quot;&quot; </span>
+<span class="c">#         Similar to scp. Used for pushing jobscript file to remote endpoint.</span>
+
+<span class="c">#         :param str fname: path to local file</span>
+<span class="c">#         :param int mode: file mode at remote endpoint</span>
+<span class="c">#         :param str dest: dirname at remote endpoint (default: local dirname)</span>
+<span class="c">#         :return: ``True`` if successful, \</span>
+<span class="c">#         else raise :py:class:`~lrms.common.common.ArcError`</span>
+<span class="c">#         :rtype: :py:obj:`bool`</span>
+<span class="c">#         &quot;&quot;&quot;</span>
+
+<span class="c">#         if not dest:</span>
+<span class="c">#             dest = os.path.dirname(fname)</span>
+<span class="c">#         if not self.sshClient.push_file(fname, mode, dest):</span>
+<span class="c">#             raise ArcError(&#39;Failed to copy file (%s) to remote endpoint&#39; % </span>
+<span class="c">#                            os.path.basename(fname), &#39;common.proc.SSHSubprocess&#39;)</span>
+<span class="c">#         return True</span></div>
+</pre></div>
+
+    </div>
+    
+    <DIV>
+      <OBJECT type="text/html" data="http//www.nordugrid.org/styles/ngfooter.html" width="100%">
+	<center><a href="http//www.nordugrid.org">Nordugrid homepage</a></center>
+      </OBJECT>
+    </DIV>
+  </body>
+</html>

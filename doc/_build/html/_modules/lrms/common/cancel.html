@@ -1,0 +1,76 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link REL="SHORTCUT ICON" HREF="http//www.nordugrid.org/favicon.ico">
+    <link rel="STYLESHEET" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="STYLESHEET" href="../../../_static/nordugrid_wrapper.css" type="text/css" />
+    <title>NorduGrid | Python LRMS backends</title>
+  </head>
+  
+  <body class="LONG">
+    <div class="MAIN">
+      <h1 class="TITLE">Python LRMS backends</h1>
+      
+      <h1>Source code for lrms.common.cancel</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Common job cancel functions.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">proc</span> <span class="kn">import</span> <span class="o">*</span>
+
+<div class="viewcode-block" id="cancel"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.cancel.cancel">[docs]</a><span class="k">def</span> <span class="nf">cancel</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">lrms</span><span class="p">,</span> <span class="n">remote</span> <span class="o">=</span> <span class="bp">False</span><span class="p">):</span>
+     <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">     Cancel job (applicable for all LRMSs except fork and boinc).</span>
+
+<span class="sd">     :param str cmd: cancel command (e.g. &#39;/usr/bin/scancel&#39;)</span>
+<span class="sd">     :param str job_id: job ID within the LRMS</span>
+<span class="sd">     :param str lrms: name of the LRMS</span>
+<span class="sd">     :param str remote: ``True`` if remote host</span>
+<span class="sd">     :return: command return code</span>
+<span class="sd">     :rtype: :py:obj:`int`</span>
+<span class="sd">     &quot;&quot;&quot;</span>
+
+     <span class="n">executable</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">cmd</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span>
+     
+     <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- starting </span><span class="si">%s</span><span class="s">Cancel.py -----&#39;</span> <span class="o">%</span> <span class="n">lrms</span><span class="p">,</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span>
+     <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;executing </span><span class="si">%s</span><span class="s"> with job id </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">executable</span><span class="p">,</span><span class="n">job_id</span><span class="p">),</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span>
+     <span class="n">execute</span> <span class="o">=</span> <span class="n">excute_local</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">remote</span> <span class="k">else</span> <span class="n">execute_remote</span>
+     <span class="n">handle</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
+     <span class="n">rc</span> <span class="o">=</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span>
+
+     <span class="k">if</span> <span class="n">rc</span><span class="p">:</span>
+          <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">ERROR</span><span class="p">,</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s"> failed&#39;</span> <span class="o">%</span> <span class="n">executable</span><span class="p">,</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span>
+     <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- exiting </span><span class="si">%s</span><span class="s">Cancel.py -----&#39;</span> <span class="o">%</span> <span class="n">lrms</span><span class="p">,</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span>
+     <span class="k">return</span> <span class="ow">not</span> <span class="n">rc</span>
+
+</div>
+<div class="viewcode-block" id="get_status_file"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.cancel.get_status_file">[docs]</a><span class="k">def</span> <span class="nf">get_status_file</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">):</span>
+     <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">     Get the job status file (for fork and boinc).</span>
+
+<span class="sd">     :param str ctrdir: path to GRID control directory</span>
+<span class="sd">     :param str gridid: GRID (global) job ID</span>
+<span class="sd">     :return: path to job status file</span>
+<span class="sd">     :rtype: :py:obj:`str`</span>
+<span class="sd">     &quot;&quot;&quot;</span>
+
+     <span class="n">status_file</span> <span class="o">=</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.status&#39;</span> <span class="o">%</span> <span class="n">gridid</span>
+     <span class="n">paths</span> <span class="o">=</span> <span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;accepting&#39;</span><span class="p">,</span> <span class="n">status_file</span><span class="p">),</span>
+              <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;processing&#39;</span><span class="p">,</span> <span class="n">status_file</span><span class="p">),</span>
+              <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;finished&#39;</span><span class="p">,</span> <span class="n">status_file</span><span class="p">))</span>
+     <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+          <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">R_OK</span><span class="p">):</span> <span class="k">return</span> <span class="n">p</span>
+     <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Status file for job </span><span class="si">%s</span><span class="s"> not found in </span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;</span><span class="s">. &#39;</span>
+                    <span class="s">&#39;Job was not killed, if running at all.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">gridid</span><span class="p">,</span> <span class="n">ctrdir</span><span class="p">),</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span></div>
+</pre></div>
+
+    </div>
+    
+    <DIV>
+      <OBJECT type="text/html" data="http//www.nordugrid.org/styles/ngfooter.html" width="100%">
+	<center><a href="http//www.nordugrid.org">Nordugrid homepage</a></center>
+      </OBJECT>
+    </DIV>
+  </body>
+</html>
