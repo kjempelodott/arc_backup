@@ -2,9 +2,15 @@
 Functions for parsing arc.conf and filling :py:data:`~lrms.common.common.Config`.
 """
 
-from common import *
+from common import Object
 
-def get_parsed_config(configfile):
+Config = Object()
+
+
+def is_conf_setter(*a):
+    pass
+
+def configure(configfile, *func):
     """
     Parse arc.conf using :py:meth:`ConfigParser.RawConfigParser.read`.
 
@@ -16,8 +22,14 @@ def get_parsed_config(configfile):
     import ConfigParser
     cfg = ConfigParser.ConfigParser()
     cfg.read(configfile)
-    return cfg
-
+    set_common(cfg)
+    set_grid_manager(cfg)
+    set_cluster(cfg)
+    set_queue(cfg)
+    for f in func:
+        if f.func_dict.get('is_conf_setter', False):
+            f(cfg)
+            
 
 def set_common(cfg):
     """

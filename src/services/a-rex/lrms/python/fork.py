@@ -1,19 +1,23 @@
 """
-Functions for fork job handling.
+Fork batch system interface module.
 """
 
-from common.common import *
+import os, sys, time, re
+import arc
+from common import UserConfig
 from common.config import *
 from common.proc import * 
 from common.parse import SimpleGramiParser
 from common.scan import *
 from common.submit import *
 
+
+@is_conf_setter
 def set_fork(cfg):
     """
-    Fill :py:data:`~lrms.common.common.Config` with fork-specific options.
+    Set fork specific options in :py:data:`~lrms.common.common.Config`.
 
-    :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)
+    :param cfg: parsed arc.conf
     :type cfg: :py:class:`ConfigParser.ConfigParser`
     """
     Config.shared_filesystem = True
@@ -24,41 +28,38 @@ def set_fork(cfg):
 
 def Submit(config, jobdescs, jc):
     """
-    Submit a fork job.
+    Submits a job to the host specified in arc.conf. This method executes the required
+    Run Time Environment scripts and assembles the bash job script. The job script is
+    written to file and submitted to the specified fork queue.
 
     :param str config: path to arc.conf
     :param jobdescs: job description list object
-    :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
-    :param jc: job container object
-    :type jc: :py:class:`arc.compute.JobContainer (Swig Object of type Arc::EntityContainer< Arc::Job > *')`
+    :type jobdescs: :py:class:`arc.JobDescriptionList`
+    :param jc: job container object 
+    :type jc: :py:class:`arc.compute.JobContainer`
     :return: ``True`` if successfully submitted, else ``False``
     :rtype: :py:obj:`bool`
     """
 
-    cfg = get_parsed_config(config)
-    set_common(cfg)
-    set_gridmanager(cfg)
-    set_cluster(cfg)
-    set_queue(cfg)
-    set_fork(cfg)
+    configure(config, set_fork)
 
     jd = jobdescs[0]
     validate_attributes(jd)
   
     # Run RTE stage0
-    log(arc.DEBUG, '----- starting forkSubmitter.py -----', 'fork.Submit')
+    debug('----- starting forkSubmitter.py -----', 'fork.Submit')
     RTE_stage0(jobdesc)
 
     # Create tmp script file and write job script
     jobscript = get_job_script(jobdescs)
     script_file = write_script_file(jobscript)
 
-    log(arc.DEBUG, 'Fork jobname: %s' % jd.Identification.JobName, 'fork.Submit')
-    log(arc.DEBUG, 'Fork job script built', 'fork.Submit')
-    log(arc.DEBUG, '----------------- BEGIN job script -----', 'fork.Submit')
+    debug('Fork jobname: %s' % jd.Identification.JobName, 'fork.Submit')
+    debug('Fork job script built', 'fork.Submit')
+    debug('----------------- BEGIN job script -----', 'fork.Submit')
     for line in jobscript.split('\n'):
-        log(arc.DEBUG, line, 'fork.Submit')
-    log(arc.DEBUG, '----------------- END job script -----', 'fork.Submit')
+        debug(line, 'fork.Submit')
+    debug('----------------- END job script -----', 'fork.Submit')
 
     if 'ONLY_WRITE_JOBSCRIPT' in os.environ and os.environ['ONLY_WRITE_JOBSCRIPT'] == 'yes':
         return False
@@ -70,10 +71,10 @@ def Submit(config, jobdescs, jc):
     execute = excute_local if not Config.remote_host else execute_remote
     directory = jd.OtherAttributes['joboption;directory']
 
-    log(arc.DEBUG, 'Session directory: %s' % directory, 'fork.Submit')
+    debug('Session directory: %s' % directory, 'fork.Submit')
 
-    fork_handle = execute(script_file)
-    jobid = fork_handle.stdout[0][5:]
+    handle = execute(script_file)
+    jobid = handle.stdout[0][5:]
 
     # Write output to comment file
     with open(directory + '.comment', 'w') as out:
@@ -82,10 +83,10 @@ def Submit(config, jobdescs, jc):
         for line in fork_handle.stderr:
             out.write(line)
 
-    if fork_handle.returncode == 0:
-        log(arc.DEBUG, 'Job submitted successfully!', 'fork.Submit')
-        log(arc.DEBUG, 'Local job id: %s' % (jobid), 'fork.Submit') 
-        log(arc.DEBUG, '----- exiting forkSubmitter.py -----', 'fork.Submit')
+    if handle.returncode == 0:
+        debug('Job submitted successfully!', 'fork.Submit')
+        debug('Local job id: %s' % (jobid), 'fork.Submit') 
+        debug('----- exiting forkSubmitter.py -----', 'fork.Submit')
 
         endpointURL = arc.common.URL(Config.remote_endpoint)
         newJob = arc.Job()
@@ -106,23 +107,25 @@ def Submit(config, jobdescs, jc):
         jc.addEntity(newJob)
         return True
 
-    log(arc.DEBUG, 'Job *NOT* submitted successfully!', 'fork.Submit')
-    log(arc.DEBUG, 'Got error code: %d !' % (fork_handle.returncode), 'fork.Submit')
-    log(arc.DEBUG, '----- exiting forkSubmitter.py -----', 'fork.Submit')
+    debug('Job *NOT* submitted successfully!', 'fork.Submit')
+    debug('Got error code: %d !' % (handle.returncode), 'fork.Submit')
+    debug('Output is:', 'fork.Submit')
+    debug('\n'.join(handle.stdout), 'fork.Submit')
+    debug('Error output is:', 'fork.Submit')
+    debug('\n'.join(handle.stderr), 'fork.Submit')
+    debug('----- exiting forkSubmitter.py -----', 'fork.Submit')
     return False
 
                 
 def get_job_script(jobdescs):
     """
-    Get the complete bash job script.
+    Assemble bash job script for a fork host.
 
     :param jobdescs: list of job description objects
-    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription (Swig Object of type Arc::JobDescription *')` ... ]
+    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription` ... ]
     :return: job script
     :rtype: :py:obj:`str`
     """
-
-    set_log_name('fork')
 
     jobscript = \
         '#!/bin/sh\n' \
@@ -175,21 +178,19 @@ def get_job_script(jobdescs):
 # Cancel methods
 #-------------------
 
-def Cancel(grami_file):
+def Cancel(config, grami_file):
     """
-    Cancel a fork job.
+    Cancel a job running at a fork host.
 
+    :param str config: path to arc.conf
     :param str grami_file: path to grami file
     :return: ``True`` if successfully cancelled, else ``False``
     :rtype: :py:obj:`bool`
     """
 
-    set_log_name('fork')
+    debug('----- starting forkCancel.py -----', 'fork.Cancel')
 
-    cfg = get_parsed_config(config)
-    set_gridmanager(cfg)
-
-    log(arc.DEBUG, '----- starting forkCancel.py -----', 'fork.Cancel')
+    configure(config)
 
     grami = SimpleGramiParser(grami_file)
     ctrdir = grami.controldir
@@ -197,7 +198,8 @@ def Cancel(grami_file):
     gridid = grami.gridid
     jobdir = get_job_directory(ctrdir, gridid)
 
-    log(arc.INFO, 'Deleting job %s, local id %s' % (gridid, jobid), 'fork.Cancel')
+    killed = False
+    info('Deleting job %s, local id %s' % (gridid, jobid), 'fork.Cancel')
     with open('%s/job.%s.status' % (jobdir, gridid)) as f:
         line = f.readline()
         if re.search('INLRMS|CANCELING'):
@@ -206,21 +208,21 @@ def Cancel(grami_file):
                 os.kill(jobid, signal.SIGTERM)
                 time.sleep(5)
                 os.kill(jobid, signal.SIGKILL)
+                killed = True
             else:
                 args = 'kill -s TERM %i; sleep 5; kill -s KILL %i' % (jobid, jobid)
                 handle = execute_remote(args)
-                if hanlde.returncode:
-                    raise ArcError('Failed to kill job %i at remote host %s' % 
-                                   (jobid, Config.remote_host), 'fork.Cancel')
-            log(arc.DEBUG, '----- exiting forkCancel.py -----', 'fork.Cancel')
-            return True
+                if handle.returncode:
+                    error('Failed to kill job %i at remote host %s' % (jobid, Config.remote_host), 'fork.Cancel')
+                else:
+                    killed = True
         elif re.search('FINISHED|DELETED'):
-            log(arc.INFO, 'Job already died, won\'t do anything', 'fork.Cancel')
+            info('Job already died, won\'t do anything', 'fork.Cancel')
         else:
-            log(arc.INFO, 'Job is at unkillable state', 'fork.Cancel')
+            info('Job is at unkillable state', 'fork.Cancel')
 
-    log(arc.DEBUG, '----- exiting forkCancel.py -----', 'fork.Cancel')
-    return False
+    debug('----- exiting forkCancel.py -----', 'fork.Cancel')
+    return killed
 
 
 #---------------------
@@ -229,7 +231,9 @@ def Cancel(grami_file):
 
 def Scan(config, ctr_dirs):
     """
-    Scan and update status of fork jobs.
+    Query the fork host for all jobs in /[controldir]/processing.
+    If the job has stopped running, the exit code is read and the 
+    diagnostics and comments files are updated.
 
     :param str config: path to arc.conf
     :param ctr_dirs: list of paths to control directories 
@@ -238,30 +242,14 @@ def Scan(config, ctr_dirs):
 
     time.sleep(10)
 
-    cfg = get_parsed_config(config)
-    set_gridmanager(cfg)
-    set_fork(cfg)
+    configure(config, set_fork)
 
     if Config.scanscriptlog:
         scanlogfile = arc.common.LogFile(Config.scanscriptlog)
         arc.common.Logger_getRootLogger().addDestination(scanlogfile)
 
     jobs = get_jobs(ctr_dirs)
-    read_job_states(jobs)
-    process_jobs(jobs)
-
-
-def process_jobs(jobs):
-    """
-    Check if jobs are still running. If job is finished, get the exit code,
-    update the ``lrms_done_file`` and write to the ``comments_file``.
-
-    :param job: list of job objects (from :py:meth:`~lrms.common.scan.get_jobs`)
-    :type job: :py:obj:`list` [ :py:class:`~lrms.common.common.Object` ... ]
-    """
-
     if not jobs: return
-    set_log_name('fork')
 
     execute = excute_local if not Config.remote_host else execute_remote
     args = 'ps -opid ' + (' '.join(jobs.keys()))
@@ -270,11 +258,11 @@ def process_jobs(jobs):
     else:
         handle = execute(args)
     if handle.returncode != 0:
-        log(arc.DEBUG, 'Got error code %i from ps -opid' % handle.returncode, 'fork.Scan')
-        #log(arc.DEBUG, 'Output is:', 'fork.Scan')
-        #log(arc.DEBUG, '\n'.join(handle.stdout), 'fork.Scan')
-        log(arc.DEBUG, 'Error output is:', 'fork.Scan')
-        log(arc.DEBUG, '\n'.join(handle.stderr), 'fork.Scan')
+        debug('Got error code %i from ps -opid' % handle.returncode, 'fork.Scan')
+        #debug('Output is:', 'fork.Scan')
+        #debug('\n'.join(handle.stdout), 'fork.Scan')
+        debug('Error output is:', 'fork.Scan')
+        debug('\n'.join(handle.stderr), 'fork.Scan')
 
     running = [line.strip() for line in handle.stdout]
     for localid, job in jobs.items():

@@ -19,15 +19,15 @@ Module tree >
 |
 |
 
-The lrms package >
-------------------
+Package: lrms >
+---------------
 
 .. automodule:: lrms
 
 ....
 
-The lrms.fork module
-++++++++++++++++++++
+Module: lrms.fork
++++++++++++++++++
 .. automodule:: lrms.fork
     :members:
 
@@ -37,8 +37,8 @@ The lrms.fork module
 
 |
 
-The lrms.lsf module
-+++++++++++++++++++
+Module: lrms.lsf
+++++++++++++++++
 
 .. automodule:: lrms.lsf
     :members:
@@ -49,8 +49,8 @@ The lrms.lsf module
 
 |
 
-The lrms.slurm module
-+++++++++++++++++++++
+Module: lrms.slurm
+++++++++++++++++++
 .. automodule:: lrms.slurm
     :members:
 
@@ -60,15 +60,15 @@ The lrms.slurm module
 
 |
 
-The lrms.common package >
--------------------------
+Package: lrms.common >
+----------------------
 
 .. automodule:: lrms.common
 
 ....
 
-The lrms.common.cancel module
-+++++++++++++++++++++++++++++
+Module: lrms.common.cancel
+++++++++++++++++++++++++++
 .. automodule:: lrms.common.cancel
     :members:
 
@@ -78,8 +78,8 @@ The lrms.common.cancel module
 
 |
 
-The lrms.common.common module
-+++++++++++++++++++++++++++++
+Module: lrms.common.common
+++++++++++++++++++++++++++
 .. automodule:: lrms.common.common
     :members:
 
@@ -101,8 +101,8 @@ The lrms.common.common module
 
 |
 
-The lrms.common.config module
-+++++++++++++++++++++++++++++
+Module: lrms.common.config
+++++++++++++++++++++++++++
 .. automodule:: lrms.common.config
     :members:
 
@@ -112,8 +112,8 @@ The lrms.common.config module
 
 |
 
-The lrms.common.files module
-++++++++++++++++++++++++++++
+Module: lrms.common.files
++++++++++++++++++++++++++
 .. automodule:: lrms.common.files
     :members:
 
@@ -123,8 +123,8 @@ The lrms.common.files module
 
 |
 
-The lrms.common.parse module
-++++++++++++++++++++++++++++
+Module: lrms.common.parse
++++++++++++++++++++++++++
 .. automodule:: lrms.common.parse
     :members:
 
@@ -134,8 +134,8 @@ The lrms.common.parse module
 
 |
 
-The lrms.common.proc module
-+++++++++++++++++++++++++++
+Module: lrms.common.proc
+++++++++++++++++++++++++
 .. automodule:: lrms.common.proc
     :members:
 
@@ -145,8 +145,8 @@ The lrms.common.proc module
 
 |
 
-The lrms.common.scan module
-+++++++++++++++++++++++++++
+Module: lrms.common.scan
+++++++++++++++++++++++++
 .. automodule:: lrms.common.scan
     :members:
 
@@ -172,8 +172,8 @@ The lrms.common.scan module
 
 |
 
-The lrms.common.submit module
-+++++++++++++++++++++++++++++
+Module: lrms.common.submit
+++++++++++++++++++++++++++
 .. automodule:: lrms.common.submit
     :members:
 
@@ -183,8 +183,8 @@ The lrms.common.submit module
 
 |
 
-The lrms.common.tools module
-++++++++++++++++++++++++++++
+Module: lrms.common.tools
++++++++++++++++++++++++++
 .. automodule:: lrms.common.tools
     :members:
 

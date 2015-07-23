@@ -39,38 +39,31 @@
 <div class="line"><br /></div>
 </div>
 <div class="section" id="module-lrms">
-<span id="the-lrms-package"></span><h2>The lrms package &gt;<a class="headerlink" href="#module-lrms" title="Permalink to this headline">¶</a></h2>
-<p>Modules for each LRMS.</p>
+<span id="package-lrms"></span><h2>Package: lrms &gt;<a class="headerlink" href="#module-lrms" title="Permalink to this headline">¶</a></h2>
+<p>The <code class="docutils literal"><span class="pre">lrms</span></code> package contains batch system specific modules and a sub-package <code class="docutils literal"><span class="pre">lrms.common</span></code>. Each module has functions for cancel, scan and submit jobs, with an interface similar to the bash backend scripts:</p>
+<ul class="simple">
+<li>Cancel ( arc.conf, grami_file )</li>
+<li>Scan   ( arc.conf, control_dirs )</li>
+<li>Submit ( arc.conf, job_description, job_container )</li>
+</ul>
 <hr class="docutils" />
 <div class="section" id="module-lrms.fork">
-<span id="the-lrms-fork-module"></span><h3>The lrms.fork module<a class="headerlink" href="#module-lrms.fork" title="Permalink to this headline">¶</a></h3>
-<p>Functions for fork job handling.</p>
-<dl class="function">
-<dt id="lrms.fork.set_fork">
-<code class="descclassname">lrms.fork.</code><code class="descname">set_fork</code><span class="sig-paren">(</span><em>cfg</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/lrms/fork.html#set_fork"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#lrms.fork.set_fork" title="Permalink to this definition">¶</a></dt>
-<dd><p>Fill <a class="reference internal" href="#lrms.common.common.Config" title="lrms.common.common.Config"><code class="xref py py-data docutils literal"><span class="pre">Config</span></code></a> with fork-specific options.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <a class="reference internal" href="#lrms.common.config.get_parsed_config" title="lrms.common.config.get_parsed_config"><code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code></a>)</td>
-</tr>
-</tbody>
-</table>
-</dd></dl>
-
+<span id="module-lrms-fork"></span><h3>Module: lrms.fork<a class="headerlink" href="#module-lrms.fork" title="Permalink to this headline">¶</a></h3>
+<p>Fork batch system interface module.</p>
 <dl class="function">
 <dt id="lrms.fork.Submit">
 <code class="descclassname">lrms.fork.</code><code class="descname">Submit</code><span class="sig-paren">(</span><em>config</em>, <em>jobdescs</em>, <em>jc</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/lrms/fork.html#Submit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#lrms.fork.Submit" title="Permalink to this definition">¶</a></dt>
-<dd><p>Submit a fork job.</p>
+<dd><p>Submits a job to the host specified in arc.conf. This method executes the required
+Run Time Environment scripts and assembles the bash job script. The job script is
+written to file and submitted to the specified fork queue.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
 <li><strong>config</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/functions.html#str" title="(in Python v2.6)"><em>str</em></a>) &#8211; path to arc.conf</li>
-<li><strong>jobdescs</strong> (<code class="xref py py-class docutils literal"><span class="pre">arc.JobDescriptionList</span> <span class="pre">(Swig</span> <span class="pre">Object</span> <span class="pre">of</span> <span class="pre">type</span> <span class="pre">'Arc::JobDescriptionList</span> <span class="pre">*')</span></code>) &#8211; job description list object</li>
-<li><strong>jc</strong> (<code class="xref py py-class docutils literal"><span class="pre">arc.compute.JobContainer</span> <span class="pre">(Swig</span> <span class="pre">Object</span> <span class="pre">of</span> <span class="pre">type</span> <span class="pre">Arc::EntityContainer&lt;</span> <span class="pre">Arc::Job</span> <span class="pre">&gt;</span> <span class="pre">*')</span></code>) &#8211; job container object</li>
+<li><strong>jobdescs</strong> (<code class="xref py py-class docutils literal"><span class="pre">arc.JobDescriptionList</span></code>) &#8211; job description list object</li>
+<li><strong>jc</strong> (<code class="xref py py-class docutils literal"><span class="pre">arc.compute.JobContainer</span></code>) &#8211; job container object</li>
 </ul>
 </td>
 </tr>
@@ -87,7 +80,7 @@
 <dl class="function">
 <dt id="lrms.fork.get_job_script">
 <code class="descclassname">lrms.fork.</code><code class="descname">get_job_script</code><span class="sig-paren">(</span><em>jobdescs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/lrms/fork.html#get_job_script"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#lrms.fork.get_job_script" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get the complete bash job script.</p>
+<dd><p>Assemble bash job script for a fork host.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -104,8 +97,8 @@
 
 <dl class="function">
 <dt id="lrms.fork.Cancel">
-<code class="descclassname">lrms.fork.</code><code class="descname">Cancel</code><span class="sig-paren">(</span><em>grami_file</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/lrms/fork.html#Cancel"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#lrms.fork.Cancel" title="Permalink to this definition">¶</a></dt>
-<dd><p>Cancel a fork job.</p>
+<code class="descclassname">lrms.fork.</code><code class="descname">Cancel</code><span class="sig-paren">(</span><em>config</em>, <em>grami_file</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/lrms/fork.html#Cancel"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#lrms.fork.Cancel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Cancel a job running at a fork host.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -123,7 +116,9 @@
 <dl class="function">
 <dt id="lrms.fork.Scan">
 <code class="descclassname">lrms.fork.</code><code class="descname">Scan</code><span class="sig-paren">(</span><em>config</em>, <em>ctr_dirs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/lrms/fork.html#Scan"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#lrms.fork.Scan" title="Permalink to this definition">¶</a></dt>
-<dd><p>Scan and update status of fork jobs.</p>
+<dd><p>Query the fork host for all jobs in /[controldir]/processing.
+If the job has stopped running, the exit code is read and the 
+diagnostics and comments files are updated.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -138,21 +133,6 @@
 </table>
 </dd></dl>
 
-<dl class="function">
-<dt id="lrms.fork.process_jobs">
-<code class="descclassname">lrms.fork.</code><code class="descname">process_jobs</code><span class="sig-paren">(</span><em>jobs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/lrms/fork.html#process_jobs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#lrms.fork.process_jobs" title="Permalink to this definition">¶</a></dt>
-<dd><p>Check if jobs are still running. If job is finished, get the exit code,
-update the <code class="docutils literal"><span class="pre">lrms_done_file</span></code> and write to the <code class="docutils literal"><span class="pre">comments_file</span></code>.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>job</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/functions.html#list" title="(in Python v2.6)"><code class="xref py py-obj docutils literal"><span class="pre">list</span></code></a> [ <a class="reference internal" href="#lrms.common.common.Object" title="lrms.common.common.Object"><code class="xref py py-class docutils literal"><span class="pre">Object</span></code></a> ... ]) &#8211; list of job objects (from <a class="reference internal" href="#lrms.common.scan.get_jobs" title="lrms.common.scan.get_jobs"><code class="xref py py-meth docutils literal"><span class="pre">get_jobs()</span></code></a>)</td>
-</tr>
-</tbody>
-</table>
-</dd></dl>
-
 <div class="line-block">
 <div class="line"><br /></div>
 </div>
@@ -162,7 +142,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 </div>
 </div>
 <div class="section" id="module-lrms.lsf">
-<span id="the-lrms-lsf-module"></span><h3>The lrms.lsf module<a class="headerlink" href="#module-lrms.lsf" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-lsf"></span><h3>Module: lrms.lsf<a class="headerlink" href="#module-lrms.lsf" title="Permalink to this headline">¶</a></h3>
 <p>Functions for LSF job handling.</p>
 <dl class="function">
 <dt id="lrms.lsf.set_lsf">
@@ -172,7 +152,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <a class="reference internal" href="#lrms.common.config.get_parsed_config" title="lrms.common.config.get_parsed_config"><code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code></a>)</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code>)</td>
 </tr>
 </tbody>
 </table>
@@ -323,7 +303,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 </div>
 </div>
 <div class="section" id="module-lrms.slurm">
-<span id="the-lrms-slurm-module"></span><h3>The lrms.slurm module<a class="headerlink" href="#module-lrms.slurm" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-slurm"></span><h3>Module: lrms.slurm<a class="headerlink" href="#module-lrms.slurm" title="Permalink to this headline">¶</a></h3>
 <p>Functions for SLURM job handling.</p>
 <dl class="function">
 <dt id="lrms.slurm.set_slurm">
@@ -333,7 +313,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <a class="reference internal" href="#lrms.common.config.get_parsed_config" title="lrms.common.config.get_parsed_config"><code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code></a>)</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code>)</td>
 </tr>
 </tbody>
 </table>
@@ -581,11 +561,11 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 </div>
 </div>
 <div class="section" id="module-lrms.common">
-<span id="the-lrms-common-package"></span><h2>The lrms.common package &gt;<a class="headerlink" href="#module-lrms.common" title="Permalink to this headline">¶</a></h2>
+<span id="package-lrms-common"></span><h2>Package: lrms.common &gt;<a class="headerlink" href="#module-lrms.common" title="Permalink to this headline">¶</a></h2>
 <p>Common classes, functions and objects for all LRMSs.</p>
 <hr class="docutils" />
 <div class="section" id="module-lrms.common.cancel">
-<span id="the-lrms-common-cancel-module"></span><h3>The lrms.common.cancel module<a class="headerlink" href="#module-lrms.common.cancel" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-common-cancel"></span><h3>Module: lrms.common.cancel<a class="headerlink" href="#module-lrms.common.cancel" title="Permalink to this headline">¶</a></h3>
 <p>Common job cancel functions.</p>
 <dl class="function">
 <dt id="lrms.common.cancel.cancel">
@@ -646,7 +626,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 </div>
 </div>
 <div class="section" id="module-lrms.common.common">
-<span id="the-lrms-common-common-module"></span><h3>The lrms.common.common module<a class="headerlink" href="#module-lrms.common.common" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-common-common"></span><h3>Module: lrms.common.common<a class="headerlink" href="#module-lrms.common.common" title="Permalink to this headline">¶</a></h3>
 <p>Declares the ArcError exception and Config, UserConfig and Logger objects.</p>
 <dl class="class">
 <dt id="lrms.common.common.Object">
@@ -695,11 +675,11 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 </div>
 </div>
 <div class="section" id="module-lrms.common.config">
-<span id="the-lrms-common-config-module"></span><h3>The lrms.common.config module<a class="headerlink" href="#module-lrms.common.config" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-common-config"></span><h3>Module: lrms.common.config<a class="headerlink" href="#module-lrms.common.config" title="Permalink to this headline">¶</a></h3>
 <p>Functions for parsing arc.conf and filling <a class="reference internal" href="#lrms.common.common.Config" title="lrms.common.common.Config"><code class="xref py py-data docutils literal"><span class="pre">Config</span></code></a>.</p>
 <dl class="function">
-<dt id="lrms.common.config.get_parsed_config">
-<code class="descclassname">lrms.common.config.</code><code class="descname">get_parsed_config</code><span class="sig-paren">(</span><em>configfile</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/lrms/common/config.html#get_parsed_config"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#lrms.common.config.get_parsed_config" title="Permalink to this definition">¶</a></dt>
+<dt id="lrms.common.config.configure">
+<code class="descclassname">lrms.common.config.</code><code class="descname">configure</code><span class="sig-paren">(</span><em>configfile</em>, <em>*func</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/lrms/common/config.html#configure"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#lrms.common.config.configure" title="Permalink to this definition">¶</a></dt>
 <dd><p>Parse arc.conf using <a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.RawConfigParser.read" title="(in Python v2.6)"><code class="xref py py-meth docutils literal"><span class="pre">ConfigParser.RawConfigParser.read()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -723,7 +703,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <a class="reference internal" href="#lrms.common.config.get_parsed_config" title="lrms.common.config.get_parsed_config"><code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code></a>)</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code>)</td>
 </tr>
 </tbody>
 </table>
@@ -737,7 +717,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <a class="reference internal" href="#lrms.common.config.get_parsed_config" title="lrms.common.config.get_parsed_config"><code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code></a>)</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code>)</td>
 </tr>
 </tbody>
 </table>
@@ -751,7 +731,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <a class="reference internal" href="#lrms.common.config.get_parsed_config" title="lrms.common.config.get_parsed_config"><code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code></a>)</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config (from <code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code>)</td>
 </tr>
 </tbody>
 </table>
@@ -765,7 +745,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config     (from <a class="reference internal" href="#lrms.common.config.get_parsed_config" title="lrms.common.config.get_parsed_config"><code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code></a>)</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cfg</strong> (<a class="reference external" href="http://docs.python.org/2.6/library/configparser.html#ConfigParser.ConfigParser" title="(in Python v2.6)"><code class="xref py py-class docutils literal"><span class="pre">ConfigParser.ConfigParser</span></code></a>) &#8211; parsed config     (from <code class="xref py py-meth docutils literal"><span class="pre">get_parsed_config()</span></code>)</td>
 </tr>
 </tbody>
 </table>
@@ -780,7 +760,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 </div>
 </div>
 <div class="section" id="module-lrms.common.files">
-<span id="the-lrms-common-files-module"></span><h3>The lrms.common.files module<a class="headerlink" href="#module-lrms.common.files" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-common-files"></span><h3>Module: lrms.common.files<a class="headerlink" href="#module-lrms.common.files" title="Permalink to this headline">¶</a></h3>
 <p>Functions for reading and writing files.</p>
 <dl class="function">
 <dt id="lrms.common.files.read">
@@ -852,7 +832,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 </div>
 </div>
 <div class="section" id="module-lrms.common.parse">
-<span id="the-lrms-common-parse-module"></span><h3>The lrms.common.parse module<a class="headerlink" href="#module-lrms.common.parse" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-common-parse"></span><h3>Module: lrms.common.parse<a class="headerlink" href="#module-lrms.common.parse" title="Permalink to this headline">¶</a></h3>
 <p>Classes for parsing GRAMI files.</p>
 <dl class="class">
 <dt id="lrms.common.parse.SimpleGramiParser">
@@ -951,7 +931,7 @@ update the <code class="docutils literal"><span class="pre">lrms_done_file</span
 </div>
 </div>
 <div class="section" id="module-lrms.common.proc">
-<span id="the-lrms-common-proc-module"></span><h3>The lrms.common.proc module<a class="headerlink" href="#module-lrms.common.proc" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-common-proc"></span><h3>Module: lrms.common.proc<a class="headerlink" href="#module-lrms.common.proc" title="Permalink to this headline">¶</a></h3>
 <p>Classes for executing commands locally or via SSH.</p>
 <dl class="function">
 <dt id="lrms.common.proc.execute_local">
@@ -1008,7 +988,7 @@ with <code class="docutils literal"><span class="pre">shell=True</span></code>.<
 </div>
 </div>
 <div class="section" id="module-lrms.common.scan">
-<span id="the-lrms-common-scan-module"></span><h3>The lrms.common.scan module<a class="headerlink" href="#module-lrms.common.scan" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-common-scan"></span><h3>Module: lrms.common.scan<a class="headerlink" href="#module-lrms.common.scan" title="Permalink to this headline">¶</a></h3>
 <p>Common job scanning functions and constants.</p>
 <dl class="function">
 <dt id="lrms.common.scan.get_jobs">
@@ -1181,7 +1161,7 @@ EndTime for accounting.</p>
 </div>
 </div>
 <div class="section" id="module-lrms.common.submit">
-<span id="the-lrms-common-submit-module"></span><h3>The lrms.common.submit module<a class="headerlink" href="#module-lrms.common.submit" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-common-submit"></span><h3>Module: lrms.common.submit<a class="headerlink" href="#module-lrms.common.submit" title="Permalink to this headline">¶</a></h3>
 <p>Common submit job functions.</p>
 <dl class="function">
 <dt id="lrms.common.submit.D">
@@ -1448,7 +1428,7 @@ EndTime for accounting.</p>
 </div>
 </div>
 <div class="section" id="module-lrms.common.tools">
-<span id="the-lrms-common-tools-module"></span><h3>The lrms.common.tools module<a class="headerlink" href="#module-lrms.common.tools" title="Permalink to this headline">¶</a></h3>
+<span id="module-lrms-common-tools"></span><h3>Module: lrms.common.tools<a class="headerlink" href="#module-lrms.common.tools" title="Permalink to this headline">¶</a></h3>
 <p>Tools and helper functions.</p>
 <dl class="function">
 <dt id="lrms.common.tools.lremove">

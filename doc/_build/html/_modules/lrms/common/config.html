@@ -16,9 +16,15 @@
 <span class="sd">Functions for parsing arc.conf and filling :py:data:`~lrms.common.common.Config`.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="n">Object</span>
 
-<div class="viewcode-block" id="get_parsed_config"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.config.get_parsed_config">[docs]</a><span class="k">def</span> <span class="nf">get_parsed_config</span><span class="p">(</span><span class="n">configfile</span><span class="p">):</span>
+<span class="n">Config</span> <span class="o">=</span> <span class="n">Object</span><span class="p">()</span>
+
+
+<span class="k">def</span> <span class="nf">is_conf_setter</span><span class="p">(</span><span class="o">*</span><span class="n">a</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<div class="viewcode-block" id="configure"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.config.configure">[docs]</a><span class="k">def</span> <span class="nf">configure</span><span class="p">(</span><span class="n">configfile</span><span class="p">,</span> <span class="o">*</span><span class="n">func</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Parse arc.conf using :py:meth:`ConfigParser.RawConfigParser.read`.</span>
 
@@ -30,8 +36,14 @@
     <span class="kn">import</span> <span class="nn">ConfigParser</span>
     <span class="n">cfg</span> <span class="o">=</span> <span class="n">ConfigParser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">()</span>
     <span class="n">cfg</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">configfile</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">cfg</span>
-
+    <span class="n">set_common</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">set_grid_manager</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">set_cluster</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">set_queue</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">func</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">func_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;is_conf_setter&#39;</span><span class="p">,</span> <span class="bp">False</span><span class="p">):</span>
+            <span class="n">f</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+            
 </div>
 <div class="viewcode-block" id="set_common"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.config.set_common">[docs]</a><span class="k">def</span> <span class="nf">set_common</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>

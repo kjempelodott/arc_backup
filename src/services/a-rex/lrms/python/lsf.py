@@ -1,24 +1,27 @@
 """
-Functions for LSF job handling.
+LSF batch system interface module.
 """
 
+import os, sys, time, re
+import arc
+from common import UserConfig
 from common.cancel import *
-from common.common import *
 from common.config import *
 from common.proc import *
 from common.scan import *
 from common.submit import *
 
+
+@is_conf_setter
 def set_lsf(cfg):
     """
-    Fill :py:data:`~lrms.common.common.Config` with LSF-specific options.
+    Set LSF specific options in :py:data:`~lrms.common.common.Config`.
 
-    :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)
+    :param cfg: parsed arc.conf
     :type cfg: :py:class:`ConfigParser.ConfigParser`
     """
 
-    Config.lsf_bin_path = str(cfg.get('common', 'lsf_bin_path')).strip('"') if \
-                          cfg.has_option('common', 'lsf_bin_path') else '/usr/bin'
+    Config.lsf_bin_path = str(cfg.get('common', 'lsf_bin_path')).strip('"') if cfg.has_option('common', 'lsf_bin_path') else '/usr/bin'
 
     if cfg.has_option('common', 'lsf_profile_path'):
         Config.lsf_cmd = 'source %s &&' % str(cfg.get('common', 'lsf_profile_path')).strip('"')
@@ -27,8 +30,7 @@ def set_lsf(cfg):
         Config.lsf_cmd = ''
 
     Config.localtransfer = False
-    Config.lsf_architecture = str(cfg.get('common', 'lsf_architecture')).strip('"') if \
-                              cfg.has_option('common', 'lsf_architecture') else ''
+    Config.lsf_architecture = str(cfg.get('common', 'lsf_architecture')).strip('"') if cfg.has_option('common', 'lsf_architecture') else ''
             
 #---------------------
 # Submit methods
@@ -36,41 +38,38 @@ def set_lsf(cfg):
 
 def Submit(config, jobdescs, jc):
     """
-    Submit a job to LSF.
+    Submits a job to the host specified in arc.conf. This method executes the required
+    Run Time Environment scripts and assembles the bash job script. The job script is
+    written to file and submitted to the specified LSF queue.
 
     :param str config: path to arc.conf
     :param jobdescs: job description list object
-    :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
-    :param jc: job container object
-    :type jc: :py:class:`arc.compute.JobContainer (Swig Object of type Arc::EntityContainer< Arc::Job > *')`
+    :type jobdescs: :py:class:`arc.JobDescriptionList`
+    :param jc: job container object 
+    :type jc: :py:class:`arc.compute.JobContainer`
     :return: ``True`` if successfully submitted, else ``False``
     :rtype: :py:obj:`bool`
     """
 
-    cfg = get_parsed_config(config)
-    set_common(cfg)
-    set_gridmanager(cfg)
-    set_cluster(cfg)
-    set_queue(cfg)
-    set_lsf(cfg)
+    configure(config, set_lsf)
 
     jd = jobdescs[0]
     validate_attributes(jd)
         
     # Run RTE stage0
-    log(arc.DEBUG, '----- starting lsfSubmitter.py -----', 'lsf.Submit')
+    debug('----- starting lsfSubmitter.py -----', 'lsf.Submit')
     RTE_stage0(jobdescs, 'LSF')
 
     # Create script file and write job script
     jobscript = get_job_script(jobdescs)
     script_file = write_script_file(jobscript)
 
-    log(arc.DEBUG, 'LSF jobname: %s' % jd.Identification.JobName, 'lsf.Submit')
-    log(arc.DEBUG, 'LSF job script built', 'lsf.Submit')
-    log(arc.DEBUG, '----------------- BEGIN job script -----', 'lsf.Submit')
+    debug('LSF jobname: %s' % jd.Identification.JobName, 'lsf.Submit')
+    debug('LSF job script built', 'lsf.Submit')
+    debug('----------------- BEGIN job script -----', 'lsf.Submit')
     for line in jobscript.split('\n'):
-        log(arc.DEBUG, line, 'lsf.Submit')
-    log(arc.DEBUG, '----------------- END job script -----', 'lsf.Submit')
+        debug(line, 'lsf.Submit')
+    debug('----------------- END job script -----', 'lsf.Submit')
 
     if 'ONLY_WRITE_JOBSCRIPT' in os.environ and os.environ['ONLY_WRITE_JOBSCRIPT'] == 'yes':
         return False
@@ -82,19 +81,18 @@ def Submit(config, jobdescs, jc):
     execute = excute_local if not Config.remote_host else execute_remote
     directory = jd.OtherAttributes['joboption;directory']
 
-    log(arc.DEBUG, 'Session directory: %s' % directory, 'lsf.Submit')
+    debug('Session directory: %s' % directory, 'lsf.Submit')
 
     LSF_TRIES = 0
     args = '%s %s/bsub < %s' % (Config.lsf_cmd, Config.lsf_bin_path, script_file)
-    log(arc.common.VERBOSE, 'executing \'%s\' on %s' % 
-        (args, Config.remote_host if Config.remote_host else 'localhost'), 'lsf.Submit')
-    bsub_handle = execute(args)
-    if bsub_handle.returncode == 0:
+    vrbs('executing \'%s\' on %s' % (args, Config.remote_host if Config.remote_host else 'localhost'), 'lsf.Submit')
+    handle = execute(args)
 
-        jobID = get_job_id(bsub_handle)
-        log(arc.DEBUG, 'job submitted successfully!', 'lsf.Submit')
-        log(arc.DEBUG, 'local job id: %s' % (jobID), 'lsf.Submit')
-        log(arc.DEBUG, '----- exiting lsfSubmitter.py -----', 'lsf.Submit')
+    if handle.returncode == 0:
+        jobID = get_job_id(handle)
+        debug('job submitted successfully!', 'lsf.Submit')
+        debug('local job id: %s' % (jobID), 'lsf.Submit')
+        debug('----- exiting lsfSubmitter.py -----', 'lsf.Submit')
 
         endpointURL = arc.common.URL(Config.remote_endpoint)
         newJob = arc.Job()
@@ -115,15 +113,13 @@ def Submit(config, jobdescs, jc):
         jc.addEntity(newJob)
         return True
 
-    else:
-        log(arc.DEBUG, 'job *NOT* submitted successfully!', 'lsf.Submit')
-        log(arc.DEBUG, 'got error code from bsub: %d !' % bsub_handle.returncode, 'lsf.Submit')
-
-    log(arc.DEBUG, 'Output is:', 'lsf.Submit')
-    log(arc.DEBUG, '\n'.join(bsub_handle.stdout), 'lsf.Submit')
-    log(arc.DEBUG, 'Error output is:', 'lsf.Submit')
-    log(arc.DEBUG, '\n'.join(bsub_handle.stderr), 'lsf.Submit')
-    log(arc.DEBUG, '----- exiting lsfSubmitter.py -----', 'lsf.Submit')
+    debug('job *NOT* submitted successfully!', 'lsf.Submit')
+    debug('got error code from bsub: %d !' % handle.returncode, 'lsf.Submit')
+    debug('Output is:', 'lsf.Submit')
+    debug('\n'.join(handle.stdout), 'lsf.Submit')
+    debug('Error output is:', 'lsf.Submit')
+    debug('\n'.join(handle.stderr), 'lsf.Submit')
+    debug('----- exiting lsfSubmitter.py -----', 'lsf.Submit')
     return False
 
 
@@ -146,10 +142,10 @@ def get_job_id(handle):
 
 def get_job_script(jobdescs):
     """
-    Get the complete bsub job script.
+    Assemble bash job script for an LSF host.
 
     :param jobdescs: list of job description objects
-    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription (Swig Object of type Arc::JobDescription *')` ... ]
+    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription` ... ]
     :return: job script
     :rtype: :py:obj:`str`
     """
@@ -178,23 +174,12 @@ def get_job_script(jobdescs):
     if Config.shared_filesystem:
         jobscript += setup_runtime_env(jobdescs)
     else:
-        runtime_stdin = jd.Application.Input[len(jobsessiondir) + 1:] \
-                        if jd.Application.Input.startswith(jobsessiondir +'/') \
-                        else jd.Application.Input
-        if runtime_stdin  != jd.Application.Input:
-            runtime_stdin = '%s/%s/%s' % (Config.scratchdir, gridid, runtime_stdin)
-
-        runtime_stdout = jd.Application.Output[len(jobsessiondir) + 1:] \
-                         if jd.Application.Output.startswith(jobsessiondir + '/') \
-                         else jd.Application.Output
-        if runtime_stdout != jd.Application.Output:
-            runtime_stdout = '%s/%s/%s' % (Config.scratchdir, gridid, runtime_stdout)
-
-        runtime_stderr = jd.Application.Error[len(jobsessiondir) + 1:] \
-                         if jd.Application.Error.startswith(jobsessiondir + '/') \
-                         else jd.Application.Error
-        if runtime_stderr != jd.Application.Error:
-            runtime_stderr = '%s/%s/%s' % (Config.scratchdir, gridid, runtime_stderr)
+        runtime_stdin = jd.Application.Input
+        runtime_stdout = jd.Application.Output
+        runtime_stderr = jd.Application.Error
+        for f in (runtime_stdin, runtime_stdout, runtime_stderr):
+            if f.startswith(jobsessiondir +'/'):
+                f = '%s/%s/%s' % (Config.scratchdir, gridid, f[len(jobsessiondir) + 1:])
 
         scratchdir = (Config.scratchdir, gridid)
         jobscript += 'RUNTIME_JOB_DIR=%s/%s\n' % scratchdir + \
@@ -214,8 +199,7 @@ def get_job_script(jobdescs):
 
     jobscript += RTE_stage1(jobdescs)
     if not Config.shared_filesystem:
-        raise ArcError('Nodes detached from gridarea are not supported when LSF is used. '
-                       'Aborting job submit', 'lsf.Submit')
+        raise ArcError('Nodes detached from gridarea are not supported when LSF is used. Aborting job submit.', 'lsf.Submit')
     jobscript += cd_and_run(jobdescs)
     jobscript += 'fi\n'
     jobscript += configure_runtime(jobdescs)
@@ -229,17 +213,15 @@ def get_job_script(jobdescs):
 
 def Cancel(config, jobid):
     """
-    Cancel an LSF job.
+    Cancel a job running at an LSF host.
 
     :param str config: path to arc.conf
-    :param str jobid: local job ID
+    :param str grami_file: path to grami file
     :return: ``True`` if successfully cancelled, else ``False``
     :rtype: :py:obj:`bool`
     """
 
-    cfg = get_parsed_config(config)
-    set_gridmanager(cfg)
-    set_lsf(cfg)
+    configure(config, set_lsf)
 
     cmd = '%s %s/bkill -s 9 %s' % (Config.lsf_cmd, Config.lsf_bin_path, jobid)
     return cancel(cmd, jobid, 'lsf')
@@ -321,8 +303,8 @@ def process_jobs(jobs):
 
     # Handle jobs lost in LSF
     if handle.returncode != 0:
-        log(arc.DEBUG, 'Got error code %i from bjobs' % handle.returncode, 'lsf.Scan')
-        log(arc.DEBUG, 'Error output is:\n' + '\n'.join(handle.stderr), 'lsf.Scan')
+        debug('Got error code %i from bjobs' % handle.returncode, 'lsf.Scan')
+        debug('Error output is:\n' + '\n'.join(handle.stderr), 'lsf.Scan')
         lost_job = re.compile('Job <(\d+)> is not found')
         for line in handle.stderr:
             try:
