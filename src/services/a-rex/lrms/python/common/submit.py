@@ -2,26 +2,19 @@
 Common submit job functions.
 """
 
-from common import *
-from proc import *
-from files import *
-
-def D(msg):
-     """
-     Alias for ``log(arc.DEBUG, msg, 'common.submit')``
-
-     :param str msg: debug message
-     """
-
-     log(arc.DEBUG, msg, 'common.submit')
+from config import Config
+from proc import execute_local, execute_remote
+from files import write
 
 
 def validate_attributes(jd):
      """
-     Check if GRID (global) job ID and other required attributes are are set.
+     Checks if GRID (global) job ID and executable are set in job description
+     and that runtime environment is resolved. For none-shared filesystems, 
+     the scratchdir must also be specified.
 
      :param jd: job description object
-     :type jd: :py:class:`arc.JobDescription (Swig Object of type 'Arc::JobDescription *')`
+     :type jd: :py:class:`arc.JobDescription`
      """
   
      if 'joboption;gridid' not in jd.OtherAttributes:
@@ -58,10 +51,10 @@ def validate_attributes(jd):
 
 def write_script_file(jobscript):
      """
-     Create and write script file.
+     Write job script to file.
 
-     :param str jobscript: Bash job script
-     :return: path to script file
+     :param str jobscript: job script buffer
+     :return: path to file
      :rtype: :py:obj:`str`
      """
      
@@ -80,14 +73,59 @@ def write_script_file(jobscript):
      return path
 
 
+def set_req_mem(jobdescs):
+   """
+   Set memory requirement attributes in job description.
+
+   :param jobdescs: job description list object
+   :type jobdescs: :py:class:`arc.JobDescriptionList`
+   """
+
+   if jobdescs[0].Resources.IndividualPhysicalMemory.max <= 0:
+       nodememory = 0
+       if Config.defaultmemory <= 0:
+           if (jobdescs[0].Resources.QueueName in Config.queue
+               and hasattr(Config.queue[jobdescs[0].Resources.QueueName], 'nodememory')):
+                nodememory = Config.queue[jobdescs[0].Resources.QueueName].nodememory
+           elif Config.nodememory > 0:
+                nodememory = Config.nodememory
+
+       debug('-'*69, 'common.submit')
+       debug('WARNING: The job description contains no explicit memory requirement.', 'common.submit')
+       if Config.defaultmemory > 0:
+           jobdescs[0].Resources.IndividualPhysicalMemory.max = Config.defaultmemory
+           debug('         A default memory limit taken from \'defaultmemory\' in', 'common.submit')
+           debug('         arc.conf will apply.', 'common.submit')
+           debug('         Limit is: %s mb.' % (Config.defaultmemory), 'common.submit')
+       elif nodememory > 0:
+           jobdescs[0].Resources.IndividualPhysicalMemory.max = nodememory
+           debug('         A default memory limit taken from \'nodememory\' in', 'common.submit')
+           debug('         arc.conf will apply.', 'common.submit')
+           debug('         You may want to set \'defaultmemory\' to something', 'common.submit')
+           debug('         else in arc.conf to better handle jobs with no memory', 'common.submit')
+           debug('         specified.', 'common.submit')
+           debug('         Limit is: %s mb.' % (nodememory), 'common.submit')
+       else:
+           jobdescs[0].Resources.IndividualPhysicalMemory.max = 1000
+           debug('         nodememory is not specified in arc.conf. A default', 'common.submit')
+           debug('         memory limit of 1GB will apply.', 'common.submit')
+       debug('-'*69, 'common.submit')
+
+   if Config.localtransfer and jobdescs[0].Resources.IndividualPhysicalMemory.max < 1000:
+       debug('-'*69, 'common.submit')
+       debug('WARNING: localtransfers are enabled and job has less than 1GB of', 'common.submit')
+       debug('         ram. up- and downloaders take up a lot of ram,', 'common.submit')
+       debug('         this can give you problems.', 'common.submit')
+       debug('-'*69, 'common.submit')
+
+
 def add_user_env(jobdescs):
      """
-     Get user environment section of job script.
+     Get user environment part of job script.
 
      :param jobdescs: job description list object
-     :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type \
-'Arc::JobDescriptionList *')`
-     :return: jobscript section
+     :type jobdescs: :py:class:`arc.JobDescriptionList`
+     :return: jobscript part
      :rtype: :py:obj:`str`
      """
 
@@ -123,51 +161,7 @@ def add_user_env(jobdescs):
      return jobscript
 
 
-def set_req_mem(jobdescs):
-   """
-   Set memory requirement attributes in job description.
 
-   :param jobdescs: job description list object
-   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
-   """
-
-   if jobdescs[0].Resources.IndividualPhysicalMemory.max <= 0:
-       nodememory = 0
-       if Config.defaultmemory <= 0:
-           if (jobdescs[0].Resources.QueueName in Config.queue
-               and hasattr(Config.queue[jobdescs[0].Resources.QueueName], 'nodememory')):
-                nodememory = Config.queue[jobdescs[0].Resources.QueueName].nodememory
-           elif Config.nodememory > 0:
-                nodememory = Config.nodememory
-
-       D('-'*69) 
-       D('WARNING: The job description contains no explicit memory requirement.')
-       if Config.defaultmemory > 0:
-           jobdescs[0].Resources.IndividualPhysicalMemory.max = Config.defaultmemory
-           D('         A default memory limit taken from \'defaultmemory\' in')
-           D('         arc.conf will apply.')
-           D('         Limit is: %s mb.' % (Config.defaultmemory))
-       elif nodememory > 0:
-           jobdescs[0].Resources.IndividualPhysicalMemory.max = nodememory
-           D('         A default memory limit taken from \'nodememory\' in')
-           D('         arc.conf will apply.')
-           D('         You may want to set \'defaultmemory\' to something')
-           D('         else in arc.conf to better handle jobs with no memory')
-           D('         specified.')
-           D('         Limit is: %s mb.' % (nodememory))
-       else:
-           jobdescs[0].Resources.IndividualPhysicalMemory.max = 1000
-           D('         nodememory is not specified in arc.conf. A default')
-           D('         memory limit of 1GB will apply.')
-       D('-'*69)
-
-   if Config.localtransfer and \
-            jobdescs[0].Resources.IndividualPhysicalMemory.max < 1000:
-       D('-'*69)
-       D('WARNING: localtransfers are enabled and job has less than 1GB of')
-       D('         ram. up- and downloaders take up a lot of ram,')
-       D('         this can give you problems.')
-       D('-'*69)
 
 
 # Limitation: In RTE stage 0, scripts MUST use the 'export' command if any
@@ -187,11 +181,11 @@ def RTE_stage0(jobdescs, lrms, **mapping):
         envCreator = RTE0EnvCreator(jobdescs[0], Config, mapping)
         stage0_environ = envCreator.getShEnv()
         stage0_environ['joboption_lrms'] = lrms
+
         # Source RTE script and update the RTE stage0 dict
         def source_sw(sw, opts):
             if os.path.exists('%s/%s' % (Config.runtimedir, sw)):
-                args = 'sourcewithargs () { script=$1; shift; . $script;};' \
-                       'sourcewithargs %s/%s 0' % (Config.runtimedir, sw)
+                args = 'sourcewithargs () { script=$1; shift; . $script;}; sourcewithargs %s/%s 0' % (Config.runtimedir, sw)
                 for opt in opts:
                     args += ' "%s"' % (opt.replace('"', '\\"'))
                 args += ' > /dev/null 2>&1 && env'
@@ -202,7 +196,7 @@ def RTE_stage0(jobdescs, lrms, **mapping):
                 new_env = dict((k,v.rstrip('\n')) for k,v in (l.split('=', 1) for l in stdout if l != '\n'))
                 stage0_environ.update(new_env)
             else:
-                log(arc.WARNING, 'Runtime script %s is missing' % sw, 'common.submit')
+                warn('Runtime script %s is missing' % sw, 'common.submit')
                 #should we exit here?
 
         # Source RTE scripts from the software list
@@ -245,16 +239,16 @@ def RTE_stage0(jobdescs, lrms, **mapping):
            with open(diagfilename, 'w+') as diagfile:
                diagfile.write('ExecutionUnits=%s\n' % jobdescs[0].Resources.SlotRequirement.NumberOfSlots)
        except IOError:
-           D('Unable to write to diag file (%s)' % diagfilename)
+           debug('Unable to write to diag file (%s)' % diagfilename)
 
 
 def RTE_stage1(jobdescs):
    """
-   Get user RTE stage 1 section of job script.
+   Get RTE stage 1 part of job script.
 
    :param jobdescs: job description list object
-   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
-   :return: jobscript section
+   :type jobdescs: :py:class:`arc.JobDescriptionList`
+   :return: jobscript part
    :rtype: :py:obj:`str`
    """
 
@@ -290,41 +284,14 @@ def RTE_stage1(jobdescs):
    jobscript += 'fi\n\n'
    return jobscript
 
-
-def configure_runtime(jobdescs):
-   """
-   Get runtime configuration section of job script.
-
-   :param jobdescs: job description list object
-   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
-   :return: jobscript section
-   :rtype: :py:obj:`str`
-   """
-
-   if jobdescs[0].Resources.RunTimeEnvironment.empty():
-       return '\n'
-
-   jobscript = 'if [ ! -z "$RUNTIME_CONFIG_DIR" ] ; then\n'
-   for rte in jobdescs[0].Resources.RunTimeEnvironment.getSoftwareList():
-       jobscript += \
-           '  if [ -r "${RUNTIME_CONFIG_DIR}/%s" ] ; then\n' % str(rte) + \
-           '    cmdl=${RUNTIME_CONFIG_DIR}/%s\n' % str(rte) + \
-           '    sourcewithargs $cmdl 2  '
-       for arg in rte.getOptions():
-           jobscript += '"%s" ' % (arg.replace('"', '\\"'))
-       jobscript += '\n  fi\n'
-
-   jobscript += 'fi\n\n'
-   return jobscript
-
    
 def setup_runtime_env(jobdescs):
      """
-     Get runtime environment section of job script.
+     Get runtime environment setup part of job script.
 
      :param jobdescs: job description list object
-     :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
-     :return: jobscript section
+     :type jobdescs: :py:class:`arc.JobDescriptionList`
+     :return: jobscript part
      :rtype: :py:obj:`str`
      """
 
@@ -356,12 +323,11 @@ def setup_runtime_env(jobdescs):
 
 def move_files_to_node(jobdescs):
      """
-     Get move files to node section of job script.
+     Get move files to node part of job script.
 
      :param jobdescs: job description list object
-     :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type \
-'Arc::JobDescriptionList *')`
-     :return: jobscript section
+     :type jobdescs: :py:class:`arc.JobDescriptionList`
+     :return: jobscript part
      :rtype: :py:obj:`str`
      """
 
@@ -451,77 +417,6 @@ def move_files_to_node(jobdescs):
          '  fi\n'
 
 
-def move_files_to_frontend():
-   """
-   Get move files to frontend section of job script.
-
-   :return: jobscript section
-   :rtype: :py:obj:`str`
-   """
-
-   return \
-       '  if [ ! -z "$RUNTIME_LOCAL_SCRATCH_DIR" ] && ' \
-       '[ ! -z "$RUNTIME_NODE_SEES_FRONTEND" ]; then \n' \
-       '    if [ ! -z "$RUNTIME_FRONTEND_SEES_NODE" ] ; then\n' \
-       '      # just move it\n' \
-       '      rm -rf "$RUNTIME_FRONTEND_JOB_DIR"\n' \
-       '      destdir=`dirname "$RUNTIME_FRONTEND_JOB_DIR"`\n' \
-       '      if ! mv "$RUNTIME_NODE_JOB_DIR" "$destdir"; then\n' \
-       '        echo "Failed to move \'$RUNTIME_NODE_JOB_DIR\' to ' \
-       '\'$destdir\'" 1>&2\n' \
-       '        RESULT=1\n' \
-       '      fi\n' \
-       '    else\n' \
-       '      # remove links\n' \
-       '      rm -f "$RUNTIME_JOB_STDOUT" 2>/dev/null\n' \
-       '      rm -f "$RUNTIME_JOB_STDERR" 2>/dev/null\n' \
-       '      # move directory contents\n' \
-       '      for f in "$RUNTIME_NODE_JOB_DIR"/.* ' \
-       '"$RUNTIME_NODE_JOB_DIR"/*; do \n' \
-       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/*" ] && ' \
-       'continue # glob failed, no files\n' \
-       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/." ] && continue\n' \
-       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/.." ] && continue\n' \
-       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/.diag" ] && continue\n' \
-       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/.comment" ] && ' \
-       'continue\n' \
-       '        if ! mv "$f" "$RUNTIME_FRONTEND_JOB_DIR"; then\n' \
-       '          echo "Failed to move \'$f\' to ' \
-       '\'$RUNTIME_FRONTEND_JOB_DIR\'" 1>&2\n' \
-       '          RESULT=1\n' \
-       '        fi\n' \
-       '      done\n' \
-       '      rm -rf "$RUNTIME_NODE_JOB_DIR"\n' \
-       '    fi\n' \
-       '  fi\n' \
-       '  echo "exitcode=$RESULT" >> "$RUNTIME_JOB_DIAG"\n' \
-       '  exit $RESULT\n' \
-
-
-def upload_output_files(jobdescs):
-   """
-   Get upload output files section of job script.
-
-   :param jobdescs: job description list object
-   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
-   :return: jobscript section
-   :rtype: :py:obj:`str`
-   """
-
-   return \
-       'UPLOADER=${UPLOADER:-%s/uploader}\n' % \
-        (arc.common.ArcLocation.GetToolsDir()) + \
-       '     if [ "$RESULT" = \'0\' ] ; then\n' \
-       '       $UPLOADER -p -c \'local\' "$RUNTIME_CONTROL_DIR" ' \
-       '"$RUNTIME_JOB_DIR" 2>>${RUNTIME_CONTROL_DIR}/job.local.errors\n' \
-       '       if [ $? -ne \'0\' ] ; then\n' \
-       '         echo \'ERROR: Uploader failed.\' 1>&2\n' \
-       '         if [ "$RESULT" = \'0\' ] ; then RESULT=1 ; fi\n' \
-       '       fi\n' \
-       '     fi\n' \
-       '     rm -f "${RUNTIME_CONTROL_DIR}/job.local.proxy"\n' \
-
-
 def download_input_files(jobdescs):
    """
    Get download input files section of job script.
@@ -605,8 +500,10 @@ def setup_local_transfer(jobdescs):
    # write to the .input file (in runtime controldir)
    with open(job_local_input_filename, 'a') as local_input:
        local_input.write(rcd_rel + ' *.*\n')
-       local_input.write(lremove(jd.Application.Output, gridid) + ' *.*\n')
-       local_input.write(lremove(jd.Application.Error, gridid) + ' *.*\n')
+       local_input.write("%s *.*\n" % jd.Application.Output[len(gridid):]
+                         if jd.Application.Output.startswith(gridid) else jd.Application.Output)
+       local_input.write("%s *.*\n" % jd.Application.Error[len(gridid):]
+                         if jd.Application.Error.startswith(gridid) else jd.Application.Error)
 
    # write to the .output file 
    job_output = join(Config.controldir, 'job.%s.output' % gridid)
@@ -726,3 +623,136 @@ def cd_and_run(jobdescs):
    return jobscript
 
 
+def upload_output_files(jobdescs):
+   """
+   Get upload output files section of job script.
+
+   :param jobdescs: job description list object
+   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
+   :return: jobscript section
+   :rtype: :py:obj:`str`
+   """
+
+   return \
+       'UPLOADER=${UPLOADER:-%s/uploader}\n' % arc.common.ArcLocation.GetToolsDir() + \
+       '     if [ "$RESULT" = \'0\' ] ; then\n' \
+       '       $UPLOADER -p -c \'local\' "$RUNTIME_CONTROL_DIR" "$RUNTIME_JOB_DIR" 2>>${RUNTIME_CONTROL_DIR}/job.local.errors\n' \
+       '       if [ $? -ne \'0\' ] ; then\n' \
+       '         echo \'ERROR: Uploader failed.\' 1>&2\n' \
+       '         if [ "$RESULT" = \'0\' ] ; then RESULT=1 ; fi\n' \
+       '       fi\n' \
+       '     fi\n' \
+       '     rm -f "${RUNTIME_CONTROL_DIR}/job.local.proxy"\n' \
+
+
+def configure_runtime(jobdescs):
+   """
+   Get runtime configuration part of job script.
+
+   :param jobdescs: job description list object
+   :type jobdescs: :py:class:`arc.JobDescriptionList`
+   :return: jobscript part
+   :rtype: :py:obj:`str`
+   """
+
+   if jobdescs[0].Resources.RunTimeEnvironment.empty():
+       return '\n'
+
+   jobscript = 'if [ ! -z "$RUNTIME_CONFIG_DIR" ] ; then\n'
+   for rte in jobdescs[0].Resources.RunTimeEnvironment.getSoftwareList():
+       jobscript += \
+           '  if [ -r "${RUNTIME_CONFIG_DIR}/%s" ] ; then\n' % str(rte) + \
+           '    cmdl=${RUNTIME_CONFIG_DIR}/%s\n' % str(rte) + \
+           '    sourcewithargs $cmdl 2  '
+       for arg in rte.getOptions():
+           jobscript += '"%s" ' % (arg.replace('"', '\\"'))
+       jobscript += '\n  fi\n'
+
+   jobscript += 'fi\n\n'
+   return jobscript
+
+
+def move_files_to_frontend():
+   """
+   Get file transfer to frontend, cleanup and exit part of job script.
+
+   :return: job script part
+   :rtype: :py:obj:`str`
+   """
+
+   return \
+       '  if [ ! -z "$RUNTIME_LOCAL_SCRATCH_DIR" ] && ' \
+       '[ ! -z "$RUNTIME_NODE_SEES_FRONTEND" ]; then \n' \
+       '    if [ ! -z "$RUNTIME_FRONTEND_SEES_NODE" ] ; then\n' \
+       '      # just move it\n' \
+       '      rm -rf "$RUNTIME_FRONTEND_JOB_DIR"\n' \
+       '      destdir=`dirname "$RUNTIME_FRONTEND_JOB_DIR"`\n' \
+       '      if ! mv "$RUNTIME_NODE_JOB_DIR" "$destdir"; then\n' \
+       '        echo "Failed to move \'$RUNTIME_NODE_JOB_DIR\' to ' \
+       '\'$destdir\'" 1>&2\n' \
+       '        RESULT=1\n' \
+       '      fi\n' \
+       '    else\n' \
+       '      # remove links\n' \
+       '      rm -f "$RUNTIME_JOB_STDOUT" 2>/dev/null\n' \
+       '      rm -f "$RUNTIME_JOB_STDERR" 2>/dev/null\n' \
+       '      # move directory contents\n' \
+       '      for f in "$RUNTIME_NODE_JOB_DIR"/.* ' \
+       '"$RUNTIME_NODE_JOB_DIR"/*; do \n' \
+       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/*" ] && ' \
+       'continue # glob failed, no files\n' \
+       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/." ] && continue\n' \
+       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/.." ] && continue\n' \
+       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/.diag" ] && continue\n' \
+       '        [ "$f" = "$RUNTIME_NODE_JOB_DIR/.comment" ] && ' \
+       'continue\n' \
+       '        if ! mv "$f" "$RUNTIME_FRONTEND_JOB_DIR"; then\n' \
+       '          echo "Failed to move \'$f\' to ' \
+       '\'$RUNTIME_FRONTEND_JOB_DIR\'" 1>&2\n' \
+       '          RESULT=1\n' \
+       '        fi\n' \
+       '      done\n' \
+       '      rm -rf "$RUNTIME_NODE_JOB_DIR"\n' \
+       '    fi\n' \
+       '  fi\n' \
+       '  echo "exitcode=$RESULT" >> "$RUNTIME_JOB_DIAG"\n' \
+       '  exit $RESULT\n'
+
+
+
+
+
+jobscript_map = {
+     'GRIDID'               : jobdesc.OtherAttributes['joboption;gridid'],
+     'SESSIONDIR'           : jobdesc.OtherAttributes['joboption;directory'],
+     'STDIN'                : jobdesc.Application.Input,
+     'STDOUT'               : jobdesc.Application.Output,
+     'STDERR'               : jobdesc.Application.Error,
+     'STDIN_REDIR'          : '<$RUNTIME_JOB_STDIN' if jobdesc.Application.Input else '',
+     'STDOUT_REDIR'         : '1>$RUNTIME_JOB_STDOUT' if jobdesc.Application.Output else '',
+     'STDERR_REDIR'         : '2>$RUNTIME_JOB_STDERR' if jobdesc.Application.Output == jobdesc.Application.Error else '2>&1',
+
+     'ENVS'                 : jobdesc.Application.Environment,
+     'ENV'                  : lambda item: item[0],
+     'VAL'                  : lambda item: item[1],
+
+     'EXEC'                 : jobdesc.Application.Executable.Path,
+     'ARGS'                 : '" "'.join(list(jobdesc.Application.Executable.Argument)),
+
+     'RTES'                 : jobdesc.Resources.RunTimeEnvironment.getSoftwareList(),
+     'RTE'                  : lambda item: str(item),
+     'OPTS'                 : lambda item: '"%s"' % " ".join([opt.replace('"', '\\"') for opt in item.getOptions()]),
+
+     'PROCESSORS'           : jobdesc.Resources.SlotRequirement.NumberOfSlots,
+     'NODENAME'             : Config.nodename,
+     'GNU_TIME'             : Config.gnu_time,
+     'GM_MOUNTPOINT'        : Config.gm_mount_point,
+     'GM_PORT'              : Config.gm_port,
+     'GM_HOST'              : Config.hostname,
+     'LOCAL_SCRATCHDIR'     : Config.local_scratchdir, 
+     'SHARED_SCRATCHDIR'    : Config.shared_scratchdir, 
+     'IS_SHARED_FILESYSTEM' : 'yes' if Config.shared_filesystem else '',
+     'ARC_LOCATION'         : arc.common.ArcLocation.Get(),
+     'ARC_TOOLSDIR'         : arc.common.ArcLocation.GetToolsDir(),
+     'GLOBUS_LOCATION'      : os.environ.get('GLOBUS_LOCATION', ''),
+     }

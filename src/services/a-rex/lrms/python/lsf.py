@@ -4,18 +4,19 @@ LSF batch system interface module.
 
 import os, sys, time, re
 import arc
-from common import UserConfig
-from common.cancel import *
-from common.config import *
-from common.proc import *
+from common.cancel import cancel
+from common.config import Config, configure
+from common.proc import execute_local, execute_remote
+from common.log import debug, verbose, info, warn, error, ArcError
 from common.scan import *
+from common.ssh import ssh_connect
 from common.submit import *
 
 
 @is_conf_setter
 def set_lsf(cfg):
     """
-    Set LSF specific options in :py:data:`~lrms.common.common.Config`.
+    Set LSF specific :py:data:`~lrms.common.Config` attributes.
 
     :param cfg: parsed arc.conf
     :type cfg: :py:class:`ConfigParser.ConfigParser`
@@ -24,10 +25,10 @@ def set_lsf(cfg):
     Config.lsf_bin_path = str(cfg.get('common', 'lsf_bin_path')).strip('"') if cfg.has_option('common', 'lsf_bin_path') else '/usr/bin'
 
     if cfg.has_option('common', 'lsf_profile_path'):
-        Config.lsf_cmd = 'source %s &&' % str(cfg.get('common', 'lsf_profile_path')).strip('"')
+        Config.lsf_setup = 'source %s &&' % str(cfg.get('common', 'lsf_profile_path')).strip('"')
     else:
-        log(arc.WARNING, 'lsf_profile_path not set in arc.conf', 'lsf')
-        Config.lsf_cmd = ''
+        warn('lsf_profile_path not set in arc.conf', 'lsf')
+        Config.lsf_setup = ''
 
     Config.localtransfer = False
     Config.lsf_architecture = str(cfg.get('common', 'lsf_architecture')).strip('"') if cfg.has_option('common', 'lsf_architecture') else ''
@@ -38,9 +39,9 @@ def set_lsf(cfg):
 
 def Submit(config, jobdescs, jc):
     """
-    Submits a job to the host specified in arc.conf. This method executes the required
+    Submits a job to the LSF queue specified in arc.conf. This method executes the required
     Run Time Environment scripts and assembles the bash job script. The job script is
-    written to file and submitted to the specified LSF queue.
+    written to file and submitted with ``bsub``.
 
     :param str config: path to arc.conf
     :param jobdescs: job description list object
@@ -55,6 +56,8 @@ def Submit(config, jobdescs, jc):
 
     jd = jobdescs[0]
     validate_attributes(jd)
+    if Config.remote_host:
+        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
         
     # Run RTE stage0
     debug('----- starting lsfSubmitter.py -----', 'lsf.Submit')
@@ -84,33 +87,34 @@ def Submit(config, jobdescs, jc):
     debug('Session directory: %s' % directory, 'lsf.Submit')
 
     LSF_TRIES = 0
-    args = '%s %s/bsub < %s' % (Config.lsf_cmd, Config.lsf_bin_path, script_file)
-    vrbs('executing \'%s\' on %s' % (args, Config.remote_host if Config.remote_host else 'localhost'), 'lsf.Submit')
+    args = '%s %s/bsub < %s' % (Config.lsf_setup, Config.lsf_bin_path, script_file)
+    verbose('executing \'%s\' on %s' % (args, Config.remote_host if Config.remote_host else 'localhost'), 'lsf.Submit')
     handle = execute(args)
 
-    if handle.returncode == 0:
-        jobID = get_job_id(handle)
+    job = arc.Job()
+    if handle.returncode == 0 and set_job_id(handle, job):
+
         debug('job submitted successfully!', 'lsf.Submit')
-        debug('local job id: %s' % (jobID), 'lsf.Submit')
+        debug('local job id: %s' % (job.JobID), 'lsf.Submit')
         debug('----- exiting lsfSubmitter.py -----', 'lsf.Submit')
 
         endpointURL = arc.common.URL(Config.remote_endpoint)
-        newJob = arc.Job()
-        newJob.JobID = endpointURL.Host() + ':' + jobID if endpointURL.Host() else jobID
+        if endpointURL.Host():
+            job.JobID = endpointURL.Host() + ':' + job.JobID
         # TODO: What interface name to use?
-        newJob.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
-        newJob.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
-        newJob.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
+        job.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
+        job.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
+        job.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
         # TODO: Change returned endpoints for job.
         # Currently these URLs are not usable.
-        newJob.ServiceInformationURL = arc.common.URL('test://localhost')
-        newJob.JobStatusURL = endpointURL
-        newJob.JobManagementURL = endpointURL
-        newJob.SessionDir  = arc.common.URL('file://' + directory)
-        newJob.StageInDir  = newJob.SessionDir
-        newJob.StageOutDir = newJob.SessionDir
-        newJob.IDFromEndpoint = str(jobID)
-        jc.addEntity(newJob)
+        job.ServiceInformationURL = arc.common.URL('test://localhost')
+        job.JobStatusURL = endpointURL
+        job.JobManagementURL = endpointURL
+        job.SessionDir  = arc.common.URL('file://' + directory)
+        job.StageInDir  = job.SessionDir
+        job.StageOutDir = job.SessionDir
+        job.IDFromEndpoint = str(job.JobID)
+        jc.addEntity(job)
         return True
 
     debug('job *NOT* submitted successfully!', 'lsf.Submit')
@@ -123,21 +127,24 @@ def Submit(config, jobdescs, jc):
     return False
 
 
-def get_job_id(handle):
+def set_job_id(handle, job):
     """
-    Get local job ID from bsub stdout or stderr.
+    Read local job ID from ``bsub`` output and set ``JobID`` attribute of job.
 
-    :param handle: list of job description objects
-    :type handle: :py:obj:`subprocess.Popen` or :py:data:`~lrms.common.common.Config`
-    :return: local ID
+    :param object handle: sbatch handle
+    :param job: job object 
+    :type job: py:class:`arc.Job
+    :return: ``True`` if found, else ``False``
     :rtype: :py:obj:`str`
     """
 
     for line in handle.stdout:
         match = re.search(r'Job <(\d+)> .+', line)
         if match:
-            return match.group(1)
-    raise ArcError('Job ID not found in stdout', 'lsf.Submit')
+            job.JobID = match.group(1)
+            return True
+    return False
+    error('Job ID not found in stdout', 'lsf.Submit')
 
 
 def get_job_script(jobdescs):
@@ -213,7 +220,7 @@ def get_job_script(jobdescs):
 
 def Cancel(config, jobid):
     """
-    Cancel a job running at an LSF host.
+    Cancel a job running at an LSF host with ``bkill``.
 
     :param str config: path to arc.conf
     :param str grami_file: path to grami file
@@ -222,9 +229,7 @@ def Cancel(config, jobid):
     """
 
     configure(config, set_lsf)
-
-    cmd = '%s %s/bkill -s 9 %s' % (Config.lsf_cmd, Config.lsf_bin_path, jobid)
-    return cancel(cmd, jobid, 'lsf')
+    return cancel('lsf', jobid)
 
 
 #---------------------
@@ -233,7 +238,13 @@ def Cancel(config, jobid):
     
 def Scan(config, ctr_dirs):
     """
-    Scan and update status of LSF jobs.
+    Query the LSF host for all jobs in /[controldir]/processing with ``bjobs``.
+    If the job has stopped running, the exit code is read and the 
+    diagnostics and comments files are updated. Finally ``gm-kick`` is executed
+    on all jobs with an exit code.
+
+    If the exit code can not be read from the diagnostics file, it will (after
+    5 tries) be kicked with status UNKNOWN.
 
     :param str config: path to arc.conf
     :param ctr_dirs: list of paths to control directories 
@@ -242,64 +253,56 @@ def Scan(config, ctr_dirs):
 
     time.sleep(10)
 
-    cfg = get_parsed_config(config)
-    set_gridmanager(cfg)
-    set_lsf(cfg)
-
+    configure(config, set_lsf)
     if Config.scanscriptlog:
         scanlogfile = arc.common.LogFile(Config.scanscriptlog)
         arc.common.Logger_getRootLogger().addDestination(scanlogfile)
 
     jobs = get_jobs(ctr_dirs)
-    process_jobs(jobs)
-
-
-def process_jobs(jobs):
-    """
-    Check if jobs are still running. If job is finished, get the exit code,
-    update the ``lrms_done_file`` and write to the ``comments_file``.
-
-    :param job: list of job objects (from :py:meth:`~lrms.common.scan.get_jobs`)
-    :type job: :py:obj:`list` [ :py:class:`~lrms.common.common.Object` ... ]
-    """
-
     if not jobs: return
+    if Config.remote_host:
+        # NOTE: Assuming 256 B of TCP window needed for each job
+        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key, (2 << 7)*len(jobs))
 
     lsf_bin_path = Config.lsf_bin_path
     execute = excute_local if not Config.remote_host else execute_remote
-    args = Config.lsf_cmd + ' ' + lsf_bin_path + '/bjobs -w -W ' + ' '.join(jobs.keys()) 
+    args = Config.lsf_setup + ' ' + lsf_bin_path + '/bjobs -w -W ' + ' '.join(jobs.keys()) 
     if os.environ.has_key('__LSF_TEST'):
 	handle = execute(args, env = dict(os.environ))
     else:
         handle = execute(args)
 
-    def kick_job(job):
-        with open(job.lrms_done_file, 'w') as f:
-            f.write('%d %s\n' % (job.exitcode, job.message))
-        write_comments(job)
-        update_diag(job)
-        gm_kick([job])
-
-    def handle_job(job, stats = []):
-
-        if job.state in RUNNING:
+    def handle_job(info, in_lsf = True):
+        job = jobs[info[0]]
+        job.state = info[2]
+        if status in RUNNING:
             if os.path.exists(job.count_file):
                 os.remove(job.count_file)
             return
 
         if set_exit_code_from_diag(job):
-            if stats:
-                start, end = stats[-2:]
+            if in_lsf:
+                start, end = info[-2:]
                 re_date = re.compile(r'^(?P<mm>\d\d)/(?P<dd>\d\d)-(?P<HH>\d\d):(?P<MM>\d\d)')
                 job.LRMSStartTime = arc.common.Time(get_MDS(re_date.match(start).groupdict()))
                 if end != '-':
                     job.LRMSEndTime = arc.common.Time(get_MDS(re_date.match(end).groupdict()))
                     job.WallTime = job.LRMSEndTime - job.LRMSStartTime
-        else:
-            raise Exception
-        # Job finished and exitcode found
-        job.message = MESSAGES[job.state]
-        kick_job(job)
+            # Job finished and exitcode found
+            job.message = MESSAGES[job.state]
+            return
+        # else
+        add_failure(job)
+
+    # Handle jobs known to LSF
+    for line in handle.stdout[1:]:
+        try:
+            info = line.strip().split()
+            assert(len(info) == 15)
+            handle_job(info)
+        except:
+            if line:
+                warn('Failed to parse bjobs line: ' + line, 'lsf.Scan')
 
     # Handle jobs lost in LSF
     if handle.returncode != 0:
@@ -307,43 +310,28 @@ def process_jobs(jobs):
         debug('Error output is:\n' + '\n'.join(handle.stderr), 'lsf.Scan')
         lost_job = re.compile('Job <(\d+)> is not found')
         for line in handle.stderr:
-            try:
-                job = jobs[lost_job.match(line).groups()[0]]
-                job.state = 'UNKNOWN'
-                handle_job(job)
-            except:
-                add_failure(job)
-                # After 5 failures, job gets exitcode -1
-                if hasattr(job, 'exitcode'):
-                    kick_job(job)
+            match = lost_job.match(line)
+            if match:
+                handle_job([.groups()[0], 'UNKNOWN'], False)
 
-    # Handle jobs in LSF
-    for line in handle.stdout[1:]:
-        try:
-            stats = line.strip().split()
-            assert(len(stats) == 15)
-        except:
-            if line:
-                log(arc.WARNING, 'Failed to parse bjobs line: ' + line, 'lsf.Scan')
-            continue
-        try:
-            job = jobs[stats[0]]
-            job.state = stats[2]
-            handle_job(job, stats)
-        except:
-            add_failure(job)
-            # After 5 failures, job gets exitcode -1
-            if hasattr(job, 'exitcode'):
-                kick_job(job)
+    kicklist = []
+    for job for job in jobs.itervalues():
+        if hasattr(job, 'exitcode'):
+            with open(job.lrms_done_file, 'w') as f:
+                f.write('%d %s\n' % (job.exitcode, job.message))
+            write_comments(job)
+            update_diag(job)
+            kicklist.append(job)
+    gm_kick(kicklist)
 
 
 def assemble_BSUB(j):
     """
-    Get bsub section of job script.
+    Assemble the ``bsub`` specific section of the job script.
 
     :param jobdescs: job description object
-    :type jobdescs: :py:class:`arc.JobDescription (Swig Object of type 'Arc::JobDescription *')`
-    :return: jobscript section
+    :type jobdescs: :py:class:`arc.JobDescription`
+    :return: job script part
     :rtype: :py:obj:`str`
     """
 

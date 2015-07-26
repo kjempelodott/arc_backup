@@ -1,21 +1,22 @@
 """
-Fork batch system interface module.
+No batch system (fork) interface module.
 """
 
 import os, sys, time, re
 import arc
-from common import UserConfig
-from common.config import *
-from common.proc import * 
+from common.config import Config, configure
+from common.proc import execute_local, execute_remote
+from common.log import debug, verbose, info, warn, error, ArcError
 from common.parse import SimpleGramiParser
 from common.scan import *
+from common.ssh import ssh_connect
 from common.submit import *
 
 
 @is_conf_setter
 def set_fork(cfg):
     """
-    Set fork specific options in :py:data:`~lrms.common.common.Config`.
+    Set fork specific :py:data:`~lrms.common.Config` attributes.
 
     :param cfg: parsed arc.conf
     :type cfg: :py:class:`ConfigParser.ConfigParser`
@@ -28,9 +29,9 @@ def set_fork(cfg):
 
 def Submit(config, jobdescs, jc):
     """
-    Submits a job to the host specified in arc.conf. This method executes the required
+    Submits a job to the local or remote (SSH) machine. This method executes the required
     Run Time Environment scripts and assembles the bash job script. The job script is
-    written to file and submitted to the specified fork queue.
+    written to file and run.
 
     :param str config: path to arc.conf
     :param jobdescs: job description list object
@@ -45,6 +46,8 @@ def Submit(config, jobdescs, jc):
 
     jd = jobdescs[0]
     validate_attributes(jd)
+    if Config.remote_host:
+        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
   
     # Run RTE stage0
     debug('----- starting forkSubmitter.py -----', 'fork.Submit')
@@ -119,7 +122,7 @@ def Submit(config, jobdescs, jc):
                 
 def get_job_script(jobdescs):
     """
-    Assemble bash job script for a fork host.
+    Assemble bash job script.
 
     :param jobdescs: list of job description objects
     :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription` ... ]
@@ -180,7 +183,8 @@ def get_job_script(jobdescs):
 
 def Cancel(config, grami_file):
     """
-    Cancel a job running at a fork host.
+    Cancel a job. The TERM signal is sent to allow the process to terminate
+    gracefully within 5 seconds, followed by a KILL signal.
 
     :param str config: path to arc.conf
     :param str grami_file: path to grami file
@@ -191,6 +195,8 @@ def Cancel(config, grami_file):
     debug('----- starting forkCancel.py -----', 'fork.Cancel')
 
     configure(config)
+    if Config.remote_host:
+        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
 
     grami = SimpleGramiParser(grami_file)
     ctrdir = grami.controldir
@@ -198,31 +204,29 @@ def Cancel(config, grami_file):
     gridid = grami.gridid
     jobdir = get_job_directory(ctrdir, gridid)
 
-    killed = False
     info('Deleting job %s, local id %s' % (gridid, jobid), 'fork.Cancel')
     with open('%s/job.%s.status' % (jobdir, gridid)) as f:
         line = f.readline()
         if re.search('INLRMS|CANCELING'):
             if not Config.remote_host:
                 import signal
-                os.kill(jobid, signal.SIGTERM)
-                time.sleep(5)
-                os.kill(jobid, signal.SIGKILL)
-                killed = True
+                try:
+                    os.kill(jobid, signal.SIGTERM)
+                    time.sleep(5)
+                    os.kill(jobid, signal.SIGKILL)
+                except OSError:
+                    # Job already died or terminated gracefully after SIGTERM
+                    pass
             else:
                 args = 'kill -s TERM %i; sleep 5; kill -s KILL %i' % (jobid, jobid)
                 handle = execute_remote(args)
-                if handle.returncode:
-                    error('Failed to kill job %i at remote host %s' % (jobid, Config.remote_host), 'fork.Cancel')
-                else:
-                    killed = True
         elif re.search('FINISHED|DELETED'):
             info('Job already died, won\'t do anything', 'fork.Cancel')
         else:
             info('Job is at unkillable state', 'fork.Cancel')
 
     debug('----- exiting forkCancel.py -----', 'fork.Cancel')
-    return killed
+    return True
 
 
 #---------------------
@@ -231,9 +235,9 @@ def Cancel(config, grami_file):
 
 def Scan(config, ctr_dirs):
     """
-    Query the fork host for all jobs in /[controldir]/processing.
-    If the job has stopped running, the exit code is read and the 
-    diagnostics and comments files are updated.
+    Query the local or remote (SSH) machine for all jobs in /[controldir]/processing.
+    If the job has stopped running, the exit code is read and the comments file
+    is updated.
 
     :param str config: path to arc.conf
     :param ctr_dirs: list of paths to control directories 
@@ -243,13 +247,14 @@ def Scan(config, ctr_dirs):
     time.sleep(10)
 
     configure(config, set_fork)
-
     if Config.scanscriptlog:
         scanlogfile = arc.common.LogFile(Config.scanscriptlog)
         arc.common.Logger_getRootLogger().addDestination(scanlogfile)
 
     jobs = get_jobs(ctr_dirs)
     if not jobs: return
+    if Config.remote_host:
+        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
 
     execute = excute_local if not Config.remote_host else execute_remote
     args = 'ps -opid ' + (' '.join(jobs.keys()))

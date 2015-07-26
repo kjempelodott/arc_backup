@@ -1,19 +1,19 @@
 """
-Functions for reading and writing files.
+Wrapper methods for stat-ing, reading and writing files.
 """
 
-from common import *
-import tools
-
+import os
+from ssh import SSHSession
+from log import warn, error
 
 def read(path, tail = 0):
     """                               
-    Read content from file.
+    Read file content.
 
     :param str path: path to file   
     :param int tail: number of lines to read (from end), entire file if 0
-    :return: ``True`` and the file content (:py:meth:file.readlines()) if read was successful, else ``False`` and an error message
-    :rtype: :py:obj:`tuple` ( :py:obj:`bool`, [ :py:obj:`str` ... ] )
+    :return: file content splitted by newline
+    :rtype: :py:obj:`list` [ :py:obj:`str` ... ]
     """
 
     try:
@@ -23,8 +23,45 @@ def read(path, tail = 0):
             with os.fdopen(os.open(path, os.O_RDONLY | os.O_NONBLOCK)) as f:
                 return f.readlines()
     except Exception as e:
-        log(arc.WARNING, 'Cannot read file at %s:\n%s' % (path, str(e)), 'common.files')
+        warn('Cannot read file at %s:\n%s' % (path, str(e)), 'common.files')
         return []
+
+
+def tail(path, n, BUFSIZ = 4096):
+    """
+    Similar to GNU tail -n [N].
+    
+    :param str path: path to file
+    :param int n: number of lines to read
+    :param int BUFSIZ: chunk size in bytes (default: 4096)
+    """
+
+    import os
+    fsize = os.stat(path)[6]
+    block = -1
+    lines = 0
+    data = ''
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NONBLOCK), 'rb') as f:
+        f.seek(0,2)
+        pos = f.tell()
+        while pos > 0 and lines < n:
+            if (pos - BUFSIZ) > 0:
+                # seek back one BUFSIZ
+                f.seek(block*BUFSIZ, 2)
+                # read buffer
+                new_data = f.read(BUFSIZ)
+                data = new_data + data
+                lines += new_data.count('\n')
+            else:
+                # file too small, start from beginning
+                f.seek(0,0)
+                # only read what was not read
+                data = f.read(pos) + data
+                break
+            pos -= BUFSIZ
+            block -= 1
+    # return n last lines of file
+    return data.split('\n')[-n:]
 
 
 def write(path, buf, mode = 0644, append = False, remote_host = None):
@@ -32,8 +69,8 @@ def write(path, buf, mode = 0644, append = False, remote_host = None):
     Write buffer to file.
   
     :param str path: path to file 
-    :param str buf: string buffer to be written                          
-    :param int mode: file mode        
+    :param str buf: buffer
+    :param int mode: file mode
     :param bool append: ``True`` if buffer should be appended to existing file
     :param bool remote_host: file will be opened with sftp at the specified hostname
     """
@@ -50,7 +87,7 @@ def write(path, buf, mode = 0644, append = False, remote_host = None):
                 f.write(buf)
 
     except Exception as e:
-        log(arc.WARNING, 'Cannot write to file at %s:\n%s' % (path, str(e)), 'common.files')
+        warn('Cannot write to file at %s:\n%s' % (path, str(e)), 'common.files')
         return False
 
     return True
@@ -58,7 +95,7 @@ def write(path, buf, mode = 0644, append = False, remote_host = None):
 
 def getmtime(path):
     """                               
-    Get modification time of a file.
+    Get modification time of ``path``.
 
     :param str path: path to file
     :return str: modification time
@@ -67,4 +104,5 @@ def getmtime(path):
     try:
         return os.path.getmtime(path)
     except:
-        raise ArcError('Failed to stat file: %s\n%s' % (path, str(e)), 'common.files')
+        error('Failed to stat file: %s\n%s' % (path, str(e)), 'common.files')
+        return False

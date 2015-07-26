@@ -1,10 +1,17 @@
 """
-Common job scanning functions and constants.
+Defines constants and functions related to scanning.
+
+RUNNING: list of possible states reported by the bactch system for jobs that are running
+MESSAGES: mapping between job state reported by batch system and grid-manager state
+UID: user ID of user running PythonLRMS
+GID: group ID of user running PythonLRMS
 """
 
-from common import *
-from files import *
-from proc import *
+import os
+from config import Config
+from files import read, write, getmtime
+from proc import execute_local, execute_remote
+
 
 RUNNING  = ['PENDING','RUNNING','SUSPENDED','COMPLETING',     # slurm
             'PSUSP','USUSP','SUSSP','RUN','PEND',             # lsf
@@ -34,20 +41,19 @@ MESSAGES = {
     '38'       :'Exit',
     }
 
+
 def get_jobs(ctrdirs):
     """
-    Get GRID jobs with status *INLRMS*.
+    Scan control directories for jobs with status *INLRMS* or *CANCELING*.
 
-    :param list ctrdirs:  list of paths (:py:obj:`str`) to controld directories
-    :return: dictionary of local job IDs and job objects
-    :rtype: :py:obj:`dict` { :py:obj:`str` : \
-    :py:class:`~lrms.common.common.Object` }
-    .. note:: The job obects have the following attributes: ``localid``, \
-    ``gridid``, ``local_file``, ``lrms_done_file``, ``grami_file``, \
-    ``output_file``, ``state``, ``uid``, ``gid``, ``sessiondir``, \
-    ``diag_file``, ``count_file``, ``errors_file`` and ``comments_file``. \
-    The file and dir attributes are paths (:py:obj:`str`), while ``state`` \
-    (:py:obj:`str`) is the current state of the job within the LRMS.
+    :param list ctrdirs: list of paths to control directories
+    :return: dictionary that maps local job ID to job object
+    :rtype: :py:obj:`dict` { :py:obj:`str` : :py:obj:`object` ... }
+
+    .. note:: The returned job obects have the following attributes: 
+    ``localid``, ``gridid``, ``local_file``, ``lrms_done_file``, ``grami_file``,
+    ``output_file``, ``state``, ``uid``, ``gid``, ``sessiondir``,
+    ``diag_file``, ``count_file``, ``errors_file`` and ``comment_file``.
     """
 
     jobs = {}
@@ -72,13 +78,13 @@ def get_jobs(ctrdirs):
                         job.message = ''
                         job.diag_file = '%s.diag' % job.sessiondir
                         job.errors_file = '%s.errors' % job.sessiondir
-                        job.comments_file = '%s.comment' % job.sessiondir
+                        job.comment_file = '%s.comment' % job.sessiondir
                         jobs[job.localid] = job
                         try:
                             job.uid = os.stat(job.diag_file).st_uid
                             job.gid = os.stat(job.diag_file).st_gid
                         except:
-                            log(arc.VERBOSE, 'Failed to stat %s' % job.diag_file, 'common.scan')
+                            verbose('Failed to stat %s' % job.diag_file, 'common.scan')
                             job.uid = UID
                             job.gid = GID
             except AttributeError:
@@ -86,18 +92,17 @@ def get_jobs(ctrdirs):
                 continue
             except IOError as e:
                 # Possibly .status file deleted by other process
-                log(arc.VERBOSE, 'IOError when scanning for jobs in /processing:\n%s' % str(e))
+                verbose('IOError when scanning for jobs in /processing:\n%s' % str(e))
                 continue
     return jobs
 
 
 def set_exit_code_from_diag(job):
     """
-    Retrieve exit code from the diag file. If successful, the exit code \
-    will be saved in ``job.exitcode``.
+    Retrieve exit code from the diag file and set the ``job.exitcode`` attribute.
 
-    :param job: job object (from :py:meth:`~lrms.common.scan.get_jobs`)
-    :type job: :py:class:`~lrms.common.common.Object`
+    :param job: job object 
+    :type job: :py:obj:`object`
     :return: ``True`` if exit code was found, else ``False`` 
     :rtype: :py:obj:`bool`
     """
@@ -124,16 +129,22 @@ def set_exit_code_from_diag(job):
             continue
         # Wait
         if time_slept >= time_to_wait:
-            log(arc.WARNING, 'Failed to get exit code from diag file', 'common.scan')
+            warn('Failed to get exit code from diag file', 'common.scan')
             return False
         time.sleep(time_step)
         time_slept += time_step
 
-    log(arc.WARNING, 'Failed to get exit code from diag file', 'common.scan')
+    warn('Failed to get exit code from diag file', 'common.scan')
     return False
 
 
 def add_failure(job):
+    """
+    Add +1 to the failure counter. If a job has more than 5 failures,
+    it is marked as lost with unknown exit code. A failure is typically
+    added if the job stopped running, but reading exit code from diag 
+    file failed.
+    """
     with open(job.count_file, 'a+') as cf:
         print >> cf, \
             int(cf.read() if cf.read() and (cf.seek(0) or True)
@@ -147,12 +158,12 @@ def add_failure(job):
  
 def update_diag(job):
     """
-    Filters out WallTime from the .diag-file if present and
-    replaces it with output from the LRMS. It also adds StartTime and
-    EndTime for accounting.
+    Filters out WallTime from the diag file if present and
+    replaces it with output from the batch system. It also adds 
+    StartTime and EndTime for accounting.
 
-    :param job: job object (from :py:meth:`~lrms.common.scan.get_jobs`)
-    :type job: :py:class:`~lrms.common.common.Object`
+    :param job: job object
+    :type job: :py:obj:`object`
     """
 
     content = read(job.diag_file)
@@ -202,10 +213,10 @@ def update_diag(job):
 
 def read_local_file(job):
     """
-    Read local_file and set  ``localid`` and ``sessiondir`` attributes of job object.
+    Read the local file and set  ``job.localid`` and ``job.sessiondir`` attributes.
 
-    :param job: job object with attributes ``controldir`` and ``globalid``
-    :type job: :py:class:`~lrms.common.common.Object`
+    :param job: job object
+    :type job: :py:obj:`object`
     :return: ``True`` if successful, else ``False``
     :rtype: :py:obj:`bool`
     """
@@ -216,16 +227,16 @@ def read_local_file(job):
         job.sessiondir = content['sessiondir'].strip()
         return True
     except Exception as e: 
-        log(arc.ERROR, 'Failed to get local ID or sessiondir from local file (%s)' % globalid, 'common.scan')
+        error('Failed to get local ID or sessiondir from local file (%s)' % globalid, 'common.scan')
         return False
 
 
 def gm_kick(jobs):
     """
-    Execute gm-kick.
+    Execute ``gm-kick``.
 
-    :param job: list of jobs (from :py:meth:`~lrms.common.scan.get_jobs`) to be kicked
-    :type job: :py:obj:`list` [ :py:class:`~lrms.common.common.Object` ]
+    :param job: list of jobs to be kicked
+    :type job: :py:obj:`list` [ :py:obj:`object` ... ]
     """    
 
     # Execute locally.
@@ -237,13 +248,13 @@ def gm_kick(jobs):
 
 def write_comments(job):
     """
-    Write content of comments file to errors file.
+    Write content of comment file to errors file.
 
-    :param job: job object (from :py:meth:`~lrms.common.scan.get_jobs`)
-    :type job: :py:class:`~lrms.common.common.Object`
+    :param job: job object
+    :type job: :py:obj:`object`
     """
 
-    comments = read(job.comments_file)
+    comments = read(job.comment_file)
     if comments:
         buf = \
         '------- '
@@ -257,13 +268,14 @@ def write_comments(job):
         write(job.errors_file, buf, 0644, True)
  
 
-def get_MDS(dm, lc_time=None):
+def get_MDS(dm, lc_time = 'en_US'):
     """
     Get date and time in MDS format.
     
     :param dm: dictionary with keys 'yyyy', 'mm'|'bbb',
     'dd', 'HH', 'MM' and 'SS'
     :type dm: :py:obj:`dict`
+    :param str lc_time: the locale, if 'bbb' given
     :return: string on the form 'yyyy-mm-ddTHH:MM:SS'
     :rtype: :py:obj:`str`
     """
@@ -273,23 +285,19 @@ def get_MDS(dm, lc_time=None):
     if 'bbb' in dm and 'mm' not in dm:
         try:
             import locale
-            locale.setlocale(locale.LC_TIME, 'en_US')
-        except:
-            pass
-        try:
+            locale.setlocale(locale.LC_TIME, lc_time)
             from datetime import datetime
             dm['mm'] = datetime.strptime(dm['bbb'],'%b').month
         except:
-            dm['mm'] = now[4:6]
+            pass
             
-    return '%s-%s-%sT%s:%s:%s' % (dm['yyyy'] if 'yyyy' in dm else now[:4],
-                                  dm['mm'], dm['dd'], dm['HH'], dm['MM'],
-                                  dm['SS'] if 'SS' in dm else '00')
+    return '%s-%s-%sT%s:%s:%s' % (dm['yyyy'] if 'yyyy' in dm else now[:4], dm['mm'] if 'mm' in dm else now[4:6], 
+                                  dm['dd'], dm['HH'], dm['MM'], dm['SS'] if 'SS' in dm else '00')
 
 
 def is_running(pid):
     """
-    Check if a process is running.
+    Look for a running process in /proc.
     
     :param int pid: process ID
     :return: ``True`` if process is running, else ``False``

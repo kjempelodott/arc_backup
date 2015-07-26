@@ -1,25 +1,30 @@
 """
-Functions for SLURM job handling.
+SLURM batch system interface module.
 """
 
-from common.cancel import *
-from common.common import *
-from common.config import *
-from common.proc import *
+import os, sys, time, re
+import arc
+from common.cancel import cancel
+from common.config import Config, configure
+from common.proc import execute_local, execute_remote
+from common.log import debug, verbose, info, warn, error, ArcError
 from common.scan import *
+from common.ssh import ssh_connect
 from common.submit import *
 
+
+@is_conf_setter
 def set_slurm(cfg):
     """
-    Fill :py:data:`~lrms.common.common.Config` with SLURM-specific options.
+    Set SLURM specific :py:data:`~lrms.common.Config` attributes.
 
-    :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)
+    :param cfg: parsed arc.conf
     :type cfg: :py:class:`ConfigParser.ConfigParser`
     """
     Config.slurm_bin_path = str(cfg.get('common', 'slurm_bin_path')).strip('"') if \
-                            cfg.has_option('common', 'slurm_bin_path') else '/usr/bin'
-    Config.slurm_wakeupperiod = cfg.getint('common', 'slurm_wakeupperiod') if \
-                                cfg.has_option('common', 'slurm_wakeupperiod') else 30
+        cfg.has_option('common', 'slurm_bin_path') else '/usr/bin'
+    Config.slurm_wakeupperiod = int(cfg.get('common', 'slurm_wakeupperiod')).strip('"') if \
+        cfg.has_option('common', 'slurm_wakeupperiod') else 30
 
             
 #---------------------
@@ -28,43 +33,40 @@ def set_slurm(cfg):
 
 def Submit(config, jobdescs, jc):
     """
-    Submit a job to SLURM.
+    Submits a job to the SLURM queue specified in arc.conf. This method executes the required
+    Run Time Environment scripts and assembles the bash job script. The job script is
+    written to file and submitted with ``sbatch``.
 
     :param str config: path to arc.conf
     :param jobdescs: job description list object
-    :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
-    :param jc: job container object
-    :type jc: :py:class:`arc.compute.JobContainer (Swig Object of type Arc::EntityContainer< Arc::Job > *')`
+    :type jobdescs: :py:class:`arc.JobDescriptionList`
+    :param jc: job container object 
+    :type jc: :py:class:`arc.compute.JobContainer`
     :return: ``True`` if successfully submitted, else ``False``
     :rtype: :py:obj:`bool`
     """
 
-    cfg = get_parsed_config(config)
-    set_common(cfg)
-    set_gridmanager(cfg)
-    set_cluster(cfg)
-    set_queue(cfg)
-    set_slurm(cfg)
-    if Config.remote_user and Config.remote_host:
-        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
+    configure(config, set_slurm)
 
     jd = jobdescs[0]
     validate_attributes(jd)
+    if Config.remote_host:
+        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
         
     # Run RTE stage0
-    log(arc.DEBUG, '----- starting slurmSubmitter.py -----', 'slurm.Submit')
+    debug('----- starting slurmSubmitter.py -----', 'slurm.Submit')
     RTE_stage0(jobdescs, 'SLURM', SBATCH_ACCOUNT = 'OtherAttributes.SBATCH_ACCOUNT')
 
     # Create script file and write job script
     jobscript = get_job_script(jobdescs)
     script_file = write_script_file(jobscript)
 
-    log(arc.DEBUG, 'SLURM jobname: %s' % jd.Identification.JobName, 'slurm.Submit')
-    log(arc.DEBUG, 'SLURM job script built', 'slurm.Submit')
-    log(arc.DEBUG, '----------------- BEGIN job script -----', 'slurm.Submit')
+    debug('SLURM jobname: %s' % jd.Identification.JobName, 'slurm.Submit')
+    debug('SLURM job script built', 'slurm.Submit')
+    debug('----------------- BEGIN job script -----', 'slurm.Submit')
     for line in jobscript.split('\n'):
-        log(arc.DEBUG, line, 'slurm.Submit')
-    log(arc.DEBUG, '----------------- END job script -----', 'slurm.Submit')
+        debug(line, 'slurm.Submit')
+    debug('----------------- END job script -----', 'slurm.Submit')
 
     if 'ONLY_WRITE_JOBSCRIPT' in os.environ and os.environ['ONLY_WRITE_JOBSCRIPT'] == 'yes':
         return False
@@ -76,28 +78,25 @@ def Submit(config, jobdescs, jc):
     execute = excute_local if not Config.remote_host else execute_remote
     directory = jd.OtherAttributes['joboption;directory']
 
-    log(arc.DEBUG, 'Session directory: %s' % directory, 'slurm.Submit')
+    debug('Session directory: %s' % directory, 'slurm.Submit')
 
     SLURM_TRIES = 0
-    sbatch_handle = None
+    handle = None
     while SLURM_TRIES < 10:
-
         args = '%s/sbatch %s' % (Config.slurm_bin_path, script_file)
-        log(arc.common.VERBOSE, 'Executing \'%s\' on %s' % 
-            (args, Config.remote_host if Config.remote_host else 'localhost'), 'slurm.Submit')
-        sbatch_handle = execute(args)
-        if sbatch_handle.returncode == 0:
+        verbose('Executing \'%s\' on %s' % (args, Config.remote_host if Config.remote_host else 'localhost'), 'slurm.Submit')
+        handle = execute(args)
+        if handle.returncode == 0:
             break
-
-        if sbatch_handle.returncode == 198 or wait_for_queue(sbatch_handle):
-            log(arc.DEBUG, 'Waiting for queue to decrease', 'slurm.Submit')
+        if handle.returncode == 198 or wait_for_queue(handle):
+            debug('Waiting for queue to decrease', 'slurm.Submit')
             time.sleep(60)
             SLURM_TRIES += 1
             continue
-
         break # Other error than full queue
 
-    if sbatch_handle.returncode == 0:
+    job = arc.Job()
+    if handle.returncode == 0 and set_job_id(handle, job):
 
         # TODO: Test what happens when the jobqueue is full or when the slurm
         # ctld is not responding. SLURM 1.x and 2.2.x outputs the jobid into 
@@ -105,48 +104,44 @@ def Submit(config, jobdescs, jc):
         # From the exit code we know that the job was submitted, so this
         # is safe. Ulf Tigerstedt <tigerste@csc.fi> 1.5.2011 
 
-        jobID = get_job_id(sbatch_handle)
-        log(arc.DEBUG, 'Job submitted successfully!', 'slurm.Submit')
-        log(arc.DEBUG, 'Local job id: %s' % (jobID), 'slurm.Submit')
-        log(arc.DEBUG, '----- exiting submitSubmitter.py -----', 'slurm.Submit')
+        debug('Job submitted successfully!', 'slurm.Submit')
+        debug('Local job id: %s' % (job.JobID), 'slurm.Submit')
+        debug('----- exiting submitSubmitter.py -----', 'slurm.Submit')
 
         endpointURL = arc.common.URL(Config.remote_endpoint)
-        newJob = arc.Job()
-        newJob.JobID = endpointURL.Host() + ':' + jobID if endpointURL.Host() else jobID
+        if endpointURL.Host():
+            job.JobID = endpointURL.Host() + ':' + job.JobID
         # TODO: What interface name to use?
-        newJob.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
-        newJob.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
-        newJob.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
+        job.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
+        job.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
+        job.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
         # TODO: Change returned endpoints for job. 
         # Currently these URLs are not usable.
-        newJob.ServiceInformationURL = arc.common.URL('test://localhost')
-        newJob.JobStatusURL = endpointURL
-        newJob.JobManagementURL = endpointURL
-        newJob.SessionDir  = arc.common.URL('file://' + directory)
-        newJob.StageInDir  = newJob.SessionDir
-        newJob.StageOutDir = newJob.SessionDir
-        newJob.IDFromEndpoint = str(jobID)
-        jc.addEntity(newJob)
+        job.ServiceInformationURL = arc.common.URL('test://localhost')
+        job.JobStatusURL = endpointURL
+        job.JobManagementURL = endpointURL
+        job.SessionDir  = arc.common.URL('file://' + directory)
+        job.StageInDir  = job.SessionDir
+        job.StageOutDir = job.SessionDir
+        job.IDFromEndpoint = str(job.JobID)
+        jc.addEntity(job)
         return True
 
-    else:
-        log(arc.DEBUG, 'job *NOT* submitted successfully!', 'slurm.Submit')
-        log(arc.DEBUG, 'got error code from sbatch: %d !' % sbatch_handle.returncode, 'slurm.Submit')
-
-    log(arc.DEBUG, 'Output is:', 'slurm.Submit')
-    log(arc.DEBUG, '\n'.join(sbatch_handle.stdout), 'slurm.Submit')
-    log(arc.DEBUG, 'Error output is:', 'slurm.Submit')
-    log(arc.DEBUG, '\n'.join(sbatch_handle.stderr), 'slurm.Submit')
-    log(arc.DEBUG, '----- exiting slurmSubmitter.py -----', 'slurm.Submit')
+    debug('job *NOT* submitted successfully!', 'slurm.Submit')
+    debug('got error code from sbatch: %d !' % handle.returncode, 'slurm.Submit')
+    debug('Output is:', 'slurm.Submit')
+    debug('\n'.join(sbatch_handle.stdout), 'slurm.Submit')
+    debug('Error output is:', 'slurm.Submit')
+    debug('\n'.join(sbatch_handle.stderr), 'slurm.Submit')
+    debug('----- exiting slurmSubmitter.py -----', 'slurm.Submit')
     return False
 
 
 def wait_for_queue(handle):
     """
-    Check if queue is full.
+    Read from ``sbatch`` output whether the queue is full.
 
-    :param handle: list of job description objects
-    :type handle: :py:class:`subprocess.Popen` or :py:data:`~lrms.common.common.Config`
+    :param object handle: sbatch handle
     :return: ``True`` if queue is full, else ``False``
     :rtype: :py:obj:`bool`
     """
@@ -161,13 +156,14 @@ def wait_for_queue(handle):
     return False
 
 
-def get_job_id(handle):
+def set_job_id(handle, job):
     """
-    Get local job ID from sbtach stdout or stderr.
+    Read local job ID from ``sbatch`` output and set ``JobID`` attribute of job.
 
-    :param handle: list of job description objects
-    :type handle: :py:obj:`subprocess.Popen` or :py:data:`~lrms.common.common.Config`
-    :return: local ID
+    :param object handle: sbatch handle
+    :param job: job object 
+    :type job: py:class:`arc.Job
+    :return: ``True`` if found, else ``False``
     :rtype: :py:obj:`str`
     """
 
@@ -175,16 +171,18 @@ def get_job_id(handle):
         for line in f:
             match = re.search(r'Submitted batch job (\d+)', line)
             if match:
-                return match.group(1)
-    raise ArcError('Job ID not found in stdout or stderr', 'slurm.Submit')
+                job.JobID = match.group(1)
+                return True
+    error('Job ID not found in stdout or stderr', 'slurm.Submit')
+    return False
 
 
 def get_job_script(jobdescs):
     """
-    Get the complete sbatch job script.
+    Assemble bash job script for a SLURM host.
 
     :param jobdescs: list of job description objects
-    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription (Swig Object of type Arc::JobDescription *')` ... ]
+    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription` ... ]
     :return: job script
     :rtype: :py:obj:`str`
     """
@@ -192,10 +190,9 @@ def get_job_script(jobdescs):
     set_req_mem(jobdescs)
 
     # TODO: Maybe change way in which JobDescriptionParserSLURM is loaded.
-    ok, jobscript = JobDescriptionParserSLURM.Assemble(jobdescs[0])
-    if not ok:
-        log(arc.DEBUG, 'Unable to assemble SLURM job options', 'slurm.Submit')
-        return False
+    jobscript = JobDescriptionParserSLURM.Assemble(jobdescs[0])
+    if not jobscript:
+        raise ArcError('Unable to assemble SLURM job options', 'slurm.Submit')
 
     jd = jobdescs[0]
     jobscript += \
@@ -221,23 +218,12 @@ def get_job_script(jobdescs):
     if Config.shared_filesystem:
         jobscript += setup_runtime_env(jobdescs)
     else:
-        runtime_stdin = jd.Application.Input[len(jobsessiondir) + 1:] \
-                        if jd.Application.Input.startswith(jobsessiondir +'/') \
-                        else jd.Application.Input
-        if runtime_stdin  != jd.Application.Input:
-            runtime_stdin = '%s/%s/%s' % (Config.scratchdir, gridid, runtime_stdin)
-
-        runtime_stdout = jd.Application.Output[len(jobsessiondir) + 1:] \
-                         if jd.Application.Output.startswith(jobsessiondir + '/') \
-                         else jd.Application.Output
-        if runtime_stdout != jd.Application.Output:
-            runtime_stdout = '%s/%s/%s' % (Config.scratchdir, gridid, runtime_stdout)
-
-        runtime_stderr = jd.Application.Error[len(jobsessiondir) + 1:] \
-                         if jd.Application.Error.startswith(jobsessiondir + '/') \
-                         else jd.Application.Error
-        if runtime_stderr != jd.Application.Error:
-            runtime_stderr = '%s/%s/%s' % (Config.scratchdir, gridid, runtime_stderr)
+        runtime_stdin = jd.Application.Input
+        runtime_stdout = jd.Application.Output
+        runtime_stderr = jd.Application.Error
+        for f in (runtime_stdin, runtime_stdout, runtime_stderr):
+            if f.startswith(jobsessiondir +'/'):
+                f = '%s/%s/%s' % (Config.scratchdir, gridid, f[len(jobsessiondir) + 1:])
 
         scratchdir = (Config.scratchdir, gridid)
         jobscript += 'RUNTIME_JOB_DIR=%s/%s\n' % scratchdir + \
@@ -327,7 +313,7 @@ def get_job_script(jobdescs):
 
 def Cancel(config, jobid):
     """
-    Cancel a SLURM job.
+    Cancel a job running at a SLURM host with ``scancel``.
 
     :param str config: path to arc.conf
     :param str jobid: local job ID
@@ -336,30 +322,21 @@ def Cancel(config, jobid):
     """
 
     verify_job_id(jobid)
-    cfg = get_parsed_config(config)
-    set_gridmanager(cfg)
-    set_slurm(cfg)
-    if Config.remote_user and Config.remote_host:
-        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
-
-    cmd = '%s/scancel %s' % (Config.slurm_bin_path, jobid)
-    return cancel(cmd, jobid, 'slurm', Config.remote_endpoint)
+    configure(config, set_slurm)
+    return cancel('slurm', jobid)
 
 
 def verify_job_id(jobid):
     """
-    Verify that the local job ID is an :py:obj:`int`, \
-    else raise an :py:class:`~lrms.common.common.ArcError`.
+    Verify that the job ID is an integer else raise :py:class:`~lrms.common.common.ArcError`.
 
     :param str jobid: local job ID
-    :rtype: :py:obj:`bool`
     """
 
     try:
         int(jobid)
     except:
-        raise ArcError('Job id is not set, or it contains non-numeric characters (%s)' % jobid,
-                       'slurm.Cancel')
+        raise ArcError('Job ID is not set, or it contains non-numeric characters (%s)' % jobid, 'slurm.Cancel')
 
 
 #---------------------
@@ -368,59 +345,39 @@ def verify_job_id(jobid):
     
 def Scan(config, ctr_dirs):
     """
-    Scan and update status of SLURM jobs.
+    Query the SLURM host for all jobs in /[controldir]/processing with ``squeue``.
+    If the job has stopped running, more detailed information is fetched with ``scontrol``,
+    and the diagnostics and comments files are updated. Finally ``gm-kick`` is executed
+    on all jobs with an exit code.
 
     :param str config: path to arc.conf
     :param ctr_dirs: list of paths to control directories 
     :type ctr_dirs: :py:obj:`list` [ :py:obj:`str` ... ]
     """
 
-    time.sleep(10)
-
-    cfg = get_parsed_config(config)
-    set_gridmanager(cfg)
-    set_slurm(cfg)
+    configure(config, set_slurm)
+    time.sleep(Config.slurm_wakeupperiod)
 
     if Config.scanscriptlog:
         scanlogfile = arc.common.LogFile(Config.scanscriptlog)
         arc.common.Logger_getRootLogger().addDestination(scanlogfile)
 
     jobs = get_jobs(ctr_dirs)
-    
-    if Config.remote_user and Config.remote_host:
-        # NOTE: Assuming 2 kB of TCP window needed for each job
-        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key, (2 << 10)*len(jobs))
+    if not jobs: return
+    if Config.remote_host:
+        # NOTE: Assuming 256 B of TCP window needed for each job (squeue)
+        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key, (2 << 7)*len(jobs)) 
 
-    process_jobs(jobs)
-   
-    kicklist = [job for job in jobs.itervalues() if job.state not in RUNNING]
-    kicklist.extend([job for job in jobs.itervalues() if job.state == 'CANCELLED']) # kick twice
-    gm_kick(kicklist)
-        
-
-def process_jobs(jobs):
-    """
-    Check if jobs are still running. If job is finished, get the exit code,
-    update the ``lrms_done_file`` and write to the ``comments_file``.
-
-    :param job: list of job objects (from :py:meth:`~lrms.common.scan.get_jobs`)
-    :type job: :py:obj:`list` [ :py:class:`~lrms.common.common.Object` ... ]
-    """
-
-    if not jobs:
-        return
- 
-    slurm_bin_path = Config.slurm_bin_path
     execute = execute_local if not Config.remote_host else execute_remote
-    args = slurm_bin_path + '/squeue -a -h -o %i:%T -t all -j ' + ','.join(jobs.keys())
+    args = Config.slurm_bin_path + '/squeue -a -h -o %i:%T -t all -j ' + ','.join(jobs.keys())
     if os.environ.has_key('__SLURM_TEST'):
         handle = execute(args, env=dict(os.environ))
     else:
         handle = execute(args)
     if handle.returncode != 0:
-        log(arc.DEBUG, 'Got error code %i from squeue' % handle.returncode, 'slurm.Scan')
-        log(arc.DEBUG, 'Error output is:', 'slurm.Scan')
-        log(arc.DEBUG, '\n'.join(handle.stderr), 'slurm.Scan')
+        debug('Got error code %i from squeue' % handle.returncode, 'slurm.Scan')
+        debug('Error output is:', 'slurm.Scan')
+        debug('\n'.join(handle.stderr), 'slurm.Scan')
 
     # Slurm can report StartTime and EndTime in at least these two formats:
     # 2010-02-15T15:30:29 (MDS)
@@ -435,30 +392,29 @@ def process_jobs(jobs):
             localid, state = line.strip().split(':', 1)
         except:
             if line:
-                log(arc.WARNING, 'Failed to parse squeue line: ' + line, 'slurm.Scan')
+                warn('Failed to parse squeue line: ' + line, 'slurm.Scan')
             continue
         job = jobs[localid]
         job.state = state 
-        if state in RUNNING:
+        if job.state in RUNNING:
             continue
 
-        if not state:
+        if not job.state:
             set_exit_code_from_diag(job)
-        job.message = MESSAGES.get(state, '')
+        job.message = MESSAGES.get(job.state, '')
 
-        args = slurm_bin_path + '/scontrol -o show job %s' % localid
+        args = Config.slurm_bin_path + '/scontrol -o show job %s' % localid
         scontrol_handle = execute(args)
         if scontrol_handle.returncode != 0:
-            log(arc.DEBUG, 'Got error code %i from scontrol' % scontrol_handle.returncode, 'slurm.Scan')
-            log(arc.DEBUG, 'Error output is:', 'slurm.Scan')
-            log(arc.DEBUG, '\n'.join(scontrol_handle.stderr), 'slurm.Scan')
+            debug('Got error code %i from scontrol' % scontrol_handle.returncode, 'slurm.Scan')
+            debug('Error output is:', 'slurm.Scan')
+            debug('\n'.join(scontrol_handle.stderr), 'slurm.Scan')
 
-        # now = arc.common.Time()
         try:
             scontrol_dict = dict(item.split('=', 1) for item in re.split(' (?=[^ =]+=)', scontrol_handle.stdout[0]))
             job = jobs[scontrol_dict['JobId']]
         except:
-            log(arc.WARNING, 'Failed to parse scontrol line: ' + line, 'slurm.Scan')
+            warn('Failed to parse scontrol line: ' + line, 'slurm.Scan')
             continue
 
         if 'ExitCode' in scontrol_dict:
@@ -491,92 +447,16 @@ def process_jobs(jobs):
         write_comments(job)
         update_diag(job)
 
+    kicklist = [job for job in jobs.itervalues() if job.state not in RUNNING]
+    kicklist.extend([job for job in jobs.itervalues() if job.state == 'CANCELLED']) # kick twice
+    gm_kick(kicklist)
+
 
 ### \mapname slurm_sbatch SLURM sbatch options
 ### SLURM sbatch options.
-class JobDescriptionParserSLURM(object):
-    
-    '''
-    SLURM v2.4 sbatch options not supported:
-    --acctg-freq=<seconds>
-    -B --extra-node-info=<sockets[:cores[:threads]]>
-    --begin=<time>
-    --checkpoint=<time>
-    --checkpoint-dir=<directory>
-    --comment=<string>
-    -C, --constraint=<list>
-    --contiguous
-    --cores-per-socket=<cores>
-    --cpu_bind=[{quiet,verbose},]type
-    -d, --dependency=<dependency_list>
-    -D, --workdir=<directory>
-    --export=<environment variables | ALL | NONE>
-    --export-file=<filename | fd>
-    -F, --nodefile=<node file>
-    --gid=<group>
-    --gres=<list>
-    -H, --hold
-    -h, --help
-    --hint=<type>
-    -I, --immediate
-    -i, --input=<filename pattern>
-    --jobid=<jobid>
-    -k, --no-kill
-    -L, --licenses=<license>
-    -M, --clusters=<string>
-    -m, --distribution=
-    --mail-type=<type>
-    --mail-user=<user>
-    --mem=<MB>
-    --mem-per-cpu=<MB>
-    --mem_bind=[{quiet,verbose},]type
-    --mincpus=<n>
-    -N, --nodes=<minnodes[-maxnodes]>
-    --network=<type>
-    --nice[=adjustment]
-    -c, --cpus-per-task=<ncpus>
-    --ntasks-per-core=<ntasks>
-    --ntasks-per-socket=<ntasks>
-    --ntasks-per-node=<ntasks>
-    -O, --overcommit
-    --open-mode=append|truncate
-    --propagate[=rlimits]
-    -Q, --quiet
-    --qos=<qos>
-    --requeue
-    --reservation=<name>
-    -s, --share
-    --signal=<sig_num>[@<sig_time>]
-    --sockets-per-node=<sockets>
-    --switches=<count>[@<max-time>]
-    --tasks-per-node=<n>
-    --threads-per-core=<threads>
-    --time-min=<time>
-    --tmp=<MB>
-    -u, --usage
-    --uid=<user>
-    -V, --version
-    -v, --verbose
-    -w, --nodelist=<node name list>
-    --wait-all-nodes=<value>
-    --wckey=<wckey>
-    --wrap=<command string>
-    -x, --exclude=<node name list>
-    --blrts-image=<path>
-    --cnload-image=<path>
-    --conn-type=<type>
-    -g, --geometry=<XxYxZ>
-    --ioload-image=<path>
-    --linux-image=<path>
-    --mloader-image=<path>
-    -R, --no-rotate
-    --ramdisk-image=<path>
-    --reboot
-    '''
-
+class JobDescriptionParserSLURM(object):    
     def __init__(self):
         pass
-        
     #def UnParse
     @staticmethod
     def Assemble(j, language = "", dialect = ""):
@@ -738,10 +618,10 @@ class JobDescriptionParserSLURM(object):
         # Benchmark must not be set, since we are currently not able to
         # scale at this level.
         if j.Resources.IndividualWallTime.benchmark[0]:
-            log(arc.ERROR, "Unable to scale 'IndividualWallTime' to specified benchmark"
-                "'{0}'".format(j.Resources.IndividualWallTime.benchmark[0]),
-                'slurm.JobDescriptionParserSLURM', 'slurm.Assemble')
-            return (False, "")
+            error("Unable to scale 'IndividualWallTime' to specified benchmark"
+                  "'{0}'".format(j.Resources.IndividualWallTime.benchmark[0]),
+                  'slurm.JobDescriptionParserSLURM', 'slurm.Assemble')
+            return False
         ### TODO: Expression: \mapattr --time <- TotalCPUTime/NumberOfSlots
         if j.Resources.TotalCPUTime.range.max >= 0 and j.Resources.SlotRequirement.NumberOfSlots > 0: 
             # TODO: Check for benchmark
@@ -788,5 +668,83 @@ class JobDescriptionParserSLURM(object):
             j.Resources.IndividualPhysicalMemory.max > 0 else 1000
         product += "#SBATCH --mem-per-cpu=" + str(memPerCPU) + "\n";
         
-        return (True, product)
+        return product
+
         
+'''
+    SLURM v2.4 sbatch options not supported:
+    --acctg-freq=<seconds>
+    -B --extra-node-info=<sockets[:cores[:threads]]>
+    --begin=<time>
+    --checkpoint=<time>
+    --checkpoint-dir=<directory>
+    --comment=<string>
+    -C, --constraint=<list>
+    --contiguous
+    --cores-per-socket=<cores>
+    --cpu_bind=[{quiet,verbose},]type
+    -d, --dependency=<dependency_list>
+    -D, --workdir=<directory>
+    --export=<environment variables | ALL | NONE>
+    --export-file=<filename | fd>
+    -F, --nodefile=<node file>
+    --gid=<group>
+    --gres=<list>
+    -H, --hold
+    -h, --help
+    --hint=<type>
+    -I, --immediate
+    -i, --input=<filename pattern>
+    --jobid=<jobid>
+    -k, --no-kill
+    -L, --licenses=<license>
+    -M, --clusters=<string>
+    -m, --distribution=
+    --mail-type=<type>
+    --mail-user=<user>
+    --mem=<MB>
+    --mem-per-cpu=<MB>
+    --mem_bind=[{quiet,verbose},]type
+    --mincpus=<n>
+    -N, --nodes=<minnodes[-maxnodes]>
+    --network=<type>
+    --nice[=adjustment]
+    -c, --cpus-per-task=<ncpus>
+    --ntasks-per-core=<ntasks>
+    --ntasks-per-socket=<ntasks>
+    --ntasks-per-node=<ntasks>
+    -O, --overcommit
+    --open-mode=append|truncate
+    --propagate[=rlimits]
+    -Q, --quiet
+    --qos=<qos>
+    --requeue
+    --reservation=<name>
+    -s, --share
+    --signal=<sig_num>[@<sig_time>]
+    --sockets-per-node=<sockets>
+    --switches=<count>[@<max-time>]
+    --tasks-per-node=<n>
+    --threads-per-core=<threads>
+    --time-min=<time>
+    --tmp=<MB>
+    -u, --usage
+    --uid=<user>
+    -V, --version
+    -v, --verbose
+    -w, --nodelist=<node name list>
+    --wait-all-nodes=<value>
+    --wckey=<wckey>
+    --wrap=<command string>
+    -x, --exclude=<node name list>
+    --blrts-image=<path>
+    --cnload-image=<path>
+    --conn-type=<type>
+    -g, --geometry=<XxYxZ>
+    --ioload-image=<path>
+    --linux-image=<path>
+    --mloader-image=<path>
+    -R, --no-rotate
+    --ramdisk-image=<path>
+    --reboot
+'''

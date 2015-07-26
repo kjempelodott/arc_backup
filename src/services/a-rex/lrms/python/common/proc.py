@@ -1,23 +1,25 @@
 """
-Classes for executing commands locally or via SSH.
+Execute bash commands locally or remotely (SSH).
 """
 
-from common import *
-from subprocess import Popen
+from config import Config
+from ssh import SSHSession
 
 def execute_local(args, env = {}):
     """
-    Execute a command locally using :py:class:`subprocess.Popen`
-    with ``shell=True``.
+    Execute a command locally. This method is a wrapper for
+    :py:class:`subprocess.Popen` with stdout and stderr piped to
+    temporary files and ``shell=True``.
     
     :param str args: command with arguments (e.g. 'sbatch myjob.sh')
     :param dict env: environment variables  (default: {})
-    :return: handle object
+    :return: handle
     :rtype: :py:class:`subprocess.Popen`
-    :note: ``wait()`` is called, and ``stdout`` and ``stderr`` is read.
+    :note: ``wait()`` is called, and ``stdout`` and ``stderr`` are read and splitted by newlines
     """
     # TODO: What if args longer than kernel ARG_MAX (e.g. scan millions of jobs)?
     from tempfile import TemporaryFile
+    from subprocess import Popen
     # Note: PIPE will cause deadlock if output is larger than 65K
     stdout, stderr = TemporaryFile(), TemporaryFile()
     handle = Popen(args, stdout = stdout, stderr = stderr, env = env, shell = True)
@@ -34,13 +36,12 @@ def execute_remote(args, host = None, timeout = 10):
     :param str args: command with arguments (e.g. 'sbatch myjob.sh')
     :return: object with attributes ``stdout``, ``stderr`` \
     and ``returncode``
-    :rtype: :py:class:`~lrms.common.common.Object`
+    :rtype: :py:obj:`object`
     """
     # TODO: What if args longer than kernel ARG_MAX (e.g. scan millions of jobs)?
     from time import sleep
-    if hasattr(Config, 'ssh_timeout'):
-        timeout = Config.ssh_timeout
 
+    timeout = Config.ssh_timeout
     def is_timeout(test):
         wait_time = 0
         while not test():
@@ -53,11 +54,11 @@ def execute_remote(args, host = None, timeout = 10):
     try:
         p = Object()
         if not SSHSession:
-            raise ArcError('There is no active SSH session! Run lrms.common.common.ssh_connect', 'common.proc')
+            raise ArcError('There is no active SSH session! Run lrms.common.ssh.ssh_connect', 'common.proc')
         session = SSHSession[host if host else SSHSession.keys()[-1]].open_session()
         session.exec_command(args)
         if is_timeout(session.exit_status_ready):
-            log(arc.WARNING, 'Session timed out. Some output might not be received. Guessing exit code from stderr.', 'common.proc')
+            warn('Session timed out. Some output might not be received. Guessing exit code from stderr.', 'common.proc')
         p.returncode = session.exit_status
 
         chnksz = 2 << 9
@@ -77,7 +78,7 @@ def execute_remote(args, host = None, timeout = 10):
         p.stderr = stderr.split('\n')
 
         if p.returncode == -1:
-            p.returncode = len(stderr)
+            p.returncode = len(stderr) > 0
         return p
 
     except Exception as e:

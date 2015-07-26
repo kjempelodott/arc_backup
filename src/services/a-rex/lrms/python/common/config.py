@@ -1,41 +1,61 @@
 """
-Functions for parsing arc.conf and filling :py:data:`~lrms.common.common.Config`.
+Provides the ``Config`` object. It holds each arc.conf options as an attribute
+and is used in most ``lrms`` modules.
 """
 
-from common import Object
+import os
 
-Config = Object()
+Config = object()
 
+def is_conf_setter(f):
+    """
+    Decorator for functions that set :py:data:`~lrms.common.Config` attributes.
+    """
+    f.is_conf_setter = True
+    return f
 
-def is_conf_setter(*a):
-    pass
 
 def configure(configfile, *func):
     """
-    Parse arc.conf using :py:meth:`ConfigParser.RawConfigParser.read`.
+    Parse arc.conf using :py:meth:`ConfigParser.RawConfigParser.read` and
+    set all dicovered options as :py:data:`~lrms.common.Config` attributes. 
+    Additional setter functions ``*func`` will only be executed if they have
+    been decorated with :py:meth:`lrms.common.config.is_conf_setter`.
 
-    :param str configfile: full path to arc.conf
-    :return: config object
-    :rtype: :py:class:`ConfigParser.ConfigParser`
+    The ``Config`` object will be pickled to ``/tmp/python_lrms_arc.conf``.
+    In case the pickle file exists and its modification time is newer than
+    that of arc.conf, the ``Config`` object will be loaded from this file.
+    
+    :param str configfile: path to arc.conf
+    :param *func: variable length setter function (e.g. set_slurm) list
+    :type *func: :py:obj:`list` [ :py:obj:`function` ... ]
     """
 
-    import ConfigParser
-    cfg = ConfigParser.ConfigParser()
-    cfg.read(configfile)
-    set_common(cfg)
-    set_grid_manager(cfg)
-    set_cluster(cfg)
-    set_queue(cfg)
-    for f in func:
-        if f.func_dict.get('is_conf_setter', False):
-            f(cfg)
+    import pickle
+    pickle_conf = '/tmp/python_lrms_arc.conf'
+
+    try:
+        assert(getmtime(pickle_conf) > getmtime(configfile))
+        Config = pickle.loads(pickle_conf)
+    except:
+        import ConfigParser
+        cfg = ConfigParser.ConfigParser()
+        cfg.read(configfile)
+
+        set_common(cfg)
+        set_grid_manager(cfg)
+        set_cluster(cfg)
+        set_queue(cfg)
+        for fun in func:
+            getattr(fun, 'is_conf_setter', False) and fun(cfg)
+        pickle.dumps(Config, pickle_conf)
             
 
 def set_common(cfg):
     """
-    Fill :py:data:`~lrms.common.common.Config` with [common] options.
+    Set [common] :py:data:`~lrms.common.Config` attributes.
 
-    :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)
+    :param cfg: parsed arc.conf
     :type cfg: :py:class:`ConfigParser.ConfigParser`
     """
 
@@ -45,9 +65,9 @@ def set_common(cfg):
 
 def set_gridmanager(cfg):
    """
-   Fill :py:data:`~lrms.common.common.Config` with [grid-manager] options.
-   
-   :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)
+   Set [grid-manager] :py:data:`~lrms.common.Config` attributes.
+
+   :param cfg: parsed arc.conf
    :type cfg: :py:class:`ConfigParser.ConfigParser`
    """
 
@@ -105,13 +125,16 @@ def set_gridmanager(cfg):
    Config.remote_runtimedir = \
        str(cfg.get('grid-manager', 'remote_runtimedir')).strip('"') \
        if cfg.has_option('grid-manager', 'remote_runtimedir') else ''
+   Config.ssh_timeout = \
+       int(cfg.get('grid-manager', 'ssh_timeout')).strip('"') \
+       if cfg.has_option('grid-manager', 'ssh_timeout') else 10
 
 
 def set_cluster(cfg):
     """
-    Fill :py:data:`~lrms.common.common.Config` with [cluster] options.
-
-    :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)
+    Set [cluster] :py:data:`~lrms.common.Config` attributes.
+    
+    :param cfg: parsed arc.conf
     :type cfg: :py:class:`ConfigParser.ConfigParser`
     """
 
@@ -129,10 +152,9 @@ def set_cluster(cfg):
 
 def set_queue(cfg):
     """
-    Fill :py:data:`~lrms.common.common.Config` with [queue] options.
-
-    :param cfg: parsed config \
-    (from :py:meth:`~lrms.common.config.get_parsed_config`)
+    Set [queue] :py:data:`~lrms.common.Config` attributes.
+    
+    :param cfg: parsed arc.conf
     :type cfg: :py:class:`ConfigParser.ConfigParser`
     """
 

@@ -78,29 +78,6 @@ Module: lrms.common.cancel
 
 |
 
-Module: lrms.common.common
-++++++++++++++++++++++++++
-.. automodule:: lrms.common.common
-    :members:
-
-.. py:data:: Config
-
-    :py:class:`Object` object holding arc.conf options
-
-.. py:data:: Logger
-
-    :py:class:`arc.Logger (Swig Object of type 'Arc::Logger *')`
-
-.. py:data:: UserConfig
-
-    :py:class:`arc.UserConfig (Swig Object of type 'Arc::UserConfig *')`
-
-|
-
-....
-
-|
-
 Module: lrms.common.config
 ++++++++++++++++++++++++++
 .. automodule:: lrms.common.config
@@ -115,6 +92,17 @@ Module: lrms.common.config
 Module: lrms.common.files
 +++++++++++++++++++++++++
 .. automodule:: lrms.common.files
+    :members:
+
+|
+
+....
+
+|
+
+Module: lrms.common.log
++++++++++++++++++++++++
+.. automodule:: lrms.common.log
     :members:
 
 |
@@ -150,21 +138,16 @@ Module: lrms.common.scan
 .. automodule:: lrms.common.scan
     :members:
 
-.. py:data:: RUNNING
+|
 
-    :py:obj:`list` of possible states (:py:obj:`str`) for running jobs
+....
 
-.. py:data:: UID
+|
 
-    user ID (:py:obj:`int`)
-
-.. py:data:: UID
-
-    group ID (:py:obj:`int`)
-
-.. py:data:: MESSAGES
-
-    mapping between job states and job messages (:py:obj:`dict` { :py:obj:`str` : :py:obj:`str` })
+Module: lrms.common.ssh
++++++++++++++++++++++++
+.. automodule:: lrms.common.ssh
+    :members:
 
 |
 
