@@ -2,9 +2,12 @@
 Common submit job functions.
 """
 
+import os, re
+import arc
 from config import Config
 from proc import execute_local, execute_remote
 from files import write
+from log import *
 
 
 def validate_attributes(jd):
@@ -719,7 +722,7 @@ def move_files_to_frontend():
 
 class JobscriptAssembler(object):
      
-     def __init__(self):
+     def __init__(self, jobdesc):
 
           # String format map
           self._map = {
@@ -751,8 +754,10 @@ class JobscriptAssembler(object):
                'GM_MOUNTPOINT'        : Config.gm_mount_point,
                'GM_PORT'              : Config.gm_port,
                'GM_HOST'              : Config.hostname,
+               'RUNTIME_CONTROLDIR'   : Config.runtime_controldir,
                'LOCAL_SCRATCHDIR'     : Config.local_scratchdir, 
-               'SHARED_SCRATCHDIR'    : Config.shared_scratchdir, 
+               'RUNTIMEDIR'           : Config.runtimedir,
+               'SHARED_SCRATCHDIR'    : Config.shared_scratch, 
                'IS_SHARED_FILESYSTEM' : 'yes' if Config.shared_filesystem else '',
                'ARC_LOCATION'         : arc.common.ArcLocation.Get(),
                'ARC_TOOLSDIR'         : arc.common.ArcLocation.GetToolsDir(),
@@ -773,15 +778,15 @@ class JobscriptAssembler(object):
           loop = ''
           _iterable = None
           _macros = None
-          _locals = {(k, v) for k, v for self._maps.iteritems()}
+          _locals = dict(item for item in self._map.items())
                                         
-          with open('job_sript.stubs', 'r') as stubs:
-               for num, line in enum(stubs.readlines()):
+          with open('job_script.stubs', 'r') as stubs:
+               for num, line in enumerate(stubs.readlines()):
                     if do & READ:
                          # END of stub
                          #
                          # Next step is saving it to the stubs map
-                         if line[0] == '>':     
+                         if line[0] == '>':
                               do = SAVE
                          
                          elif line[0] == '@':   
@@ -793,25 +798,26 @@ class JobscriptAssembler(object):
                               #   add formatted loop stub to stub
                               if do & LOOP:
                                    for item in _iterable:
-                                        for _macro in _macros:
-                                             _locals[_macro] = self._map[_macro](item)
+                                        for key, macro in _macros.iteritems():
+                                             _locals[key] = macro(item)
                                         stub += loop % _locals
                                    do ^= LOOP
 
                               # BEGIN loop stub
                               #
                               # Get the iterable and macros to resolve the string format variables
-                              else:            
+                              else: 
+                                   loop = ''
                                    keys = line[1:].split()
                                    try:
-                                        key = keys[0].strip()
+                                        key = keys[0]
                                         _iterable = self._map[key]
-                                        _macros = []
+                                        _macros = {}
                                         for key in keys[1:]:
                                              assert(key[0] == '%')
-                                             _macros.append(self._map[key[1:].strip()])
+                                             _macros[key[1:]] = self._map[key[1:]]
                                    except AssertionError:
-                                        raise ArcError('Syntax error at line %i in job_script.stubs. Missing \'%\'.'
+                                        raise ArcError('Syntax error at line %i in job_script.stubs. Missing \'%%\'.'
                                                        % num, 'common.submit.JobscriptAssembler')
                                    except:
                                         raise ArcError('Unknown key \'%s\' at line %i in job_script.stubs.'
@@ -823,17 +829,22 @@ class JobscriptAssembler(object):
                               loop += line
                          # Format line and add to stub
                          else:
-                              stub += line % self._map
+                              try:
+                                   stub += line % self._map
+                              except ValueError:
+                                   raise ArcError('Incomplete format key. Maybe a missing \'s\' after \'%%( ... )\'',
+                                                  'common.submit.JobscriptAssembler') 
 
                     elif do & SKIP:
                          # BEGIN stub
                          #
                          # Everything after the '>' tag is read into the stub string, inlcuding empty lines
+                         stub = ''
                          if line[0] == '>':
                               do = READ
 
                     elif do & SAVE:
-                         self.stubs[stub_name] = stub
+                         self._stubs[stub_name] = stub
                          do = PARSE
 
                     elif line[:2] == '>>':
