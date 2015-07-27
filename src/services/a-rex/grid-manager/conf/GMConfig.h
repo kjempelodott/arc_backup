@@ -41,6 +41,7 @@ class DelegationStores;
 typedef struct {
   std::string remote_session_dir;
   std::string remote_runtime_dir;
+  std::string remote_cache_dir;
   std::string remote_user;
   std::string remote_host;
   std::string private_key;
@@ -228,6 +229,7 @@ public:
   /// Remount remote directories
   bool MountSessionDir() { return mount_sessiondir.run(*this); }
   bool MountRuntimeDir() { return mount_runtimedir.run(*this); }
+  bool MountCacheDir() { return mount_cachedir.run(*this); }
 
 private:
 
@@ -340,6 +342,7 @@ private:
   SSHConfig ssh_config;
   ExternalHelper mount_sessiondir;
   ExternalHelper mount_runtimedir;
+  ExternalHelper mount_cachedir;
 
   /// Logger object
   static Arc::Logger logger;

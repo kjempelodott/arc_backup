@@ -302,6 +302,14 @@ bool GridManager::thread() {
 	  config_.MountRuntimeDir();
 	  active_.wait(10000);
 	}
+      std::string remote_cache = config_.GetSSHConfig().remote_cache_dir;
+      // TODO: can there be more than one cache dir?
+      if (!remote_cache.empty())
+	while(!config_.SSHFS_OK(config_.CacheParams().getCacheDirs().front())) {
+	  logger.msg(Arc::WARNING, "Cachedir SSHFS mount point is broken, attempting to restore.");
+	  config_.MountCacheDir();
+	  active_.wait(10000);
+	}
     }
     config_.RunHelpers();
     config_.GetJobLog()->RunReporter(config_);

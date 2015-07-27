@@ -437,6 +437,13 @@ bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
       }
       config.ssh_config.remote_runtime_dir = remote_runtime_dir;
     }
+    else if (command == "remote_cachedir") {
+      std::string remote_cache_dir = config_next_arg(rest);
+      if (remote_cache_dir.empty()) {
+        logger.msg(Arc::ERROR, "Missing directory in remote_cachedir command"); return false;
+      }
+      config.ssh_config.remote_cache_dir = remote_cache_dir;
+    }
     else if (command == "private_key") {
       std::string private_key = config_next_arg(rest);
       if (private_key.empty()) {
@@ -459,6 +466,7 @@ bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
     config.cancelScriptName = config.default_lrms + "Cancel.py";
     config.mount_sessiondir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs session";
     config.mount_runtimedir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs runtime";
+    config.mount_cachedir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs cache";
   }
   CheckLRMSBackends(config);
 
@@ -622,6 +630,7 @@ bool CoreConfig::ParseConfXML(GMConfig& config, const Arc::XMLNode& cfg) {
       config.cancelScriptName = config.default_lrms + "Cancel.py";
       config.mount_sessiondir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs session";
       config.mount_runtimedir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs runtime";
+      config.mount_cachedir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs cache";
     }
     CheckLRMSBackends(config);
 
@@ -709,6 +718,7 @@ bool CoreConfig::ParseConfXML(GMConfig& config, const Arc::XMLNode& cfg) {
       remoteUser
       remoteSessionRootDir
       remoteRuntimeDir
+      remoteCacheDir
       privateKey  
     cache
       location
@@ -788,16 +798,13 @@ bool CoreConfig::ParseConfXML(GMConfig& config, const Arc::XMLNode& cfg) {
       logger.msg(Arc::ERROR, "remoteSessionRootDir is missing");
       return false;
     }
-    config.ssh_config.remote_runtime_dir = (std::string)to_node["remoteRuntimeDir"];
-    if (config.ssh_config.remote_runtime_dir.empty()) {
-      logger.msg(Arc::ERROR, "remoteRuntimeDir is missing");
-      return false;
-    }
     config.ssh_config.private_key = (std::string)to_node["privateKey"];
     if (config.ssh_config.private_key.empty()) {
       logger.msg(Arc::ERROR, "privateKey is missing");
       return false;
     }
+    config.ssh_config.remote_runtime_dir = (std::string)to_node["remoteRuntimeDir"];
+    config.ssh_config.remote_cache_dir = (std::string)to_node["remoteCacheDir"];
   }
 
   /*

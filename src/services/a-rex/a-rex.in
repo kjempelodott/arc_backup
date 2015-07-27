@@ -105,13 +105,13 @@ if [ -n "$GLOBUS_LOCATION" ]; then
 fi
 
 # ARC_LOCATION
-export prefix=@prefix@
-ARC_LOCATION=${ARC_LOCATION:-$prefix}
+ARC_LOCATION=${ARC_LOCATION:-@prefix@}
 if [ ! -d "$ARC_LOCATION" ]; then
     log_failure_msg "ARC_LOCATION ($ARC_LOCATION) not found"
     exit 1
 fi
 export ARC_LOCATION
+export prefix=@prefix@
 
 readconfigvar() {
     fname=$1
@@ -803,6 +803,11 @@ start() {
 	    log_failure_msg "unable to mount remote runtime directory"
 	    return $?
 	fi
+	mount_sshfs cache
+	if [ $? != 0 ]; then
+	    log_failure_msg "unable to mount remote cache directory"
+	    return $?
+	fi
     fi
 
     eval "$CMD"
@@ -893,6 +898,22 @@ stop() {
 		fi
 	    fi
 	fi 
+	CACHEDIR=`readconfigvar "$ARC_CONFIG" grid-manager cachedir`
+	REMOTEDIR=`readconfigvar "$ARC_CONFIG" grid-manager remote_cachedir`
+	if [ ! -z $REMOTEDIR ] && [ "$(mount | grep ${CACHEDIR})" ]; then
+            timeout 10 fusermount -u ${CACHEDIR} > /dev/null
+	    if [ $? != 0 ]; then
+		log_failure_msg "sshfs cachedir unmount - timeout"
+	    else
+	        # restore write mode
+		chmod 755 ${CACHEDIR}
+	        # restore content of cachedir
+		if [ -d ${CACHEDIR}.0 ]; then
+		    cp -ru ${CACHEDIR}.0/* ${CACHEDIR}/. && \
+			rm -r ${CACHEDIR}.0
+		fi
+	    fi
+	fi
     fi
     return $RETVAL
 }
@@ -954,6 +975,10 @@ mount_sshfs() {
 	runtime)
 	    LOCALDIR=`readconfigvar "$ARC_CONFIG" grid-manager runtimedir`
 	    REMOTEDIR=`readconfigvar "$ARC_CONFIG" grid-manager remote_runtimedir`
+	    ;;
+	cache)
+	    LOCALDIR=`readconfigvar "$ARC_CONFIG" grid-manager cachedir`
+	    REMOTEDIR=`readconfigvar "$ARC_CONFIG" grid-manager remote_cachedir`
 	    ;;
 	*)
 	    return 0
