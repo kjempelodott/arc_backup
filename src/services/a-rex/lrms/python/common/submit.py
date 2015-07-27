@@ -745,8 +745,8 @@ class JobscriptAssembler(object):
                
                'RTES'                 : jobdesc.Resources.RunTimeEnvironment.getSoftwareList(), # Iterable
                'RTE'                  : lambda item: str(item), # Macro
-               'OPTS'                 : lambda item: '"%s"' % " ".join([opt.replace('"', '\\"') for
-                                                                        opt in item.getOptions()]), # Macro
+               'OPTS'                 : lambda item: '"%s"' % '" "'.join([opt.replace('"', '\\"') for
+                                                                          opt in item.getOptions()]), # Macro
                
                'PROCESSORS'           : jobdesc.Resources.SlotRequirement.NumberOfSlots,
                'NODENAME'             : Config.nodename,
@@ -761,7 +761,7 @@ class JobscriptAssembler(object):
                'IS_SHARED_FILESYSTEM' : 'yes' if Config.shared_filesystem else '',
                'ARC_LOCATION'         : arc.common.ArcLocation.Get(),
                'ARC_TOOLSDIR'         : arc.common.ArcLocation.GetToolsDir(),
-               'GLOBUS_LOCATION'      : os.environ.get('GLOBUS_LOCATION', ''),
+               'GLOBUS_LOCATION'      : os.environ.get('GLOBUS_LOCATION', '')
                }
 
           self._stubs = {}
@@ -781,77 +781,79 @@ class JobscriptAssembler(object):
           _locals = dict(item for item in self._map.items())
                                         
           with open('job_script.stubs', 'r') as stubs:
-               for num, line in enumerate(stubs.readlines()):
-                    if do & READ:
-                         # END of stub
-                         #
-                         # Next step is saving it to the stubs map
-                         if line[0] == '>':
-                              do = SAVE
-                         
-                         elif line[0] == '@':   
-                              # END of loop stub
-                              # 
-                              # Loop over the iterable, and for each item:
-                              #   run the macro(s) to resolve the string format variable(s)
-                              #   format the loop stub
-                              #   add formatted loop stub to stub
-                              if do & LOOP:
-                                   for item in _iterable:
-                                        for key, macro in _macros.iteritems():
-                                             _locals[key] = macro(item)
-                                        stub += loop % _locals
-                                   do ^= LOOP
-
-                              # BEGIN loop stub
+               try:
+                    for num, line in enumerate(stubs.readlines()):
+                         if do & READ:
+                              # END of stub
                               #
-                              # Get the iterable and macros to resolve the string format variables
-                              else: 
-                                   loop = ''
-                                   keys = line[1:].split()
-                                   try:
+                              # Next step is saving it to the stubs map
+                              if line[0] == '>':
+                                   do = SAVE
+                         
+                              # Encountered loop tag
+                              elif line[0] == '@':   
+
+                                   # END of loop stub
+                                   # 
+                                   # Loop over the iterable, and for each item:
+                                   #   run the macro(s) to resolve the string format variable(s)
+                                   #   format the loop stub
+                                   #   add formatted loop stub to stub
+                                   if do & LOOP:
+                                        for item in _iterable:
+                                             for key in _macros:
+                                                  _locals[key] = self._map[key](item)
+                                             stub += loop % _locals
+                                        do ^= LOOP
+
+                                   # BEGIN loop stub
+                                   #
+                                   # Get the iterable and macros to resolve the string format variables
+                                   else: 
+                                        loop = ''
+                                        keys = line[1:].split()
                                         key = keys[0]
                                         _iterable = self._map[key]
-                                        _macros = {}
+                                        _macros = []
                                         for key in keys[1:]:
                                              assert(key[0] == '%')
-                                             _macros[key[1:]] = self._map[key[1:]]
-                                   except AssertionError:
-                                        raise ArcError('Syntax error at line %i in job_script.stubs. Missing \'%%\'.'
-                                                       % num, 'common.submit.JobscriptAssembler')
-                                   except:
-                                        raise ArcError('Unknown key \'%s\' at line %i in job_script.stubs.'
-                                                       % (key, num), 'common.submit.JobscriptAssembler')
-                                   do |= LOOP
+                                             _macros.append(key[1:])
+                                        do |= LOOP
 
-                         # Inside '@' loop tags. Add line to loop stub. Format later
-                         elif do & LOOP:
-                              loop += line
-                         # Format line and add to stub
-                         else:
-                              try:
+                              # Inside loop. Add line to loop stub. Format later
+                              elif do & LOOP:
+                                   loop += line
+                              # Format line and add to stub
+                              else:
                                    stub += line % self._map
-                              except ValueError:
-                                   raise ArcError('Incomplete format key. Maybe a missing \'s\' after \'%%( ... )\'',
+
+                         elif do & SKIP:
+                              # BEGIN stub
+                              #
+                              # Everything after the '>' tag is read into the stub string, inlcuding empty lines
+                              stub = ''
+                              if line[0] == '>':
+                                   do = READ
+
+                         elif do & SAVE:
+                              self._stubs[stub_name] = stub
+                              do = PARSE
+
+                         elif line[:2] == '>>':
+                              # Signals that a new stub is coming up
+                              stub_name = line[2:].strip()
+                              stub = ''
+                              do = SKIP
+
+               except ValueError:
+                    raise ArcError('Incomplete format key. Maybe a missing \'s\' after \'%%( ... )\'',
                                                   'common.submit.JobscriptAssembler') 
-
-                    elif do & SKIP:
-                         # BEGIN stub
-                         #
-                         # Everything after the '>' tag is read into the stub string, inlcuding empty lines
-                         stub = ''
-                         if line[0] == '>':
-                              do = READ
-
-                    elif do & SAVE:
-                         self._stubs[stub_name] = stub
-                         do = PARSE
-
-                    elif line[:2] == '>>':
-                         # Signals that a new stub is coming up
-                         stub_name = line[2:].strip()
-                         stub = ''
-                         do = SKIP
+               except AssertionError:
+                    raise ArcError('Syntax error at line %i in job_script.stubs. Missing \'%%\'.'
+                                   % num, 'common.submit.JobscriptAssembler')
+               except:
+                    raise ArcError('Unknown key \'%s\' at line %i in job_script.stubs.'
+                                   % (key, num), 'common.submit.JobscriptAssembler')
 
      def get_stub(stub):
           return self._stubs.get(stub, '')
