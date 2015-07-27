@@ -1,5 +1,4 @@
-from arc.common import URL
-from lrms.common.common import *
+import re
 
 class LRMSInfo(object):
     
@@ -8,6 +7,7 @@ class LRMSInfo(object):
         'remote_host' : '*',
         'remote_user' : '*',
         'private_key' : '*',
+        'ssh_timeout' : '*',
         }
 
     def __init__(self, options):
@@ -17,10 +17,14 @@ class LRMSInfo(object):
 
         self._ssh = False
         if 'remote_host' in options:
+            from lrms.common.config import Config
+            from lrms.common.ssh import ssh_connect
+
             tcp_window = (2 << 30) - 1
             ssh_connect(options['remote_host'], options['remote_user'], options['private_key'], tcp_window)
             self._ssh = True
             self._remote_user = options['remote_user']
+            Config.ssh_timeout = int(options['ssh_timeout']) if 'ssh_timeout' in options else 10
             
     '''
     Convert human readable number to integer.

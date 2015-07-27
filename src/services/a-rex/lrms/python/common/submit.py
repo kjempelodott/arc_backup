@@ -721,7 +721,7 @@ def move_files_to_frontend():
 
 
 
-
+"""
 jobscript_map = {
      'GRIDID'               : jobdesc.OtherAttributes['joboption;gridid'],
      'SESSIONDIR'           : jobdesc.OtherAttributes['joboption;directory'],
@@ -756,3 +756,4 @@ jobscript_map = {
      'ARC_TOOLSDIR'         : arc.common.ArcLocation.GetToolsDir(),
      'GLOBUS_LOCATION'      : os.environ.get('GLOBUS_LOCATION', ''),
      }
+"""

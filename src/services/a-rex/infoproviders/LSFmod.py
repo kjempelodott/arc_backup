@@ -1,8 +1,8 @@
 import re
 
 import arc
-from lrms.common.proc import *
-from lrms.common.common import *
+from lrms.common.proc import execute_local, execute_remote
+from lrms.common.log import ArcError
 from LRMSmod import LRMSInfo
 
 

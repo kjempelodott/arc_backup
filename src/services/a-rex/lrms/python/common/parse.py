@@ -331,6 +331,6 @@ class JobDescriptionParserGRAMi(object):
             env = dict( line.strip().replace("\\\\", "\\").split("=", 1) for line in source.splitlines() if not re.search(r"^\s*(#|$)", line) )
         except:
             return False
-        RTE0EnvCreator(j, Object(), mapping).setPyEnv(env)
+        RTE0EnvCreator(j, type('JobDescription', (object,), {})(), mapping).setPyEnv(env)
         jobdescs.append(j)
         return True

@@ -312,10 +312,10 @@ def Scan(config, ctr_dirs):
         for line in handle.stderr:
             match = lost_job.match(line)
             if match:
-                handle_job([.groups()[0], 'UNKNOWN'], False)
+                handle_job([match.groups()[0], 'UNKNOWN'], False)
 
     kicklist = []
-    for job for job in jobs.itervalues():
+    for job in jobs.itervalues():
         if hasattr(job, 'exitcode'):
             with open(job.lrms_done_file, 'w') as f:
                 f.write('%d %s\n' % (job.exitcode, job.message))

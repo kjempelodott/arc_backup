@@ -297,7 +297,7 @@ def get_MDS(dm, lc_time = 'en_US'):
 
 def is_running(pid):
     """
-    Look for a running process in /proc.
+    Check if process is running on the local machine.
     
     :param int pid: process ID
     :return: ``True`` if process is running, else ``False``

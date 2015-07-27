@@ -5,7 +5,7 @@ and is used in most ``lrms`` modules.
 
 import os
 
-Config = object()
+Config = type('Config', (object,), {})()
 
 def is_conf_setter(f):
     """
@@ -164,7 +164,7 @@ def set_queue(cfg):
         if section[:6] != 'queue/' or not section[6:]:
             continue
         if section[6:] not in Config.queue:
-            Config.queue[section[6:]] = Object()
+            Config.queue[section[6:]] = type('Queue', (object,), {})()
             if cfg.has_option(section, 'nodememory'):
                 Config.queue[section[6:]].nodememory = \
                     int(cfg.get(section, 'nodememory').strip('"'))

@@ -27,8 +27,8 @@ def cancel(lrms, job_id):
           executable = 'bkill'
           cmd = '%s %s/%s -s 9 %s' % (Config.lsf_setup, Config.lsf_bin_path, executable, jobid)
 
-    if Config.remote_host:
-        ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
+     if Config.remote_host:
+          ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
 
      log(arc.DEBUG, '----- starting %sCancel.py -----' % lrms, 'common.cancel')
      log(arc.DEBUG, 'executing %s with job id %s' % (executable, job_id), 'common.cancel')

@@ -2,6 +2,7 @@
 Execute bash commands locally or remotely (SSH).
 """
 
+from log import ArcError
 from config import Config
 from ssh import SSHSession
 
@@ -52,7 +53,7 @@ def execute_remote(args, host = None, timeout = 10):
         return False
 
     try:
-        p = Object()
+        p = type('Handle', (object,), {})()
         if not SSHSession:
             raise ArcError('There is no active SSH session! Run lrms.common.ssh.ssh_connect', 'common.proc')
         session = SSHSession[host if host else SSHSession.keys()[-1]].open_session()
