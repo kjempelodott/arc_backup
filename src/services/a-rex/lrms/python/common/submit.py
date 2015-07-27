@@ -24,18 +24,14 @@ def validate_attributes(jd):
           jd.OtherAttributes['joboption;directory'] = \
               os.path.join(Config.sessiondir, jd.OtherAttributes['joboption;gridid'])
 
-     jd.OtherAttributes['joboption;local_directory'] = \
-                         jd.OtherAttributes['joboption;directory']
+     jd.OtherAttributes['joboption;local_directory'] = jd.OtherAttributes['joboption;directory']
 
      if Config.remote_sessiondir:
           jd.OtherAttributes['joboption;directory'] = \
               os.path.join(Config.remote_sessiondir, jd.OtherAttributes['joboption;gridid'])
-          jd.Application.Output = \
-              jd.Application.Output.replace(Config.sessiondir, Config.remote_sessiondir)
-          jd.Application.Input = \
-              jd.Application.Input.replace(Config.sessiondir, Config.remote_sessiondir)
-          jd.Application.Error = \
-              jd.Application.Error.replace(Config.sessiondir, Config.remote_sessiondir)
+          jd.Application.Output = jd.Application.Output.replace(Config.sessiondir, Config.remote_sessiondir)
+          jd.Application.Input = jd.Application.Input.replace(Config.sessiondir, Config.remote_sessiondir)
+          jd.Application.Error = jd.Application.Error.replace(Config.sessiondir, Config.remote_sessiondir)
 
      if 'joboption;controldir' in jd.OtherAttributes:
           Config.controldir = jd.OtherAttributes['joboption;controldir']
@@ -61,9 +57,7 @@ def write_script_file(jobscript):
      import uuid
 
      jobscript += '\nrm -- "$0"\n' # self destroy
-     mode = stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR | \
-            stat.S_IXGRP | stat.S_IRGRP | \
-            stat.S_IXOTH | stat.S_IROTH
+     mode = stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXGRP | stat.S_IRGRP | stat.S_IXOTH | stat.S_IROTH
 
      path = '/tmp/' + str(uuid.uuid4()) + '.sh'
 
@@ -721,39 +715,132 @@ def move_files_to_frontend():
 
 
 
-"""
-jobscript_map = {
-     'GRIDID'               : jobdesc.OtherAttributes['joboption;gridid'],
-     'SESSIONDIR'           : jobdesc.OtherAttributes['joboption;directory'],
-     'STDIN'                : jobdesc.Application.Input,
-     'STDOUT'               : jobdesc.Application.Output,
-     'STDERR'               : jobdesc.Application.Error,
-     'STDIN_REDIR'          : '<$RUNTIME_JOB_STDIN' if jobdesc.Application.Input else '',
-     'STDOUT_REDIR'         : '1>$RUNTIME_JOB_STDOUT' if jobdesc.Application.Output else '',
-     'STDERR_REDIR'         : '2>$RUNTIME_JOB_STDERR' if jobdesc.Application.Output == jobdesc.Application.Error else '2>&1',
 
-     'ENVS'                 : jobdesc.Application.Environment,
-     'ENV'                  : lambda item: item[0],
-     'VAL'                  : lambda item: item[1],
 
-     'EXEC'                 : jobdesc.Application.Executable.Path,
-     'ARGS'                 : '" "'.join(list(jobdesc.Application.Executable.Argument)),
+class JobscriptAssembler(object):
+     
+     def __init__(self):
 
-     'RTES'                 : jobdesc.Resources.RunTimeEnvironment.getSoftwareList(),
-     'RTE'                  : lambda item: str(item),
-     'OPTS'                 : lambda item: '"%s"' % " ".join([opt.replace('"', '\\"') for opt in item.getOptions()]),
+          # String format map
+          self._map = {
+               'GRIDID'               : jobdesc.OtherAttributes['joboption;gridid'],
+               'SESSIONDIR'           : jobdesc.OtherAttributes['joboption;directory'],
+               'STDIN'                : jobdesc.Application.Input,
+               'STDOUT'               : jobdesc.Application.Output,
+               'STDERR'               : jobdesc.Application.Error,
+               'STDIN_REDIR'          : '<$RUNTIME_JOB_STDIN' if jobdesc.Application.Input else '',
+               'STDOUT_REDIR'         : '1>$RUNTIME_JOB_STDOUT' if jobdesc.Application.Output else '',
+               'STDERR_REDIR'         : '2>$RUNTIME_JOB_STDERR' if \
+                    jobdesc.Application.Output == jobdesc.Application.Error else '2>&1',
+               
+               'ENVS'                 : jobdesc.Application.Environment, # Iterable
+               'ENV'                  : lambda item: item[0], # Macro
+               'VAL'                  : lambda item: item[1], # Macro
+               
+               'EXEC'                 : jobdesc.Application.Executable.Path, 
+               'ARGS'                 : '" "'.join(list(jobdesc.Application.Executable.Argument)),
+               
+               'RTES'                 : jobdesc.Resources.RunTimeEnvironment.getSoftwareList(), # Iterable
+               'RTE'                  : lambda item: str(item), # Macro
+               'OPTS'                 : lambda item: '"%s"' % " ".join([opt.replace('"', '\\"') for
+                                                                        opt in item.getOptions()]), # Macro
+               
+               'PROCESSORS'           : jobdesc.Resources.SlotRequirement.NumberOfSlots,
+               'NODENAME'             : Config.nodename,
+               'GNU_TIME'             : Config.gnu_time,
+               'GM_MOUNTPOINT'        : Config.gm_mount_point,
+               'GM_PORT'              : Config.gm_port,
+               'GM_HOST'              : Config.hostname,
+               'LOCAL_SCRATCHDIR'     : Config.local_scratchdir, 
+               'SHARED_SCRATCHDIR'    : Config.shared_scratchdir, 
+               'IS_SHARED_FILESYSTEM' : 'yes' if Config.shared_filesystem else '',
+               'ARC_LOCATION'         : arc.common.ArcLocation.Get(),
+               'ARC_TOOLSDIR'         : arc.common.ArcLocation.GetToolsDir(),
+               'GLOBUS_LOCATION'      : os.environ.get('GLOBUS_LOCATION', ''),
+               }
 
-     'PROCESSORS'           : jobdesc.Resources.SlotRequirement.NumberOfSlots,
-     'NODENAME'             : Config.nodename,
-     'GNU_TIME'             : Config.gnu_time,
-     'GM_MOUNTPOINT'        : Config.gm_mount_point,
-     'GM_PORT'              : Config.gm_port,
-     'GM_HOST'              : Config.hostname,
-     'LOCAL_SCRATCHDIR'     : Config.local_scratchdir, 
-     'SHARED_SCRATCHDIR'    : Config.shared_scratchdir, 
-     'IS_SHARED_FILESYSTEM' : 'yes' if Config.shared_filesystem else '',
-     'ARC_LOCATION'         : arc.common.ArcLocation.Get(),
-     'ARC_TOOLSDIR'         : arc.common.ArcLocation.GetToolsDir(),
-     'GLOBUS_LOCATION'      : os.environ.get('GLOBUS_LOCATION', ''),
-     }
-"""
+          self._stubs = {}
+
+          PARSE = 0
+          SKIP  = 1
+          READ  = 2
+          LOOP  = 4
+          SAVE  = 8
+
+          do = PARSE
+          stub_name = ''
+          stub = ''
+          loop = ''
+          _iterable = None
+          _macros = None
+          _locals = {(k, v) for k, v for self._maps.iteritems()}
+                                        
+          with open('job_sript.stubs', 'r') as stubs:
+               for num, line in enum(stubs.readlines()):
+                    if do & READ:
+                         # END of stub
+                         #
+                         # Next step is saving it to the stubs map
+                         if line[0] == '>':     
+                              do = SAVE
+                         
+                         elif line[0] == '@':   
+                              # END of loop stub
+                              # 
+                              # Loop over the iterable, and for each item:
+                              #   run the macro(s) to resolve the string format variable(s)
+                              #   format the loop stub
+                              #   add formatted loop stub to stub
+                              if do & LOOP:
+                                   for item in _iterable:
+                                        for _macro in _macros:
+                                             _locals[_macro] = self._map[_macro](item)
+                                        stub += loop % _locals
+                                   do ^= LOOP
+
+                              # BEGIN loop stub
+                              #
+                              # Get the iterable and macros to resolve the string format variables
+                              else:            
+                                   keys = line[1:].split()
+                                   try:
+                                        key = keys[0].strip()
+                                        _iterable = self._map[key]
+                                        _macros = []
+                                        for key in keys[1:]:
+                                             assert(key[0] == '%')
+                                             _macros.append(self._map[key[1:].strip()])
+                                   except AssertionError:
+                                        raise ArcError('Syntax error at line %i in job_script.stubs. Missing \'%\'.'
+                                                       % num, 'common.submit.JobscriptAssembler')
+                                   except:
+                                        raise ArcError('Unknown key \'%s\' at line %i in job_script.stubs.'
+                                                       % (key, num), 'common.submit.JobscriptAssembler')
+                                   do |= LOOP
+
+                         # Inside '@' loop tags. Add line to loop stub. Format later
+                         elif do & LOOP:
+                              loop += line
+                         # Format line and add to stub
+                         else:
+                              stub += line % self._map
+
+                    elif do & SKIP:
+                         # BEGIN stub
+                         #
+                         # Everything after the '>' tag is read into the stub string, inlcuding empty lines
+                         if line[0] == '>':
+                              do = READ
+
+                    elif do & SAVE:
+                         self.stubs[stub_name] = stub
+                         do = PARSE
+
+                    elif line[:2] == '>>':
+                         # Signals that a new stub is coming up
+                         stub_name = line[2:].strip()
+                         stub = ''
+                         do = SKIP
+
+     def get_stub(stub):
+          return self._stubs.get(stub, '')
