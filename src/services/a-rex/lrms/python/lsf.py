@@ -5,7 +5,7 @@ LSF batch system interface module.
 import os, sys, time, re
 import arc
 from common.cancel import cancel
-from common.config import Config, configure
+from common.config import Config, configure, is_conf_setter
 from common.proc import execute_local, execute_remote
 from common.log import debug, verbose, info, warn, error, ArcError
 from common.scan import *

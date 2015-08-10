@@ -67,7 +67,7 @@ def _log(level, message, caller = None):
 
 
 class ArcError(Exception):
-    """                                                                                                                   
+    """                                       
     Print an ``ERROR`` to the log, sleep for 10 seconds and exit.
 
     :param str msg: error message

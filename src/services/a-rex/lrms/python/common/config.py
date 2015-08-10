@@ -1,11 +1,15 @@
 """
-Provides the ``Config`` object. It holds each arc.conf options as an attribute
-and is used in most ``lrms`` modules.
+Provides the ``Config`` object, with each arc.conf option as an attribute.
 """
 
 import os
+from log import debug
 
-Config = type('Config', (object,), {})()
+class _object(object):
+    pass
+
+Config = _object()
+
 
 def is_conf_setter(f):
     """
@@ -33,9 +37,11 @@ def configure(configfile, *func):
 
     import pickle
     pickle_conf = '/tmp/python_lrms_arc.conf'
+    global Config
 
     try:
         assert(getmtime(pickle_conf) > getmtime(configfile))
+        debug('Loading pickled config from ' + pickle_conf, 'common.config')
         Config = pickle.loads(pickle_conf)
     except:
         import ConfigParser
@@ -43,12 +49,13 @@ def configure(configfile, *func):
         cfg.read(configfile)
 
         set_common(cfg)
-        set_grid_manager(cfg)
+        set_gridmanager(cfg)
         set_cluster(cfg)
         set_queue(cfg)
         for fun in func:
             getattr(fun, 'is_conf_setter', False) and fun(cfg)
-        pickle.dumps(Config, pickle_conf)
+        with open(pickle_conf, 'w') as f:
+            f.write(pickle.dumps(Config))
             
 
 def set_common(cfg):
@@ -59,6 +66,7 @@ def set_common(cfg):
     :type cfg: :py:class:`ConfigParser.ConfigParser`
     """
 
+    global Config
     Config.hostname = str(cfg.get('common', 'hostname')).strip('"') \
         if cfg.has_option('common', 'hostname') else ''
 
@@ -71,6 +79,7 @@ def set_gridmanager(cfg):
    :type cfg: :py:class:`ConfigParser.ConfigParser`
    """
 
+   global Config
    # joboption_directory
    Config.sessiondir = str(cfg.get('grid-manager', 'sessiondir')).strip('"') \
        if cfg.has_option('grid-manager', 'sessiondir') else ''
@@ -138,6 +147,7 @@ def set_cluster(cfg):
     :type cfg: :py:class:`ConfigParser.ConfigParser`
     """
 
+    global Config
     Config.gm_port = int(cfg.get('cluster', 'gm_port').strip('"')) \
         if cfg.has_option('cluster', 'gm_port') else 2811
     Config.gm_mount_point = cfg.get('cluster', 'gm_mount_point') \
@@ -158,13 +168,14 @@ def set_queue(cfg):
     :type cfg: :py:class:`ConfigParser.ConfigParser`
     """
 
+    global Config
     Config.queue = {}
 
     for section in cfg.sections():
         if section[:6] != 'queue/' or not section[6:]:
             continue
         if section[6:] not in Config.queue:
-            Config.queue[section[6:]] = type('Queue', (object,), {})()
+            Config.queue[section[6:]] = _object()
             if cfg.has_option(section, 'nodememory'):
                 Config.queue[section[6:]].nodememory = \
                     int(cfg.get(section, 'nodememory').strip('"'))

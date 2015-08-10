@@ -5,7 +5,7 @@ SLURM batch system interface module.
 import os, sys, time, re
 import arc
 from common.cancel import cancel
-from common.config import Config, configure
+from common.config import Config, configure, is_conf_setter
 from common.proc import execute_local, execute_remote
 from common.log import debug, verbose, info, warn, error, ArcError
 from common.scan import *
@@ -55,7 +55,7 @@ def Submit(config, jobdescs, jc):
         
     # Run RTE stage0
     debug('----- starting slurmSubmitter.py -----', 'slurm.Submit')
-    RTE_stage0(jobdescs, 'SLURM', SBATCH_ACCOUNT = 'OtherAttributes.SBATCH_ACCOUNT')
+    #RTE_stage0(jobdescs, 'SLURM', SBATCH_ACCOUNT = 'OtherAttributes.SBATCH_ACCOUNT')
 
     # Create script file and write job script
     jobscript = get_job_script(jobdescs)
@@ -190,7 +190,7 @@ def get_job_script(jobdescs):
     set_req_mem(jobdescs)
 
     # TODO: Maybe change way in which JobDescriptionParserSLURM is loaded.
-    jobscript = JobDescriptionParserSLURM.Assemble(jobdescs[0])
+    jobscript = JobscriptAssemblerSLURM.Assemble(jobdescs[0])
     if not jobscript:
         raise ArcError('Unable to assemble SLURM job options', 'slurm.Submit')
 
@@ -454,10 +454,35 @@ def Scan(config, ctr_dirs):
 
 ### \mapname slurm_sbatch SLURM sbatch options
 ### SLURM sbatch options.
-class JobDescriptionParserSLURM(object):    
-    def __init__(self):
-        pass
+class JobscriptAssemblerSLURM(JobscriptAssembler):
+    def __init__(self, jobdesc = None):
+        if jobdesc:
+            super(JobscriptAssemblerSLURM, self).__init__(jobdesc)
+
     #def UnParse
+
+    def Assemble2(self):
+        script = JobscriptAssemblerSLURM.Assemble(self.jobdesc)
+        script += self.get_stub('umask_and_sourcewithargs')
+        script += self.get_stub('user_env')
+        if Config.localtransfer:
+            script += self.get_stub('local_transfer')
+        script += self.get_stub('runtime_env')
+        script += self.get_stub('move_files_to_node')
+        if Config.localtransfer:
+            script += self.get_stub('download_input_files')
+        script += self.get_stub('rte_stage1')
+        script += self.get_stub('slurm_nodefile')
+        script += self.get_stub('cd_and_run')
+        script += self.get_stub('rte_stage2')
+        if Config.localtransfer:
+            script += self.get_stub('upload_output_files')
+        else:
+            script += self.get_stub('clean_scratchdir')
+        script += self.get_stub('move_files_to_frontend')
+        return script
+
+
     @staticmethod
     def Assemble(j, language = "", dialect = ""):
         # TODO: What about localtransfer, adjusting working directory,
