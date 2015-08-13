@@ -55,7 +55,7 @@ def Submit(config, jobdescs, jc):
         
     # Run RTE stage0
     debug('----- starting slurmSubmitter.py -----', 'slurm.Submit')
-    #RTE_stage0(jobdescs, 'SLURM', SBATCH_ACCOUNT = 'OtherAttributes.SBATCH_ACCOUNT')
+    RTE_stage0(jobdescs, 'SLURM', SBATCH_ACCOUNT = 'OtherAttributes.SBATCH_ACCOUNT')
 
     # Create script file and write job script
     jobscript = get_job_script(jobdescs)
@@ -84,7 +84,8 @@ def Submit(config, jobdescs, jc):
     handle = None
     while SLURM_TRIES < 10:
         args = '%s/sbatch %s' % (Config.slurm_bin_path, script_file)
-        verbose('Executing \'%s\' on %s' % (args, Config.remote_host if Config.remote_host else 'localhost'), 'slurm.Submit')
+        verbose('Executing \'%s\' on %s' % 
+                (args, Config.remote_host if Config.remote_host else 'localhost'), 'slurm.Submit')
         handle = execute(args)
         if handle.returncode == 0:
             break
@@ -130,9 +131,9 @@ def Submit(config, jobdescs, jc):
     debug('job *NOT* submitted successfully!', 'slurm.Submit')
     debug('got error code from sbatch: %d !' % handle.returncode, 'slurm.Submit')
     debug('Output is:', 'slurm.Submit')
-    debug('\n'.join(sbatch_handle.stdout), 'slurm.Submit')
+    debug('\n'.join(handle.stdout), 'slurm.Submit')
     debug('Error output is:', 'slurm.Submit')
-    debug('\n'.join(sbatch_handle.stderr), 'slurm.Submit')
+    debug('\n'.join(handle.stderr), 'slurm.Submit')
     debug('----- exiting slurmSubmitter.py -----', 'slurm.Submit')
     return False
 
@@ -190,120 +191,9 @@ def get_job_script(jobdescs):
     set_req_mem(jobdescs)
 
     # TODO: Maybe change way in which JobDescriptionParserSLURM is loaded.
-    jobscript = JobscriptAssemblerSLURM.Assemble(jobdescs[0])
+    jobscript = JobscriptAssemblerSLURM(jobdescs[0]).assemble()
     if not jobscript:
         raise ArcError('Unable to assemble SLURM job options', 'slurm.Submit')
-
-    jd = jobdescs[0]
-    jobscript += \
-        '\n' \
-        '# Overide umask of execution node ' \
-        '(sometime values are really strange)\n' \
-        'umask 077\n' \
-        ' \n' \
-        '# source with arguments for DASH shells\n' \
-        'sourcewithargs() {\n' \
-        'script=$1\n' \
-        'shift\n' \
-        '. $script\n' \
-        '}\n'
-
-    jobscript += add_user_env(jobdescs)
-    jobsessiondir = jd.OtherAttributes['joboption;directory'].rstrip('/')
-    gridid = jd.OtherAttributes['joboption;gridid']
-
-    if Config.localtransfer:
-        jobscript += setup_local_transfer(jobdescs)
-
-    if Config.shared_filesystem:
-        jobscript += setup_runtime_env(jobdescs)
-    else:
-        runtime_stdin = jd.Application.Input
-        runtime_stdout = jd.Application.Output
-        runtime_stderr = jd.Application.Error
-        for f in (runtime_stdin, runtime_stdout, runtime_stderr):
-            if f.startswith(jobsessiondir +'/'):
-                f = '%s/%s/%s' % (Config.scratchdir, gridid, f[len(jobsessiondir) + 1:])
-
-        scratchdir = (Config.scratchdir, gridid)
-        jobscript += 'RUNTIME_JOB_DIR=%s/%s\n' % scratchdir + \
-                     'RUNTIME_JOB_DIAG=%s/%s.diag\n' % scratchdir + \
-                     'RUNTIME_JOB_STDIN="%s"\n'  % runtime_stdin + \
-                     'RUNTIME_JOB_STDOUT="%s"\n' % runtime_stdout + \
-                     'RUNTIME_JOB_STDERR="%s"\n' % runtime_stderr
-
-    jobscript += move_files_to_node(jobdescs)
-    jobscript += '\nRESULT=0\n\n'
-    if Config.localtransfer:
-        jobscript += download_input_files(jobdescs)
-    jobscript += 'if [ "$RESULT" = \'0\' ] ; then\n'
-    jobscript += RTE_stage1(jobdescs)
-    jobscript += \
-        'echo "runtimeenvironments=$runtimeenvironments" >> ' \
-        '"$RUNTIME_JOB_DIAG"\n' \
-        'if [ ! "X$SLURM_NODEFILE" = \'X\' ] ; then\n' \
-        '  if [ -r "$SLURM_NODEFILE" ] ; then\n' \
-        '    cat "$SLURM_NODEFILE" | sed \'s/\(.*\)/nodename=\\1/\' >> ' \
-        '"$RUNTIME_JOB_DIAG"\n' \
-        '  else\n' \
-        '    SLURM_NODEFILE=\n' \
-        '  fi\nfi\n' \
-        'if [ "$RESULT" = \'0\' ] ; then\n'
-    jobscript += cd_and_run(jobdescs)
-    jobscript += 'fi\nfi\n'
-    jobscript += configure_runtime(jobdescs)
-
-    if Config.localtransfer:
-        jobscript += upload_output_files(jobdescs)
-    else:
-        # There is no sense to keep trash till GM runs uploader
-        jobscript += 'if [ ! -z  "$RUNTIME_LOCAL_SCRATCH_DIR" ] ; then\n'
-        # Delete all files except listed in job.#.output
-        jobscript += '  find ./ -type l -exec rm -f "{}" ";"\n'
-        jobscript += '  find ./ -type f -exec chmod u+w "{}" ";"\n'
-
-        try:
-            with open(Config.controldir + '/job.' + gridid + '.output', 'r') as outputfile:
-                for name in outputfile:
-                    name = (
-                            # Replace escaped back-slashes (\). 
-                            # Note: Backslash escapes in 2 argument 
-                            # are processed. Pattern explained: First
-                            # look for escaped backslashes (8x\), then 
-                            # look for other escaped chars (4x\).
-                            re.sub(r'\\\\\\\\|\\\\', '\\\\',
-
-                            # Remove possible remote destination (URL).
-                            # Take spaces and escaping into account.
-                            # URL is the first string which is preceded by 
-                            # a space which is not escaped.
-                            re.sub(r'([^\\](\\\\)*) .*', '\\1', name.strip()).
-
-                            # Replace escaped spaces and single quotes
-                            replace('\ ', ' ').replace("'", "'\\''").
-
-                            # Strip leading slashes (/).
-                            lstrip('/'))
-                            )
-                    if name[0] == '@':
-                        jobscript += \
-                            '  dynlist=\'%s\'\n' % (name[1:]) + \
-                            '  chmod -R u-w "./$dynlist" 2>/dev/null\n' \
-                            '  cat "./$dynlist" | ' \
-                            'while read name rest; do\n' \
-                            '    chmod -R u-w "./$name" 2>/dev/null\n' \
-                            '  done\n'
-                    else:
-                        jobscript += '  chmod -R u-w "$RUNTIME_JOB_DIR"/\'%s\' 2>/dev/null\n' % (name)
-        except IOError:
-            pass
-
-        jobscript += '  find ./ -type f -perm /200 -exec rm -f "{}" ";"\n' \
-                     '  find ./ -type f -exec chmod u+w "{}" ";"\n' \
-                     'fi\n'
-
-    jobscript += '\n'
-    jobscript += move_files_to_frontend()
     return jobscript
 
 
@@ -455,14 +345,14 @@ def Scan(config, ctr_dirs):
 ### \mapname slurm_sbatch SLURM sbatch options
 ### SLURM sbatch options.
 class JobscriptAssemblerSLURM(JobscriptAssembler):
-    def __init__(self, jobdesc = None):
-        if jobdesc:
-            super(JobscriptAssemblerSLURM, self).__init__(jobdesc)
 
-    #def UnParse
+    def __init__(self, jobdesc):
+        super(JobscriptAssemblerSLURM, self).__init__(jobdesc)
 
-    def Assemble2(self):
-        script = JobscriptAssemblerSLURM.Assemble(self.jobdesc)
+    def assemble(self):
+        script = JobscriptAssemblerSLURM.assemble_SBATCH(self.jobdesc)
+        if not script:
+            return
         script += self.get_stub('umask_and_sourcewithargs')
         script += self.get_stub('user_env')
         if Config.localtransfer:
@@ -482,9 +372,8 @@ class JobscriptAssemblerSLURM(JobscriptAssembler):
         script += self.get_stub('move_files_to_frontend')
         return script
 
-
     @staticmethod
-    def Assemble(j, language = "", dialect = ""):
+    def assemble_SBATCH(j, language = "", dialect = ""):
         # TODO: What about localtransfer, adjusting working directory,
         #       diagnostics, and uploading output files. These should
         #       probably be handled by submisison script.
@@ -646,7 +535,7 @@ class JobscriptAssemblerSLURM(JobscriptAssembler):
             error("Unable to scale 'IndividualWallTime' to specified benchmark"
                   "'{0}'".format(j.Resources.IndividualWallTime.benchmark[0]),
                   'slurm.JobDescriptionParserSLURM', 'slurm.Assemble')
-            return False
+            return
         ### TODO: Expression: \mapattr --time <- TotalCPUTime/NumberOfSlots
         if j.Resources.TotalCPUTime.range.max >= 0 and j.Resources.SlotRequirement.NumberOfSlots > 0: 
             # TODO: Check for benchmark

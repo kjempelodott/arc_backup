@@ -98,6 +98,7 @@ class RTE0EnvCreator(object):
     # joboption_post_#_#, joboption_post_#_code
     # TODO: Parse joboption_penv_type, joboption_penv_version,
     # joboption_penv_processesperhost, joboption_penv_threadsperprocess
+
     _shToPy = \
         {
         "RUNTIME_FRONTEND_SEES_NODE" : "config.shared_scratch",

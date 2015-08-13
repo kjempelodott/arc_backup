@@ -54,8 +54,11 @@ def configure(configfile, *func):
         set_queue(cfg)
         for fun in func:
             getattr(fun, 'is_conf_setter', False) and fun(cfg)
-        with open(pickle_conf, 'w') as f:
-            f.write(pickle.dumps(Config))
+        try:
+            with open(pickle_conf, 'w') as f:
+                f.write(pickle.dumps(Config))
+        except IOError:
+            pass
             
 
 def set_common(cfg):

@@ -7,7 +7,7 @@ UID: user ID of user running PythonLRMS
 GID: group ID of user running PythonLRMS
 """
 
-import os
+import os, arc
 from config import Config
 from files import read, write, getmtime
 from proc import execute_local, execute_remote
@@ -56,6 +56,8 @@ def get_jobs(ctrdirs):
     ``diag_file``, ``count_file``, ``errors_file`` and ``comment_file``.
     """
 
+    import re
+
     jobs = {}
     for ctrdir in ctrdirs:
         procdir = ctrdir + '/processing'
@@ -64,7 +66,7 @@ def get_jobs(ctrdirs):
                 globalid = re.search(r'job.(?P<id>\w+).status',fname).groupdict()['id']
                 with open('%s/%s' % (procdir, fname), 'r') as f:
                     if re.search('INLRMS|CANCELING', f.readline()):
-                        job = Object()
+                        job = type('Job', (object, ), {})()
                         job.globalid = globalid
                         job.controldir = ctrdir
                         job.local_file = '%s/job.%s.local' % (ctrdir, job.globalid)
@@ -223,7 +225,7 @@ def read_local_file(job):
 
     try:
         content = dict(item.split('=', 1) for item in read(job.local_file))
-        job.localid = content['localid'].strip()
+        job.localid = content['localid'].split(':', 1)[1].strip()
         job.sessiondir = content['sessiondir'].strip()
         return True
     except Exception as e: 

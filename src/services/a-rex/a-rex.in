@@ -987,35 +987,31 @@ mount_sshfs() {
     if [ -z ${LOCALDIR} ] || [ -z ${REMOTEDIR} ]; then
 	return 0;
     fi
-    if [ "$(mount | grep ${LOCALDIR})" ]; then
+    # Stat will fail if transport endpoints are not connected
+    if [ "$(mount | grep ${LOCALDIR})" ] && [ "$(stat ${LOCALDIR} 2>/dev/null)" ]; then
 	echo "${LOCALDIR} is already mounted"
 	return 0
     fi
 
+    # In case of bad disconnect, unmount before remount
+    fusermount -u ${LOCALDIR} 2>/dev/null
+    
     # TODO: is this safe? What if LOCALDIR is busy?
     # Save and clean
     if [ "$(ls -A ${LOCALDIR})" ]; then
 	mkdir -p ${LOCALDIR}.0
-	echo && echo "INFO: copying content of ${LOCALDIR} to ${LOCALDIR}.0 ... "
+	echo && echo "Info: copying content of ${LOCALDIR} to ${LOCALDIR}.0 ... "
 	cp -ru ${LOCALDIR}/* ${LOCALDIR}.0/. && \
 	    echo "rm -r ${LOCALDIR}" && \
 	    rm -Ir ${LOCALDIR}
 	mkdir -p ${LOCALDIR}
     fi
 
-    # In case of bad disconnect, unmount before remount
-    fusermount -u ${LOCALDIR} 2>/dev/null 
-    # Make mount point read-only to prevent grid-manager from writing to
-    # directory if SSHFS breaks
-    chmod 555 ${LOCALDIR}
-    sshfs -o allow_other,idmap=file,uidfile=$UIDF,gidfile=$GIDF,ConnectTimeout=10 \
-	${REMOTE_USER}@${REMOTE_HOST}:${REMOTEDIR} ${LOCALDIR}
-    res=$?
-    # If other error than timeout
-    if [ ! $res = 0 ] && [ ! $res = 124 ]; then
-	sleep 10
-    fi
-    return $res
+    # The reconnect and ServerAliveInterval options should prevent
+    # the "transport endpoint not connected" error from occuring
+    sshfs -o allow_other,reconnect,idmap=file,uidfile=$UIDF,gidfile=$GIDF,ConnectTimeout=10,ServerAliveInterval=10 \
+	${REMOTE_USER}@${REMOTE_HOST}:${REMOTEDIR} ${LOCALDIR} 2>&1>/dev/null
+    return $?
 }
 
 case "$1" in

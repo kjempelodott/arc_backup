@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import sys, time, traceback
 
@@ -12,7 +12,7 @@ except:
 try:
     from lrms import lsf
     from lrms.common.parse import SimpleGramiParser
-    from lrms.common.common import *
+    from lrms.common.log import ArcError
 except:
     sys.stderr.write('Failed to import lrms module\n')
     time.sleep(10)
