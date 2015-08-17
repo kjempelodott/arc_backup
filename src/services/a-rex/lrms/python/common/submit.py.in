@@ -80,32 +80,32 @@ def write_script_file(jobscript):
      return path
 
 
-def set_req_mem(jobdescs):
+def set_req_mem(jd):
    """
    Set memory requirement attributes in job description.
 
-   :param jobdescs: job description list object
-   :type jobdescs: :py:class:`arc.JobDescriptionList`
+   :param jd: job description object
+   :type jd: :py:class:`arc.JobDescription`
    """
 
-   if jobdescs[0].Resources.IndividualPhysicalMemory.max <= 0:
+   if jd.Resources.IndividualPhysicalMemory.max <= 0:
        nodememory = 0
        if Config.defaultmemory <= 0:
-           if (jobdescs[0].Resources.QueueName in Config.queue
-               and hasattr(Config.queue[jobdescs[0].Resources.QueueName], 'nodememory')):
-                nodememory = Config.queue[jobdescs[0].Resources.QueueName].nodememory
+           if (jd.Resources.QueueName in Config.queue
+               and hasattr(Config.queue[jd.Resources.QueueName], 'nodememory')):
+                nodememory = Config.queue[jd.Resources.QueueName].nodememory
            elif Config.nodememory > 0:
                 nodememory = Config.nodememory
 
        debug('-'*69, 'common.submit')
        debug('WARNING: The job description contains no explicit memory requirement.', 'common.submit')
        if Config.defaultmemory > 0:
-           jobdescs[0].Resources.IndividualPhysicalMemory.max = Config.defaultmemory
+           jd.Resources.IndividualPhysicalMemory.max = Config.defaultmemory
            debug('         A default memory limit taken from \'defaultmemory\' in', 'common.submit')
            debug('         arc.conf will apply.', 'common.submit')
            debug('         Limit is: %s mb.' % (Config.defaultmemory), 'common.submit')
        elif nodememory > 0:
-           jobdescs[0].Resources.IndividualPhysicalMemory.max = nodememory
+           jd.Resources.IndividualPhysicalMemory.max = nodememory
            debug('         A default memory limit taken from \'nodememory\' in', 'common.submit')
            debug('         arc.conf will apply.', 'common.submit')
            debug('         You may want to set \'defaultmemory\' to something', 'common.submit')
@@ -113,12 +113,12 @@ def set_req_mem(jobdescs):
            debug('         specified.', 'common.submit')
            debug('         Limit is: %s mb.' % (nodememory), 'common.submit')
        else:
-           jobdescs[0].Resources.IndividualPhysicalMemory.max = 1000
+           jd.Resources.IndividualPhysicalMemory.max = 1000
            debug('         nodememory is not specified in arc.conf. A default', 'common.submit')
            debug('         memory limit of 1GB will apply.', 'common.submit')
        debug('-'*69, 'common.submit')
 
-   if Config.localtransfer and jobdescs[0].Resources.IndividualPhysicalMemory.max < 1000:
+   if Config.localtransfer and jd.Resources.IndividualPhysicalMemory.max < 1000:
        debug('-'*69, 'common.submit')
        debug('WARNING: localtransfers are enabled and job has less than 1GB of', 'common.submit')
        debug('         ram. up- and downloaders take up a lot of ram,', 'common.submit')
@@ -129,18 +129,18 @@ def set_req_mem(jobdescs):
 # Limitation: In RTE stage 0, scripts MUST use the 'export' command if any
 # new variables are defined which should be picked up by the submit script.
 # Also no output from the RTE script in stage 0 will be printed.
-def RTE_stage0(jobdescs, lrms, **mapping):
+def RTE_stage0(jd, lrms, **mapping):
    """
    Source RTE scripts and update job description environment.
 
-   :param jobdescs: job description list object
-   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type 'Arc::JobDescriptionList *')`
-   :param str lrms: name of the LRMS
+   :param jd: job description object
+   :type jd: :py:class:`arc.JobDescription`
+   :param dict **mapping: additional environment variables
    """     
 
-   if jobdescs[0].Resources.RunTimeEnvironment.getSoftwareList():
+   if jd.Resources.RunTimeEnvironment.getSoftwareList():
         from parse import RTE0EnvCreator
-        envCreator = RTE0EnvCreator(jobdescs[0], Config, mapping)
+        envCreator = RTE0EnvCreator(jd, Config, mapping)
         stage0_environ = envCreator.getShEnv()
         stage0_environ['joboption_lrms'] = lrms
 
@@ -163,7 +163,7 @@ def RTE_stage0(jobdescs, lrms, **mapping):
 
         # Source RTE scripts from the software list
         sw_list = []
-        for sw in jobdescs[0].Resources.RunTimeEnvironment.getSoftwareList():
+        for sw in jd.Resources.RunTimeEnvironment.getSoftwareList():
             sw_list.append(str(sw))
             source_sw(sw, sw.getOptions())
 
@@ -195,17 +195,108 @@ def RTE_stage0(jobdescs, lrms, **mapping):
 
    # joboption_count might have been changed by an RTE.
    # Save it for accouting purposes.
-   if jobdescs[0].Resources.SlotRequirement.NumberOfSlots > 0:
+   if jd.Resources.SlotRequirement.NumberOfSlots > 0:
        try:
-           diagfilename = '%s/job.%s.diag' % (Config.controldir, jobdescs[0].OtherAttributes['joboption;gridid'])
+           diagfilename = '%s/job.%s.diag' % (Config.controldir, jd.OtherAttributes['joboption;gridid'])
            with open(diagfilename, 'w+') as diagfile:
-               diagfile.write('ExecutionUnits=%s\n' % jobdescs[0].Resources.SlotRequirement.NumberOfSlots)
+               diagfile.write('ExecutionUnits=%s\n' % jd.Resources.SlotRequirement.NumberOfSlots)
        except IOError:
            debug('Unable to write to diag file (%s)' % diagfilename)
 
 
 class JobscriptAssembler(object):
+     """
+     Parses and expands the jobscript stubs defined in job_script.stubs.
+     Each stub is initiated by a line starting with '>>', followed by
+     the name of the stub. The stub must be enclosed within two '>' on
+     separate lines.::
+
+       >> set_some_vars
+       >
+       export FOO=bar
+       export BAR=baz
+       >
+
+
+     To expand variables, use the Python format syntax %(LOCAL)s.::
+
+       >> set_sessiondir
+       >
+       export RUNTIME_SESSIONDIR=%(SESSIONDIR)s
+       >
+
+     This will evaluate to the session directory specified in the 
+     job description, for example::
+
+       export RUNTIME_SESSIONDIR=/scratch/grid/123456
      
+      
+     It is also possible to define loops that depend on some iterable 
+     in the job description object. For example, the attribute
+     Application.Environment is an iterable, where each item is a tuple
+     with two elements: name of environment variable and value of 
+     environment variable. This is mapped to 'ENVS' with macros
+     'ENV' and 'ENV_VAL'.
+
+     Loops must be enclosed within two '@' on separate lines. The top '@'
+     must be followed by the map name of the iterable and the map name 
+     of the macro(s) that resolves the string format variables. The 
+     simplest macro is mapped to 'ITEM' and simply returns the current 
+     item in the iterable. This is only applicable when each item is a 
+     string. Note the '%' in front of each macro name in the first line
+     following example.::
+
+        @ ENVS %ENV %ENV_VAL
+        export %(ENV)s=%(ENV_VAL)s
+        @
+
+     This will evaluate to a list of export lines for every environment 
+     variable represented in Application.Environment.
+
+
+     All format variables, iterables and macros are defined in the 
+     ``_map`` attribute.
+     """
+
+     def get_standard_jobscript(self):
+          """
+          Assemble a generic, out-of-the-box jobscript. This does
+          not contain the batch system-specific instructions you
+          typically find at the top of the jobscript.
+          
+          return: jobscript
+          rtype: :py:obj:`str`
+          """
+          
+          script  = self.get_stub('umask_and_sourcewithargs')
+          script += self.get_stub('user_env')
+          if Config.localtransfer:
+               script += self.get_stub('local_transfer')
+          script += self.get_stub('runtime_env')
+          script += self.get_stub('move_files_to_node')
+          if Config.localtransfer:
+               script += self.get_stub('download_input_files')
+          script += self.get_stub('rte_stage1')
+          script += self.get_stub('cd_and_run')
+          script += self.get_stub('rte_stage2')
+          if Config.localtransfer:
+               script += self.get_stub('upload_output_files')
+          else:
+               script += self.get_stub('clean_scratchdir')
+          script += self.get_stub('move_files_to_frontend')
+          return script
+
+     def get_stub(self, stub):
+          """
+          Get formatted jobscript stub.
+
+          param str stub: name of jobscript stub 
+          return: jobscript stub
+          rtype: :py:obj:`str`
+          """
+          return self._stubs.get(stub, '')
+     
+
      def __init__(self, jobdesc):
 
           self.jobdesc = jobdesc
@@ -213,6 +304,7 @@ class JobscriptAssembler(object):
           self._ignore = []
           # String format map
           self._map = {
+               # Simple strings
                'GRIDID'               : jobdesc.OtherAttributes['joboption;gridid'],
                'SESSIONDIR'           : jobdesc.OtherAttributes['joboption;directory'],
                'STDIN'                : jobdesc.Application.Input,
@@ -222,21 +314,9 @@ class JobscriptAssembler(object):
                'STDOUT_REDIR'         : '1>$RUNTIME_JOB_STDOUT' if jobdesc.Application.Output else '',
                'STDERR_REDIR'         : '2>$RUNTIME_JOB_STDERR' if \
                                         jobdesc.Application.Output != jobdesc.Application.Error else '2>&1',
-               
-               'ENVS'                 : jobdesc.Application.Environment, # Iterable
-               'ENV'                  : lambda item: item[0], # Macro
-               'ENV_VAL'              : lambda item: item[1], # Macro
-               
                'EXEC'                 : jobdesc.Application.Executable.Path, 
                'ARGS'                 : '" "'.join(list(jobdesc.Application.Executable.Argument)),
-               
-               'RTES'                 : jobdesc.Resources.RunTimeEnvironment.getSoftwareList(), # Iterable
-               'RTE'                  : lambda item: str(item), # Macro
-               'OPTS'                 : lambda item: '"%s"' % '" "'.join([opt.replace('"', '\\"') for
-                                                                          opt in item.getOptions()]), # Macro
-               
                'PROCESSORS'           : jobdesc.Resources.SlotRequirement.NumberOfSlots,
-
                'NODENAME'             : Config.nodename,
                'GNU_TIME'             : Config.gnu_time,
                'GM_MOUNTPOINT'        : Config.gm_mount_point,
@@ -246,11 +326,19 @@ class JobscriptAssembler(object):
                'RUNTIMEDIR'           : Config.remote_runtimedir if Config.remote_runtimedir else Config.runtimedir,
                'SHARED_SCRATCHDIR'    : Config.shared_scratch, 
                'IS_SHARED_FILESYSTEM' : 'yes' if Config.shared_filesystem else '',
-
                'ARC_LOCATION'         : arc.common.ArcLocation.Get(),
                'ARC_TOOLSDIR'         : arc.common.ArcLocation.GetToolsDir(),
                'GLOBUS_LOCATION'      : os.environ.get('GLOBUS_LOCATION', ''),
+               # Iterables and associated macros
+               'ENVS'                 : jobdesc.Application.Environment, # Iterable
+               'ENV'                  : lambda item: item[0], # Macro
+               'ENV_VAL'              : lambda item: item[1], # Macro
 
+               'RTES'                 : jobdesc.Resources.RunTimeEnvironment.getSoftwareList(), # Iterable
+               'RTE'                  : lambda item: str(item), # Macro
+               'OPTS'                 : lambda item: '"%s"' % '" "'.join([opt.replace('"', '\\"') for
+                                                                          opt in item.getOptions()]), # Macro
+               # To be setup in a later method
                'RUNTIME_CONTROLDIR'   :	'', # Setup later if localtransfer
                'OUTPUT_LISTS'         :	'', # Setup later if NOT localtransfer
                'OUTPUT_FILES'         :	'', # Setup later if NOT localtransfer
@@ -362,10 +450,6 @@ class JobscriptAssembler(object):
                                         % (str(e), num), 'common.submit.JobscriptAssembler')
 
 
-     def get_stub(self, stub):
-          return self._stubs.get(stub, '')
-
-
      def setup_local_transfer(self):
           """
           Create runtime control directory and update job input and output files.
@@ -409,7 +493,10 @@ class JobscriptAssembler(object):
                     pass
 
 
-     def setup_cleaning(self):
+     def setup_cleaning(self): 
+          """
+          Setup trash cleaning. No reason to keep trash until gm-kick runs.
+          """
           
           output = Config.controldir + '/job.' + self['GRIDID'] + '.output'
           try:
@@ -445,6 +532,11 @@ class JobscriptAssembler(object):
 
 
      def setup_runtime_env(self):
+          """
+          For non-shared filesystems, replace sessiondir with local scratchdir
+          in the stdin, stdout and stderr paths.
+          """
+          
           self['LOCAL_SCRATCHDIR'] = os.path.join(self['LOCAL_SCRATCHDIR'], self['GRIDID'])
           sdir = self['SESSIONDIR'] + os.path.sep
           for f in ('STDIN', 'STDOUT', 'STDERR'):
