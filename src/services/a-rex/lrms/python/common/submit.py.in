@@ -1,5 +1,5 @@
 """
-Common submit job functions.
+Classes and functions to setup job submission.
 """
 
 import os, re
@@ -53,26 +53,25 @@ def validate_attributes(jd):
                has_globalid = True
                break
      if not has_globalid:
-          globalid = 'gsiftp://%s:%s%s/%s' % (Config.hostname, Config.gm_port,
-                                              Config.gm_mount_point, jd.OtherAttributes['joboption;gridid'])
+          globalid = 'gsiftp://%s:%s%s/%s' % (Config.hostname, Config.gm_port, Config.gm_mount_point,
+                                              jd.OtherAttributes['joboption;gridid'])
           jd.Application.Environment.append(('GRID_GLOBAL_JOBID', globalid))
 
 
 def write_script_file(jobscript):
      """
-     Write job script to file.
+     Write job script to a temporary file.
 
      :param str jobscript: job script buffer
      :return: path to file
      :rtype: :py:obj:`str`
      """
      
-     import uuid, stat
+     import stat, tempfile
 
-     jobscript += '\nrm -- "$0"\n' # self destroy
+     jobscript += '\nrm -- "$0"\n' # delete jobscript at end of execution
      mode = stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXGRP | stat.S_IRGRP | stat.S_IXOTH | stat.S_IROTH
-
-     path = '/tmp/' + str(uuid.uuid4()) + '.sh'
+     _f, path = tempfile.mkstemp('.sh', 'job')
 
      if not write(path, jobscript, mode, False, Config.remote_host):
           raise ArcError('Failed to write jobscript', 'common.submit')
@@ -82,7 +81,7 @@ def write_script_file(jobscript):
 
 def set_req_mem(jd):
    """
-   Set memory requirement attributes in job description.
+   Resolve memory requirement in job description.
 
    :param jd: job description object
    :type jd: :py:class:`arc.JobDescription`
@@ -135,7 +134,7 @@ def RTE_stage0(jd, lrms, **mapping):
 
    :param jd: job description object
    :type jd: :py:class:`arc.JobDescription`
-   :param dict **mapping: additional environment variables
+   :param dict mapping: additional environment variables
    """     
 
    if jd.Resources.RunTimeEnvironment.getSoftwareList():
@@ -206,19 +205,18 @@ def RTE_stage0(jd, lrms, **mapping):
 
 class JobscriptAssembler(object):
      """
-     Parses and expands the jobscript stubs defined in job_script.stubs.
-     Each stub is initiated by a line starting with '>>', followed by
-     the name of the stub. The stub must be enclosed within two '>' on
-     separate lines.::
+     Parses and expands jobscript stubs defined in job_script.stubs.
+     Each stub is initiated by a line starting with ``>>``, followed by
+     the stub name. The stub must be enclosed within two ``>`` on
+     separate lines::
 
-       >> set_some_vars
+       >> my_export_stub
        >
        export FOO=bar
        export BAR=baz
        >
 
-
-     To expand variables, use the Python format syntax %(LOCAL)s.::
+     To expand variables, use the Python format syntax ``%(LOCAL)s``::
 
        >> set_sessiondir
        >
@@ -226,36 +224,38 @@ class JobscriptAssembler(object):
        >
 
      This will evaluate to the session directory specified in the 
-     job description, for example::
+     job description::
 
        export RUNTIME_SESSIONDIR=/scratch/grid/123456
-     
       
      It is also possible to define loops that depend on some iterable 
-     in the job description object. For example, the attribute
-     Application.Environment is an iterable, where each item is a tuple
-     with two elements: name of environment variable and value of 
-     environment variable. This is mapped to 'ENVS' with macros
-     'ENV' and 'ENV_VAL'.
+     in the job description object. The attribute Application.Environment 
+     is an iterable, where each item is a tuple of two elements, an 
+     environment variable and its respective value. The iterable is mapped
+     to ``ENVS``, and the macros that return the first and second tuple element
+     are mapped to ``ENV`` and ``ENV_VAL``, respectively.
 
-     Loops must be enclosed within two '@' on separate lines. The top '@'
-     must be followed by the map name of the iterable and the map name 
-     of the macro(s) that resolves the string format variables. The 
-     simplest macro is mapped to 'ITEM' and simply returns the current 
+     Loops must be enclosed within two ``@`` on separate lines. The top ``@``
+     must be followed by the map names of the iterable and the macros. The
+     simplest macro is mapped to ``ITEM`` and simply returns the current 
      item in the iterable. This is only applicable when each item is a 
-     string. Note the '%' in front of each macro name in the first line
-     following example.::
+     string. Note the ``%`` in front of each macro name in the first line
+     following example::
 
+        >> some_stuff
+        >
+        do_something
+        ...
         @ ENVS %ENV %ENV_VAL
         export %(ENV)s=%(ENV_VAL)s
         @
+        >
 
-     This will evaluate to a list of export lines for every environment 
+     This will expand to a set of export lines for every environment 
      variable represented in Application.Environment.
 
-
-     All format variables, iterables and macros are defined in the 
-     ``_map`` attribute.
+     The format variable, iterable and macro mapping is defined in the 
+     ``map`` attribute.
      """
 
      def get_standard_jobscript(self):
@@ -264,8 +264,8 @@ class JobscriptAssembler(object):
           not contain the batch system-specific instructions you
           typically find at the top of the jobscript.
           
-          return: jobscript
-          rtype: :py:obj:`str`
+          :return: jobscript
+          :rtype: :py:obj:`str`
           """
           
           script  = self.get_stub('umask_and_sourcewithargs')
@@ -288,11 +288,11 @@ class JobscriptAssembler(object):
 
      def get_stub(self, stub):
           """
-          Get formatted jobscript stub.
+          Get expanded jobscript stub.
 
-          param str stub: name of jobscript stub 
-          return: jobscript stub
-          rtype: :py:obj:`str`
+          :param str stub: name of jobscript stub 
+          :return: expanded jobscript stub
+          :rtype: :py:obj:`str`
           """
           return self._stubs.get(stub, '')
      
@@ -303,7 +303,7 @@ class JobscriptAssembler(object):
           self._stubs = {}
           self._ignore = []
           # String format map
-          self._map = {
+          self.map = {
                # Simple strings
                'GRIDID'               : jobdesc.OtherAttributes['joboption;gridid'],
                'SESSIONDIR'           : jobdesc.OtherAttributes['joboption;directory'],
@@ -346,19 +346,19 @@ class JobscriptAssembler(object):
                }
 
           if Config.localtransfer:
-               self.setup_local_transfer()
+               self._setup_local_transfer()
           else:
-               self.setup_cleaning()
+               self._setup_cleaning()
           if not Config.shared_filesystem:
-               self.setup_runtime_env()
+               self._setup_runtime_env()
           self._parse()
 
 
      def __getitem__(self, item):
-          return self._map.get(item, '')
+          return self.map.get(item, '')
 
      def __setitem__(self, item, value):
-          self._map[item] = value
+          self.map[item] = value
 
 
      def _parse(self):
@@ -374,7 +374,7 @@ class JobscriptAssembler(object):
           loop = ''
           _iterable = None
           _macros = None
-          _locals = dict(item for item in self._map.items())
+          _locals = dict(item for item in self.map.items())
                                         
           with open(os.path.join('@prefix@', '@pkgdatasubdir@', 'job_script.stubs'), 'r') as stubs:
                for num, line in enumerate(stubs):
@@ -395,12 +395,12 @@ class JobscriptAssembler(object):
                                    # 
                                    # Loop over the iterable, and for each item:
                                    #   run the macro(s) to resolve the string format variable(s)
-                                   #   format the loop stub
-                                   #   add formatted loop stub to stub
+                                   #   expand the loop stub
+                                   #   add expanded loop stub to stub
                                    if do & LOOP:
                                         for item in _iterable:
                                              for key in _macros:
-                                                  _locals[key] = self._map[key](item)
+                                                  _locals[key] = self.map[key](item)
                                              stub += loop % _locals
                                         do ^= LOOP
 
@@ -411,19 +411,19 @@ class JobscriptAssembler(object):
                                         loop = ''
                                         keys = line[1:].split()
                                         key = keys[0]
-                                        _iterable = self._map[key]
+                                        _iterable = self.map[key]
                                         _macros = []
                                         for key in keys[1:]:
                                              assert(key[0] == '%')
                                              _macros.append(key[1:])
                                         do |= LOOP
 
-                              # Inside loop. Add line to loop stub. Format later
+                              # Inside loop. Add line to loop stub. Expand later
                               elif do & LOOP:
                                    loop += line
-                              # Format line and add to stub
+                              # Expand line and add to stub
                               else:
-                                   stub += line % self._map
+                                   stub += line % self.map
 
                          elif do & SKIP:
                               # BEGIN stub
@@ -450,7 +450,7 @@ class JobscriptAssembler(object):
                                         % (str(e), num), 'common.submit.JobscriptAssembler')
 
 
-     def setup_local_transfer(self):
+     def _setup_local_transfer(self):
           """
           Create runtime control directory and update job input and output files.
           RUNTIME_CONTROLDIR is added to the string format map.
@@ -493,7 +493,7 @@ class JobscriptAssembler(object):
                     pass
 
 
-     def setup_cleaning(self): 
+     def _setup_cleaning(self): 
           """
           Setup trash cleaning. No reason to keep trash until gm-kick runs.
           """
@@ -531,7 +531,7 @@ class JobscriptAssembler(object):
                verbose('Failed to read job output file (%s)' % output, 'common.submit')
 
 
-     def setup_runtime_env(self):
+     def _setup_runtime_env(self):
           """
           For non-shared filesystems, replace sessiondir with local scratchdir
           in the stdin, stdout and stderr paths.

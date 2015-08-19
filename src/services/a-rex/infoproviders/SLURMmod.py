@@ -38,7 +38,7 @@ class SLURMInfo(LRMSInfo, object):
 
     def read_config(self):
         self.config = {}
-        execute = excute_local if not self._ssh else execute_remote
+        execute = execute_local if not self._ssh else execute_remote
         handle = execute('%s/scontrol show config| grep "MaxJobCount\|SLURM_VERSION"' % (self._path))
         if handle.returncode:
             raise ArcError('scontrol error: %s' % '\n'.join(handle.stderr), 'SLURMInfo')

@@ -1,6 +1,22 @@
 @import url("basic.css");
 @import url("nordugrid.css");
 
+div.highlight
+{
+  background-color: #FFF8ED	
+  padding: 0 0 0 5px;
+  margin: 10px, 10em, 10px, 10px;
+  font-family: Courier, "Courier New", monospace;
+  border: 1px solid #C0C0C0;
+  text-align: left;
+  display: block;
+}
+
+p
+{
+  margin-right: 10em;
+}
+	
 div.viewcode-block
 {
   font-family: monospace;
@@ -25,14 +41,15 @@ table.field-list
   vertical-align: top;
 }
 
-dl.function
+dl.function, dl.class
 {
   margin-top: 2em
 }
 
-code.descname
+code.descname, code.descclassname
 {
-  font-size: 11pt;
+  font-size: 12pt;
+  color: #660066;
 }
 
 code.xref

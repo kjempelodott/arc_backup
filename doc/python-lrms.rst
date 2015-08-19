@@ -7,14 +7,14 @@ Module tree >
  | |– :mod:`slurm <lrms.slurm>`
  | |– :mod:`common <lrms.common>`
  |      |– :mod:`cancel <lrms.common.cancel>`
- |      |– :mod:`common <lrms.common.common>`
  |      |– :mod:`config <lrms.common.config>`
  |      |– :mod:`files <lrms.common.files>`
+ |      |– :mod:`log <lrms.common.common>`
  |      |– :mod:`parse <lrms.common.parse>`
  |      |– :mod:`proc <lrms.common.proc>`
  |      |– :mod:`scan <lrms.common.scan>`
+ |      |– :mod:`ssh <lrms.common.tools>`
  |      |– :mod:`submit <lrms.common.submit>`
- |      |– :mod:`tools <lrms.common.tools>`
 
 |
 |
@@ -158,17 +158,6 @@ Module: lrms.common.ssh
 Module: lrms.common.submit
 ++++++++++++++++++++++++++
 .. automodule:: lrms.common.submit
-    :members:
-
-|
-
-....
-
-|
-
-Module: lrms.common.tools
-+++++++++++++++++++++++++
-.. automodule:: lrms.common.tools
     :members:
 
 |

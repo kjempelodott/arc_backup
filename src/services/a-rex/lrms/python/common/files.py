@@ -1,5 +1,5 @@
 """
-Wrapper methods for stat-ing, reading and writing files.
+Wrapper methods for stating, reading and writing files.
 """
 
 import os
