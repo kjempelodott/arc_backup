@@ -464,9 +464,6 @@ bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
     config.submitScriptName = config.default_lrms + "Submitter.py";
     config.scanScriptName = config.default_lrms + "Scanner.py";
     config.cancelScriptName = config.default_lrms + "Cancel.py";
-    config.mount_sessiondir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs session";
-    config.mount_runtimedir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs runtime";
-    config.mount_cachedir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs cache";
   }
   CheckLRMSBackends(config);
 
@@ -628,9 +625,6 @@ bool CoreConfig::ParseConfXML(GMConfig& config, const Arc::XMLNode& cfg) {
       config.submitScriptName = config.default_lrms + "Submitter.py";
       config.scanScriptName = config.default_lrms + "Scanner.py";
       config.cancelScriptName = config.default_lrms + "Cancel.py";
-      config.mount_sessiondir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs session";
-      config.mount_runtimedir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs runtime";
-      config.mount_cachedir = Arc::ArcLocation::GetInitdDir() + "/a-rex mount-sshfs cache";
     }
     CheckLRMSBackends(config);
 

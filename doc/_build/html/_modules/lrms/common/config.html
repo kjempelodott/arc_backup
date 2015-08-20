@@ -13,58 +13,90 @@
       
       <h1>Source code for lrms.common.config</h1><div class="highlight"><pre>
 <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Functions for parsing arc.conf and filling :py:data:`~lrms.common.common.Config`.</span>
+<span class="sd">Provides the ``Config`` object, with each arc.conf option as an attribute.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="n">Object</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">log</span> <span class="kn">import</span> <span class="n">debug</span>
 
-<span class="n">Config</span> <span class="o">=</span> <span class="n">Object</span><span class="p">()</span>
-
-
-<span class="k">def</span> <span class="nf">is_conf_setter</span><span class="p">(</span><span class="o">*</span><span class="n">a</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">_object</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="k">pass</span>
 
+<span class="n">Config</span> <span class="o">=</span> <span class="n">_object</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="is_conf_setter"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.config.is_conf_setter">[docs]</a><span class="k">def</span> <span class="nf">is_conf_setter</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Decorator for functions that set :py:data:`~lrms.common.Config` attributes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">is_conf_setter</span> <span class="o">=</span> <span class="bp">True</span>
+    <span class="k">return</span> <span class="n">f</span>
+
+</div>
 <div class="viewcode-block" id="configure"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.config.configure">[docs]</a><span class="k">def</span> <span class="nf">configure</span><span class="p">(</span><span class="n">configfile</span><span class="p">,</span> <span class="o">*</span><span class="n">func</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Parse arc.conf using :py:meth:`ConfigParser.RawConfigParser.read`.</span>
+<span class="sd">    Parse arc.conf using :py:meth:`ConfigParser.RawConfigParser.read` and</span>
+<span class="sd">    set all dicovered options as :py:data:`~lrms.common.Config` attributes. </span>
+<span class="sd">    Additional setter functions ``*func`` will only be executed if they have</span>
+<span class="sd">    been decorated with :py:meth:`lrms.common.config.is_conf_setter`.</span>
 
-<span class="sd">    :param str configfile: full path to arc.conf</span>
-<span class="sd">    :return: config object</span>
-<span class="sd">    :rtype: :py:class:`ConfigParser.ConfigParser`</span>
+<span class="sd">    The ``Config`` object will be pickled to ``/tmp/python_lrms_arc.conf``.</span>
+<span class="sd">    In case the pickle file exists and its modification time is newer than</span>
+<span class="sd">    that of arc.conf, the ``Config`` object will be loaded from this file.</span>
+<span class="sd">    </span>
+<span class="sd">    :param str configfile: path to arc.conf</span>
+<span class="sd">    :param *func: variable length setter function (e.g. set_slurm) list</span>
+<span class="sd">    :type *func: :py:obj:`list` [ :py:obj:`function` ... ]</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="kn">import</span> <span class="nn">ConfigParser</span>
-    <span class="n">cfg</span> <span class="o">=</span> <span class="n">ConfigParser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">()</span>
-    <span class="n">cfg</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">configfile</span><span class="p">)</span>
-    <span class="n">set_common</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="n">set_grid_manager</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="n">set_cluster</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="n">set_queue</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">func</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">func_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;is_conf_setter&#39;</span><span class="p">,</span> <span class="bp">False</span><span class="p">):</span>
-            <span class="n">f</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="kn">import</span> <span class="nn">pickle</span>
+    <span class="n">pickle_conf</span> <span class="o">=</span> <span class="s">&#39;/tmp/python_lrms_arc.conf&#39;</span>
+    <span class="k">global</span> <span class="n">Config</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">assert</span><span class="p">(</span><span class="n">getmtime</span><span class="p">(</span><span class="n">pickle_conf</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">getmtime</span><span class="p">(</span><span class="n">configfile</span><span class="p">))</span>
+        <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Loading pickled config from &#39;</span> <span class="o">+</span> <span class="n">pickle_conf</span><span class="p">,</span> <span class="s">&#39;common.config&#39;</span><span class="p">)</span>
+        <span class="n">Config</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pickle_conf</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="kn">import</span> <span class="nn">ConfigParser</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="n">ConfigParser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">()</span>
+        <span class="n">cfg</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">configfile</span><span class="p">)</span>
+
+        <span class="n">set_common</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+        <span class="n">set_gridmanager</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+        <span class="n">set_cluster</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+        <span class="n">set_queue</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">fun</span> <span class="ow">in</span> <span class="n">func</span><span class="p">:</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="n">fun</span><span class="p">,</span> <span class="s">&#39;is_conf_setter&#39;</span><span class="p">,</span> <span class="bp">False</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fun</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">pickle_conf</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">Config</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="k">pass</span>
             
 </div>
 <div class="viewcode-block" id="set_common"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.config.set_common">[docs]</a><span class="k">def</span> <span class="nf">set_common</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Fill :py:data:`~lrms.common.common.Config` with [common] options.</span>
+<span class="sd">    Set [common] :py:data:`~lrms.common.Config` attributes.</span>
 
-<span class="sd">    :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)</span>
+<span class="sd">    :param cfg: parsed arc.conf</span>
 <span class="sd">    :type cfg: :py:class:`ConfigParser.ConfigParser`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="k">global</span> <span class="n">Config</span>
     <span class="n">Config</span><span class="o">.</span><span class="n">hostname</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;hostname&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span> \
         <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;hostname&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="s">&#39;&#39;</span>
 
 </div>
 <div class="viewcode-block" id="set_gridmanager"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.config.set_gridmanager">[docs]</a><span class="k">def</span> <span class="nf">set_gridmanager</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">   Fill :py:data:`~lrms.common.common.Config` with [grid-manager] options.</span>
-<span class="sd">   </span>
-<span class="sd">   :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)</span>
+<span class="sd">   Set [grid-manager] :py:data:`~lrms.common.Config` attributes.</span>
+
+<span class="sd">   :param cfg: parsed arc.conf</span>
 <span class="sd">   :type cfg: :py:class:`ConfigParser.ConfigParser`</span>
 <span class="sd">   &quot;&quot;&quot;</span>
 
+   <span class="k">global</span> <span class="n">Config</span>
    <span class="c"># joboption_directory</span>
    <span class="n">Config</span><span class="o">.</span><span class="n">sessiondir</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;grid-manager&#39;</span><span class="p">,</span> <span class="s">&#39;sessiondir&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span> \
        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;grid-manager&#39;</span><span class="p">,</span> <span class="s">&#39;sessiondir&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="s">&#39;&#39;</span>
@@ -119,16 +151,20 @@
    <span class="n">Config</span><span class="o">.</span><span class="n">remote_runtimedir</span> <span class="o">=</span> \
        <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;grid-manager&#39;</span><span class="p">,</span> <span class="s">&#39;remote_runtimedir&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span> \
        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;grid-manager&#39;</span><span class="p">,</span> <span class="s">&#39;remote_runtimedir&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="s">&#39;&#39;</span>
+   <span class="n">Config</span><span class="o">.</span><span class="n">ssh_timeout</span> <span class="o">=</span> \
+       <span class="nb">int</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;grid-manager&#39;</span><span class="p">,</span> <span class="s">&#39;ssh_timeout&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span> \
+       <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;grid-manager&#39;</span><span class="p">,</span> <span class="s">&#39;ssh_timeout&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="mi">10</span>
 
 </div>
 <div class="viewcode-block" id="set_cluster"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.config.set_cluster">[docs]</a><span class="k">def</span> <span class="nf">set_cluster</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Fill :py:data:`~lrms.common.common.Config` with [cluster] options.</span>
-
-<span class="sd">    :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)</span>
+<span class="sd">    Set [cluster] :py:data:`~lrms.common.Config` attributes.</span>
+<span class="sd">    </span>
+<span class="sd">    :param cfg: parsed arc.conf</span>
 <span class="sd">    :type cfg: :py:class:`ConfigParser.ConfigParser`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="k">global</span> <span class="n">Config</span>
     <span class="n">Config</span><span class="o">.</span><span class="n">gm_port</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;cluster&#39;</span><span class="p">,</span> <span class="s">&#39;gm_port&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">))</span> \
         <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;cluster&#39;</span><span class="p">,</span> <span class="s">&#39;gm_port&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="mi">2811</span>
     <span class="n">Config</span><span class="o">.</span><span class="n">gm_mount_point</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;cluster&#39;</span><span class="p">,</span> <span class="s">&#39;gm_mount_point&#39;</span><span class="p">)</span> \
@@ -143,20 +179,20 @@
 </div>
 <div class="viewcode-block" id="set_queue"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.config.set_queue">[docs]</a><span class="k">def</span> <span class="nf">set_queue</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Fill :py:data:`~lrms.common.common.Config` with [queue] options.</span>
-
-<span class="sd">    :param cfg: parsed config \</span>
-<span class="sd">    (from :py:meth:`~lrms.common.config.get_parsed_config`)</span>
+<span class="sd">    Set [queue] :py:data:`~lrms.common.Config` attributes.</span>
+<span class="sd">    </span>
+<span class="sd">    :param cfg: parsed arc.conf</span>
 <span class="sd">    :type cfg: :py:class:`ConfigParser.ConfigParser`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="k">global</span> <span class="n">Config</span>
     <span class="n">Config</span><span class="o">.</span><span class="n">queue</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="n">cfg</span><span class="o">.</span><span class="n">sections</span><span class="p">():</span>
         <span class="k">if</span> <span class="n">section</span><span class="p">[:</span><span class="mi">6</span><span class="p">]</span> <span class="o">!=</span> <span class="s">&#39;queue/&#39;</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">section</span><span class="p">[</span><span class="mi">6</span><span class="p">:]:</span>
             <span class="k">continue</span>
         <span class="k">if</span> <span class="n">section</span><span class="p">[</span><span class="mi">6</span><span class="p">:]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">Config</span><span class="o">.</span><span class="n">queue</span><span class="p">:</span>
-            <span class="n">Config</span><span class="o">.</span><span class="n">queue</span><span class="p">[</span><span class="n">section</span><span class="p">[</span><span class="mi">6</span><span class="p">:]]</span> <span class="o">=</span> <span class="n">Object</span><span class="p">()</span>
+            <span class="n">Config</span><span class="o">.</span><span class="n">queue</span><span class="p">[</span><span class="n">section</span><span class="p">[</span><span class="mi">6</span><span class="p">:]]</span> <span class="o">=</span> <span class="n">_object</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="n">section</span><span class="p">,</span> <span class="s">&#39;nodememory&#39;</span><span class="p">):</span>
                 <span class="n">Config</span><span class="o">.</span><span class="n">queue</span><span class="p">[</span><span class="n">section</span><span class="p">[</span><span class="mi">6</span><span class="p">:]]</span><span class="o">.</span><span class="n">nodememory</span> <span class="o">=</span> \
                     <span class="nb">int</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">section</span><span class="p">,</span> <span class="s">&#39;nodememory&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">))</span>

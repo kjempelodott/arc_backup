@@ -34,7 +34,7 @@ def set_slurm(cfg):
 def Submit(config, jobdescs, jc):
     """
     Submits a job to the SLURM queue specified in arc.conf. This method executes the required
-    Run Time Environment scripts and assembles the bash job script. The job script is
+    RunTimeEnvironment scripts and assembles the bash job script. The job script is
     written to file and submitted with ``sbatch``.
 
     :param str config: path to arc.conf
@@ -109,15 +109,13 @@ def Submit(config, jobdescs, jc):
         debug('Local job id: %s' % (job.JobID), 'slurm.Submit')
         debug('----- exiting submitSubmitter.py -----', 'slurm.Submit')
 
-        endpointURL = arc.common.URL(Config.remote_endpoint)
-        if endpointURL.Host():
-            job.JobID = endpointURL.Host() + ':' + job.JobID
         # TODO: What interface name to use?
         job.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
         job.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
         job.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
         # TODO: Change returned endpoints for job. 
         # Currently these URLs are not usable.
+        endpointURL = arc.common.URL(Config.remote_endpoint)
         job.ServiceInformationURL = arc.common.URL('test://localhost')
         job.JobStatusURL = endpointURL
         job.JobManagementURL = endpointURL
@@ -163,7 +161,7 @@ def set_job_id(handle, job):
 
     :param object handle: sbatch handle
     :param job: job object 
-    :type job: py:class:`arc.Job
+    :type job: py:class:`arc.Job`
     :return: ``True`` if found, else ``False``
     :rtype: :py:obj:`str`
     """
@@ -193,7 +191,7 @@ def get_job_script(jobdescs):
     # TODO: Maybe change way in which JobDescriptionParserSLURM is loaded.
     jobscript = JobscriptAssemblerSLURM(jobdescs[0]).assemble()
     if not jobscript:
-        raise ArcError('Unable to assemble SLURM job options', 'slurm.Submit')
+        raise ArcError('Unable to assemble SLURM job option', 'slurm.Submit')
     return jobscript
 
 

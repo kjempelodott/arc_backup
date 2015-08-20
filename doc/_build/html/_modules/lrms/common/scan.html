@@ -13,12 +13,19 @@
       
       <h1>Source code for lrms.common.scan</h1><div class="highlight"><pre>
 <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Common job scanning functions and constants.</span>
+<span class="sd">Defines constants and functions related to scanning.</span>
+
+<span class="sd">RUNNING: list of possible states reported by the bactch system for jobs that are running</span>
+<span class="sd">MESSAGES: mapping between job state reported by batch system and grid-manager state</span>
+<span class="sd">UID: user ID of user running PythonLRMS</span>
+<span class="sd">GID: group ID of user running PythonLRMS</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">files</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">proc</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">import</span> <span class="nn">os</span><span class="o">,</span> <span class="nn">arc</span>
+<span class="kn">from</span> <span class="nn">config</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span> <span class="nn">files</span> <span class="kn">import</span> <span class="n">read</span><span class="p">,</span> <span class="n">write</span><span class="p">,</span> <span class="n">getmtime</span>
+<span class="kn">from</span> <span class="nn">proc</span> <span class="kn">import</span> <span class="n">execute_local</span><span class="p">,</span> <span class="n">execute_remote</span>
+
 
 <span class="n">RUNNING</span>  <span class="o">=</span> <span class="p">[</span><span class="s">&#39;PENDING&#39;</span><span class="p">,</span><span class="s">&#39;RUNNING&#39;</span><span class="p">,</span><span class="s">&#39;SUSPENDED&#39;</span><span class="p">,</span><span class="s">&#39;COMPLETING&#39;</span><span class="p">,</span>     <span class="c"># slurm</span>
             <span class="s">&#39;PSUSP&#39;</span><span class="p">,</span><span class="s">&#39;USUSP&#39;</span><span class="p">,</span><span class="s">&#39;SUSSP&#39;</span><span class="p">,</span><span class="s">&#39;RUN&#39;</span><span class="p">,</span><span class="s">&#39;PEND&#39;</span><span class="p">,</span>             <span class="c"># lsf</span>
@@ -48,21 +55,22 @@
     <span class="s">&#39;38&#39;</span>       <span class="p">:</span><span class="s">&#39;Exit&#39;</span><span class="p">,</span>
     <span class="p">}</span>
 
+
 <div class="viewcode-block" id="get_jobs"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.get_jobs">[docs]</a><span class="k">def</span> <span class="nf">get_jobs</span><span class="p">(</span><span class="n">ctrdirs</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Get GRID jobs with status *INLRMS*.</span>
+<span class="sd">    Scan control directories for jobs with status *INLRMS* or *CANCELING*.</span>
 
-<span class="sd">    :param list ctrdirs:  list of paths (:py:obj:`str`) to controld directories</span>
-<span class="sd">    :return: dictionary of local job IDs and job objects</span>
-<span class="sd">    :rtype: :py:obj:`dict` { :py:obj:`str` : \</span>
-<span class="sd">    :py:class:`~lrms.common.common.Object` }</span>
-<span class="sd">    .. note:: The job obects have the following attributes: ``localid``, \</span>
-<span class="sd">    ``gridid``, ``local_file``, ``lrms_done_file``, ``grami_file``, \</span>
-<span class="sd">    ``output_file``, ``state``, ``uid``, ``gid``, ``sessiondir``, \</span>
-<span class="sd">    ``diag_file``, ``count_file``, ``errors_file`` and ``comments_file``. \</span>
-<span class="sd">    The file and dir attributes are paths (:py:obj:`str`), while ``state`` \</span>
-<span class="sd">    (:py:obj:`str`) is the current state of the job within the LRMS.</span>
+<span class="sd">    :param list ctrdirs: list of paths to control directories</span>
+<span class="sd">    :return: dictionary that maps local job ID to job object</span>
+<span class="sd">    :rtype: :py:obj:`dict` { :py:obj:`str` : :py:obj:`object` ... }</span>
+
+<span class="sd">    .. note:: The returned job obects have the following attributes: </span>
+<span class="sd">    ``localid``, ``gridid``, ``local_file``, ``lrms_done_file``, ``grami_file``,</span>
+<span class="sd">    ``output_file``, ``state``, ``uid``, ``gid``, ``sessiondir``,</span>
+<span class="sd">    ``diag_file``, ``count_file``, ``errors_file`` and ``comment_file``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="kn">import</span> <span class="nn">re</span>
 
     <span class="n">jobs</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">for</span> <span class="n">ctrdir</span> <span class="ow">in</span> <span class="n">ctrdirs</span><span class="p">:</span>
@@ -72,7 +80,7 @@
                 <span class="n">globalid</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">r&#39;job.(?P&lt;id&gt;\w+).status&#39;</span><span class="p">,</span><span class="n">fname</span><span class="p">)</span><span class="o">.</span><span class="n">groupdict</span><span class="p">()[</span><span class="s">&#39;id&#39;</span><span class="p">]</span>
                 <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">procdir</span><span class="p">,</span> <span class="n">fname</span><span class="p">),</span> <span class="s">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
                     <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">&#39;INLRMS|CANCELING&#39;</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">readline</span><span class="p">()):</span>
-                        <span class="n">job</span> <span class="o">=</span> <span class="n">Object</span><span class="p">()</span>
+                        <span class="n">job</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="s">&#39;Job&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nb">object</span><span class="p">,</span> <span class="p">),</span> <span class="p">{})()</span>
                         <span class="n">job</span><span class="o">.</span><span class="n">globalid</span> <span class="o">=</span> <span class="n">globalid</span>
                         <span class="n">job</span><span class="o">.</span><span class="n">controldir</span> <span class="o">=</span> <span class="n">ctrdir</span>
                         <span class="n">job</span><span class="o">.</span><span class="n">local_file</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/job.</span><span class="si">%s</span><span class="s">.local&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="n">job</span><span class="o">.</span><span class="n">globalid</span><span class="p">)</span>
@@ -86,13 +94,13 @@
                         <span class="n">job</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
                         <span class="n">job</span><span class="o">.</span><span class="n">diag_file</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">.diag&#39;</span> <span class="o">%</span> <span class="n">job</span><span class="o">.</span><span class="n">sessiondir</span>
                         <span class="n">job</span><span class="o">.</span><span class="n">errors_file</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">.errors&#39;</span> <span class="o">%</span> <span class="n">job</span><span class="o">.</span><span class="n">sessiondir</span>
-                        <span class="n">job</span><span class="o">.</span><span class="n">comments_file</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">.comment&#39;</span> <span class="o">%</span> <span class="n">job</span><span class="o">.</span><span class="n">sessiondir</span>
+                        <span class="n">job</span><span class="o">.</span><span class="n">comment_file</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">.comment&#39;</span> <span class="o">%</span> <span class="n">job</span><span class="o">.</span><span class="n">sessiondir</span>
                         <span class="n">jobs</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">localid</span><span class="p">]</span> <span class="o">=</span> <span class="n">job</span>
                         <span class="k">try</span><span class="p">:</span>
                             <span class="n">job</span><span class="o">.</span><span class="n">uid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">diag_file</span><span class="p">)</span><span class="o">.</span><span class="n">st_uid</span>
                             <span class="n">job</span><span class="o">.</span><span class="n">gid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">diag_file</span><span class="p">)</span><span class="o">.</span><span class="n">st_gid</span>
                         <span class="k">except</span><span class="p">:</span>
-                            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">,</span> <span class="s">&#39;Failed to stat </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">job</span><span class="o">.</span><span class="n">diag_file</span><span class="p">,</span> <span class="s">&#39;common.scan&#39;</span><span class="p">)</span>
+                            <span class="n">verbose</span><span class="p">(</span><span class="s">&#39;Failed to stat </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">job</span><span class="o">.</span><span class="n">diag_file</span><span class="p">,</span> <span class="s">&#39;common.scan&#39;</span><span class="p">)</span>
                             <span class="n">job</span><span class="o">.</span><span class="n">uid</span> <span class="o">=</span> <span class="n">UID</span>
                             <span class="n">job</span><span class="o">.</span><span class="n">gid</span> <span class="o">=</span> <span class="n">GID</span>
             <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
@@ -100,18 +108,17 @@
                 <span class="k">continue</span>
             <span class="k">except</span> <span class="ne">IOError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                 <span class="c"># Possibly .status file deleted by other process</span>
-                <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">,</span> <span class="s">&#39;IOError when scanning for jobs in /processing:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+                <span class="n">verbose</span><span class="p">(</span><span class="s">&#39;IOError when scanning for jobs in /processing:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
                 <span class="k">continue</span>
     <span class="k">return</span> <span class="n">jobs</span>
 
 </div>
 <div class="viewcode-block" id="set_exit_code_from_diag"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.set_exit_code_from_diag">[docs]</a><span class="k">def</span> <span class="nf">set_exit_code_from_diag</span><span class="p">(</span><span class="n">job</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Retrieve exit code from the diag file. If successful, the exit code \</span>
-<span class="sd">    will be saved in ``job.exitcode``.</span>
+<span class="sd">    Retrieve exit code from the diag file and set the ``job.exitcode`` attribute.</span>
 
-<span class="sd">    :param job: job object (from :py:meth:`~lrms.common.scan.get_jobs`)</span>
-<span class="sd">    :type job: :py:class:`~lrms.common.common.Object`</span>
+<span class="sd">    :param job: job object </span>
+<span class="sd">    :type job: :py:obj:`object`</span>
 <span class="sd">    :return: ``True`` if exit code was found, else ``False`` </span>
 <span class="sd">    :rtype: :py:obj:`bool`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -138,16 +145,22 @@
             <span class="k">continue</span>
         <span class="c"># Wait</span>
         <span class="k">if</span> <span class="n">time_slept</span> <span class="o">&gt;=</span> <span class="n">time_to_wait</span><span class="p">:</span>
-            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Failed to get exit code from diag file&#39;</span><span class="p">,</span> <span class="s">&#39;common.scan&#39;</span><span class="p">)</span>
+            <span class="n">warn</span><span class="p">(</span><span class="s">&#39;Failed to get exit code from diag file&#39;</span><span class="p">,</span> <span class="s">&#39;common.scan&#39;</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">False</span>
         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">time_step</span><span class="p">)</span>
         <span class="n">time_slept</span> <span class="o">+=</span> <span class="n">time_step</span>
 
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Failed to get exit code from diag file&#39;</span><span class="p">,</span> <span class="s">&#39;common.scan&#39;</span><span class="p">)</span>
+    <span class="n">warn</span><span class="p">(</span><span class="s">&#39;Failed to get exit code from diag file&#39;</span><span class="p">,</span> <span class="s">&#39;common.scan&#39;</span><span class="p">)</span>
     <span class="k">return</span> <span class="bp">False</span>
 
 </div>
-<span class="k">def</span> <span class="nf">add_failure</span><span class="p">(</span><span class="n">job</span><span class="p">):</span>
+<div class="viewcode-block" id="add_failure"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.add_failure">[docs]</a><span class="k">def</span> <span class="nf">add_failure</span><span class="p">(</span><span class="n">job</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Add +1 to the failure counter. If a job has more than 5 failures,</span>
+<span class="sd">    it is marked as lost with unknown exit code. A failure is typically</span>
+<span class="sd">    added if the job stopped running, but reading exit code from diag </span>
+<span class="sd">    file failed.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">count_file</span><span class="p">,</span> <span class="s">&#39;a+&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">cf</span><span class="p">:</span>
         <span class="k">print</span> <span class="o">&gt;&gt;</span> <span class="n">cf</span><span class="p">,</span> \
             <span class="nb">int</span><span class="p">(</span><span class="n">cf</span><span class="o">.</span><span class="n">read</span><span class="p">()</span> <span class="k">if</span> <span class="n">cf</span><span class="o">.</span><span class="n">read</span><span class="p">()</span> <span class="ow">and</span> <span class="p">(</span><span class="n">cf</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">True</span><span class="p">)</span>
@@ -158,15 +171,15 @@
         <span class="n">job</span><span class="o">.</span><span class="n">exitcode</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
         <span class="n">job</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="s">&#39;Job was lost with unknown exit code. Status: &#39;</span> <span class="o">+</span> <span class="n">MESSAGES</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">state</span><span class="p">]</span>
 
- 
+ </div>
 <div class="viewcode-block" id="update_diag"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.update_diag">[docs]</a><span class="k">def</span> <span class="nf">update_diag</span><span class="p">(</span><span class="n">job</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Filters out WallTime from the .diag-file if present and</span>
-<span class="sd">    replaces it with output from the LRMS. It also adds StartTime and</span>
-<span class="sd">    EndTime for accounting.</span>
+<span class="sd">    Filters out WallTime from the diag file if present and</span>
+<span class="sd">    replaces it with output from the batch system. It also adds </span>
+<span class="sd">    StartTime and EndTime for accounting.</span>
 
-<span class="sd">    :param job: job object (from :py:meth:`~lrms.common.scan.get_jobs`)</span>
-<span class="sd">    :type job: :py:class:`~lrms.common.common.Object`</span>
+<span class="sd">    :param job: job object</span>
+<span class="sd">    :type job: :py:obj:`object`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">content</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">diag_file</span><span class="p">)</span>
@@ -216,30 +229,30 @@
 </div>
 <div class="viewcode-block" id="read_local_file"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.read_local_file">[docs]</a><span class="k">def</span> <span class="nf">read_local_file</span><span class="p">(</span><span class="n">job</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Read local_file and set  ``localid`` and ``sessiondir`` attributes of job object.</span>
+<span class="sd">    Read the local file and set  ``job.localid`` and ``job.sessiondir`` attributes.</span>
 
-<span class="sd">    :param job: job object with attributes ``controldir`` and ``globalid``</span>
-<span class="sd">    :type job: :py:class:`~lrms.common.common.Object`</span>
+<span class="sd">    :param job: job object</span>
+<span class="sd">    :type job: :py:obj:`object`</span>
 <span class="sd">    :return: ``True`` if successful, else ``False``</span>
 <span class="sd">    :rtype: :py:obj:`bool`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">try</span><span class="p">:</span>
         <span class="n">content</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;=&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">read</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">local_file</span><span class="p">))</span>
-        <span class="n">job</span><span class="o">.</span><span class="n">localid</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s">&#39;localid&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">localid</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s">&#39;localid&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
         <span class="n">job</span><span class="o">.</span><span class="n">sessiondir</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s">&#39;sessiondir&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
         <span class="k">return</span> <span class="bp">True</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span> 
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">ERROR</span><span class="p">,</span> <span class="s">&#39;Failed to get local ID or sessiondir from local file (</span><span class="si">%s</span><span class="s">)&#39;</span> <span class="o">%</span> <span class="n">globalid</span><span class="p">,</span> <span class="s">&#39;common.scan&#39;</span><span class="p">)</span>
+        <span class="n">error</span><span class="p">(</span><span class="s">&#39;Failed to get local ID or sessiondir from local file (</span><span class="si">%s</span><span class="s">)&#39;</span> <span class="o">%</span> <span class="n">globalid</span><span class="p">,</span> <span class="s">&#39;common.scan&#39;</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">False</span>
 
 </div>
 <div class="viewcode-block" id="gm_kick"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.gm_kick">[docs]</a><span class="k">def</span> <span class="nf">gm_kick</span><span class="p">(</span><span class="n">jobs</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Execute gm-kick.</span>
+<span class="sd">    Execute ``gm-kick``.</span>
 
-<span class="sd">    :param job: list of jobs (from :py:meth:`~lrms.common.scan.get_jobs`) to be kicked</span>
-<span class="sd">    :type job: :py:obj:`list` [ :py:class:`~lrms.common.common.Object` ]</span>
+<span class="sd">    :param job: list of jobs to be kicked</span>
+<span class="sd">    :type job: :py:obj:`list` [ :py:obj:`object` ... ]</span>
 <span class="sd">    &quot;&quot;&quot;</span>    
 
     <span class="c"># Execute locally.</span>
@@ -251,13 +264,13 @@
 </div>
 <div class="viewcode-block" id="write_comments"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.write_comments">[docs]</a><span class="k">def</span> <span class="nf">write_comments</span><span class="p">(</span><span class="n">job</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Write content of comments file to errors file.</span>
+<span class="sd">    Write content of comment file to errors file.</span>
 
-<span class="sd">    :param job: job object (from :py:meth:`~lrms.common.scan.get_jobs`)</span>
-<span class="sd">    :type job: :py:class:`~lrms.common.common.Object`</span>
+<span class="sd">    :param job: job object</span>
+<span class="sd">    :type job: :py:obj:`object`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">comments</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">comments_file</span><span class="p">)</span>
+    <span class="n">comments</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">comment_file</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">comments</span><span class="p">:</span>
         <span class="n">buf</span> <span class="o">=</span> \
         <span class="s">&#39;------- &#39;</span>
@@ -271,13 +284,14 @@
         <span class="n">write</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">errors_file</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="mo">0644</span><span class="p">,</span> <span class="bp">True</span><span class="p">)</span>
  
 </div>
-<div class="viewcode-block" id="get_MDS"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.get_MDS">[docs]</a><span class="k">def</span> <span class="nf">get_MDS</span><span class="p">(</span><span class="n">dm</span><span class="p">,</span> <span class="n">lc_time</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="get_MDS"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.get_MDS">[docs]</a><span class="k">def</span> <span class="nf">get_MDS</span><span class="p">(</span><span class="n">dm</span><span class="p">,</span> <span class="n">lc_time</span> <span class="o">=</span> <span class="s">&#39;en_US&#39;</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Get date and time in MDS format.</span>
 <span class="sd">    </span>
 <span class="sd">    :param dm: dictionary with keys &#39;yyyy&#39;, &#39;mm&#39;|&#39;bbb&#39;,</span>
 <span class="sd">    &#39;dd&#39;, &#39;HH&#39;, &#39;MM&#39; and &#39;SS&#39;</span>
 <span class="sd">    :type dm: :py:obj:`dict`</span>
+<span class="sd">    :param str lc_time: the locale, if &#39;bbb&#39; given</span>
 <span class="sd">    :return: string on the form &#39;yyyy-mm-ddTHH:MM:SS&#39;</span>
 <span class="sd">    :rtype: :py:obj:`str`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -287,23 +301,19 @@
     <span class="k">if</span> <span class="s">&#39;bbb&#39;</span> <span class="ow">in</span> <span class="n">dm</span> <span class="ow">and</span> <span class="s">&#39;mm&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">dm</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span> <span class="nn">locale</span>
-            <span class="n">locale</span><span class="o">.</span><span class="n">setlocale</span><span class="p">(</span><span class="n">locale</span><span class="o">.</span><span class="n">LC_TIME</span><span class="p">,</span> <span class="s">&#39;en_US&#39;</span><span class="p">)</span>
-        <span class="k">except</span><span class="p">:</span>
-            <span class="k">pass</span>
-        <span class="k">try</span><span class="p">:</span>
+            <span class="n">locale</span><span class="o">.</span><span class="n">setlocale</span><span class="p">(</span><span class="n">locale</span><span class="o">.</span><span class="n">LC_TIME</span><span class="p">,</span> <span class="n">lc_time</span><span class="p">)</span>
             <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
             <span class="n">dm</span><span class="p">[</span><span class="s">&#39;mm&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">dm</span><span class="p">[</span><span class="s">&#39;bbb&#39;</span><span class="p">],</span><span class="s">&#39;%b&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">month</span>
         <span class="k">except</span><span class="p">:</span>
-            <span class="n">dm</span><span class="p">[</span><span class="s">&#39;mm&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">now</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">6</span><span class="p">]</span>
+            <span class="k">pass</span>
             
-    <span class="k">return</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">-</span><span class="si">%s</span><span class="s">-</span><span class="si">%s</span><span class="s">T</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">dm</span><span class="p">[</span><span class="s">&#39;yyyy&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="s">&#39;yyyy&#39;</span> <span class="ow">in</span> <span class="n">dm</span> <span class="k">else</span> <span class="n">now</span><span class="p">[:</span><span class="mi">4</span><span class="p">],</span>
-                                  <span class="n">dm</span><span class="p">[</span><span class="s">&#39;mm&#39;</span><span class="p">],</span> <span class="n">dm</span><span class="p">[</span><span class="s">&#39;dd&#39;</span><span class="p">],</span> <span class="n">dm</span><span class="p">[</span><span class="s">&#39;HH&#39;</span><span class="p">],</span> <span class="n">dm</span><span class="p">[</span><span class="s">&#39;MM&#39;</span><span class="p">],</span>
-                                  <span class="n">dm</span><span class="p">[</span><span class="s">&#39;SS&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="s">&#39;SS&#39;</span> <span class="ow">in</span> <span class="n">dm</span> <span class="k">else</span> <span class="s">&#39;00&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">-</span><span class="si">%s</span><span class="s">-</span><span class="si">%s</span><span class="s">T</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">dm</span><span class="p">[</span><span class="s">&#39;yyyy&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="s">&#39;yyyy&#39;</span> <span class="ow">in</span> <span class="n">dm</span> <span class="k">else</span> <span class="n">now</span><span class="p">[:</span><span class="mi">4</span><span class="p">],</span> <span class="n">dm</span><span class="p">[</span><span class="s">&#39;mm&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="s">&#39;mm&#39;</span> <span class="ow">in</span> <span class="n">dm</span> <span class="k">else</span> <span class="n">now</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span> 
+                                  <span class="n">dm</span><span class="p">[</span><span class="s">&#39;dd&#39;</span><span class="p">],</span> <span class="n">dm</span><span class="p">[</span><span class="s">&#39;HH&#39;</span><span class="p">],</span> <span class="n">dm</span><span class="p">[</span><span class="s">&#39;MM&#39;</span><span class="p">],</span> <span class="n">dm</span><span class="p">[</span><span class="s">&#39;SS&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="s">&#39;SS&#39;</span> <span class="ow">in</span> <span class="n">dm</span> <span class="k">else</span> <span class="s">&#39;00&#39;</span><span class="p">)</span>
 
 </div>
 <div class="viewcode-block" id="is_running"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.scan.is_running">[docs]</a><span class="k">def</span> <span class="nf">is_running</span><span class="p">(</span><span class="n">pid</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Check if a process is running.</span>
+<span class="sd">    Check if process is running on the local machine.</span>
 <span class="sd">    </span>
 <span class="sd">    :param int pid: process ID</span>
 <span class="sd">    :return: ``True`` if process is running, else ``False``</span>

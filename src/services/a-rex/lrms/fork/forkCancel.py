@@ -17,7 +17,6 @@ except:
 
 
 if __name__ == "__main__":
-    set_log_name("forkCancel")
 
     if len(sys.argv) != 4:
         raise ArcError("Usage: %s --config <arc.conf> <grami>" % (sys.argv[0]))

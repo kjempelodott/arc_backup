@@ -16,26 +16,22 @@
 <span class="sd">Common submit job functions.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">proc</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">files</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">import</span> <span class="nn">os</span><span class="o">,</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">arc</span>
+<span class="kn">from</span> <span class="nn">config</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span> <span class="nn">proc</span> <span class="kn">import</span> <span class="n">execute_local</span><span class="p">,</span> <span class="n">execute_remote</span>
+<span class="kn">from</span> <span class="nn">files</span> <span class="kn">import</span> <span class="n">write</span>
+<span class="kn">from</span> <span class="nn">log</span> <span class="kn">import</span> <span class="o">*</span>
 
-<div class="viewcode-block" id="D"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.D">[docs]</a><span class="k">def</span> <span class="nf">D</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
-     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">     Alias for ``log(arc.DEBUG, msg, &#39;common.submit&#39;)``</span>
 
-<span class="sd">     :param str msg: debug message</span>
-<span class="sd">     &quot;&quot;&quot;</span>
-
-     <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
-
-</div>
 <div class="viewcode-block" id="validate_attributes"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.validate_attributes">[docs]</a><span class="k">def</span> <span class="nf">validate_attributes</span><span class="p">(</span><span class="n">jd</span><span class="p">):</span>
      <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">     Check if GRID (global) job ID and other required attributes are are set.</span>
+<span class="sd">     Checks if GRID (global) job ID and executable are set in job description</span>
+<span class="sd">     and that runtime environment is resolved. For none-shared filesystems, </span>
+<span class="sd">     the scratchdir must also be specified.</span>
 
 <span class="sd">     :param jd: job description object</span>
-<span class="sd">     :type jd: :py:class:`arc.JobDescription (Swig Object of type &#39;Arc::JobDescription *&#39;)`</span>
+<span class="sd">     :type jd: :py:class:`arc.JobDescription`</span>
 <span class="sd">     &quot;&quot;&quot;</span>
   
      <span class="k">if</span> <span class="s">&#39;joboption;gridid&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">:</span>
@@ -45,18 +41,14 @@
           <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">]</span> <span class="o">=</span> \
               <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">sessiondir</span><span class="p">,</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;gridid&#39;</span><span class="p">])</span>
 
-     <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;local_directory&#39;</span><span class="p">]</span> <span class="o">=</span> \
-                         <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">]</span>
+     <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;local_directory&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">]</span>
 
      <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_sessiondir</span><span class="p">:</span>
           <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">]</span> <span class="o">=</span> \
               <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_sessiondir</span><span class="p">,</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;gridid&#39;</span><span class="p">])</span>
-          <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span> <span class="o">=</span> \
-              <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">sessiondir</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_sessiondir</span><span class="p">)</span>
-          <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span> <span class="o">=</span> \
-              <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">sessiondir</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_sessiondir</span><span class="p">)</span>
-          <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span> <span class="o">=</span> \
-              <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">sessiondir</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_sessiondir</span><span class="p">)</span>
+          <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">sessiondir</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_sessiondir</span><span class="p">)</span>
+          <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">sessiondir</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_sessiondir</span><span class="p">)</span>
+          <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">sessiondir</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_sessiondir</span><span class="p">)</span>
 
      <span class="k">if</span> <span class="s">&#39;joboption;controldir&#39;</span> <span class="ow">in</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">:</span>
           <span class="n">Config</span><span class="o">.</span><span class="n">controldir</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;controldir&#39;</span><span class="p">]</span>
@@ -69,22 +61,30 @@
                          <span class="s">&#39;RUNTIME_LOCAL_SCRATCH_DIR must be set if &#39;</span>
                          <span class="s">&#39;RUNTIME_NODE_SEES_FRONTEND is empty&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
 
+     <span class="n">has_globalid</span> <span class="o">=</span> <span class="bp">False</span>
+     <span class="k">for</span> <span class="n">env_pair</span> <span class="ow">in</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Environment</span><span class="p">:</span>
+          <span class="k">if</span> <span class="n">env_pair</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;GRID_GLOBAL_JOBID&#39;</span><span class="p">:</span>
+               <span class="n">has_globalid</span> <span class="o">=</span> <span class="bp">True</span>
+               <span class="k">break</span>
+     <span class="k">if</span> <span class="ow">not</span> <span class="n">has_globalid</span><span class="p">:</span>
+          <span class="n">globalid</span> <span class="o">=</span> <span class="s">&#39;gsiftp://</span><span class="si">%s</span><span class="s">:</span><span class="si">%s%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">hostname</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">gm_port</span><span class="p">,</span>
+                                              <span class="n">Config</span><span class="o">.</span><span class="n">gm_mount_point</span><span class="p">,</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;gridid&#39;</span><span class="p">])</span>
+          <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Environment</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s">&#39;GRID_GLOBAL_JOBID&#39;</span><span class="p">,</span> <span class="n">globalid</span><span class="p">))</span>
+
 </div>
 <div class="viewcode-block" id="write_script_file"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.write_script_file">[docs]</a><span class="k">def</span> <span class="nf">write_script_file</span><span class="p">(</span><span class="n">jobscript</span><span class="p">):</span>
      <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">     Create and write script file.</span>
+<span class="sd">     Write job script to file.</span>
 
-<span class="sd">     :param str jobscript: Bash job script</span>
-<span class="sd">     :return: path to script file</span>
+<span class="sd">     :param str jobscript: job script buffer</span>
+<span class="sd">     :return: path to file</span>
 <span class="sd">     :rtype: :py:obj:`str`</span>
 <span class="sd">     &quot;&quot;&quot;</span>
      
-     <span class="kn">import</span> <span class="nn">uuid</span>
+     <span class="kn">import</span> <span class="nn">uuid</span><span class="o">,</span> <span class="nn">stat</span>
 
      <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">rm -- &quot;$0&quot;</span><span class="se">\n</span><span class="s">&#39;</span> <span class="c"># self destroy</span>
-     <span class="n">mode</span> <span class="o">=</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IXUSR</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IWUSR</span> <span class="o">|</span> \
-            <span class="n">stat</span><span class="o">.</span><span class="n">S_IXGRP</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IRGRP</span> <span class="o">|</span> \
-            <span class="n">stat</span><span class="o">.</span><span class="n">S_IXOTH</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IROTH</span>
+     <span class="n">mode</span> <span class="o">=</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IXUSR</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IXGRP</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IXOTH</span> <span class="o">|</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_IROTH</span>
 
      <span class="n">path</span> <span class="o">=</span> <span class="s">&#39;/tmp/&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span> <span class="o">+</span> <span class="s">&#39;.sh&#39;</span>
 
@@ -94,118 +94,74 @@
      <span class="k">return</span> <span class="n">path</span>
 
 </div>
-<div class="viewcode-block" id="add_user_env"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.add_user_env">[docs]</a><span class="k">def</span> <span class="nf">add_user_env</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
-     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">     Get user environment section of job script.</span>
-
-<span class="sd">     :param jobdescs: job description list object</span>
-<span class="sd">     :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type \</span>
-<span class="sd">&#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">     :return: jobscript section</span>
-<span class="sd">     :rtype: :py:obj:`str`</span>
-<span class="sd">     &quot;&quot;&quot;</span>
-
-     <span class="n">jobscript</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
-     <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;# Setting environment variables as specified by user</span><span class="se">\n</span><span class="s">&#39;</span>
-     <span class="n">has_gridglobalid</span> <span class="o">=</span> <span class="bp">False</span>
-
-     <span class="k">for</span> <span class="n">env_pair</span> <span class="ow">in</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Environment</span><span class="p">:</span>
-          <span class="n">has_gridglobalid</span> <span class="o">|=</span> <span class="n">env_pair</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;GRID_GLOBAL_JOBID&#39;</span>
-          <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&quot;export &#39;</span><span class="si">%s</span><span class="s">=&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">env_pair</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-          <span class="n">value</span> <span class="o">=</span> <span class="n">env_pair</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-          <span class="k">if</span> <span class="n">value</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;&quot;&#39;</span> <span class="ow">and</span> <span class="n">value</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;&quot;&#39;</span><span class="p">:</span>
-               <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s">&quot;</span><span class="se">\\\&#39;</span><span class="s">&quot;</span><span class="p">)</span> <span class="c"># &#39; -&gt; \&#39;</span>
-               <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\\\\\\\\</span><span class="s">&quot;</span><span class="p">,</span> <span class="s">&quot;</span><span class="se">\\</span><span class="s">&quot;</span><span class="p">)</span> <span class="c"># \\\\ -&gt; \</span>
-               <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\\\&#39;</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&quot;&#39;</span><span class="se">\\\&#39;</span><span class="s">&#39;&quot;</span><span class="p">)</span> <span class="c"># \&#39; -&gt; &#39;\&#39;&#39;</span>
-          <span class="k">else</span><span class="p">:</span>
-               <span class="n">value</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s">r&quot;^&#39;(?&lt;!</span><span class="se">\\</span><span class="s">&#39;&#39;)(.*)(?&lt;!&#39;</span><span class="se">\\</span><span class="s">&#39;)&#39;$&quot;</span><span class="p">,</span> <span class="s">&quot;</span><span class="se">\\</span><span class="s">1&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-               <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\\\\\\\\</span><span class="s">&quot;</span><span class="p">,</span> <span class="s">&quot;</span><span class="se">\\\\</span><span class="s">&quot;</span><span class="p">)</span> <span class="c"># \\\\ -&gt; \</span>
-          <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
-               <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">value</span><span class="p">)</span>
-          <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&quot;&#39;</span><span class="se">\n</span><span class="s">&quot;</span>
-
-     <span class="c"># guess globalid in case not already provided</span>
-     <span class="k">if</span> <span class="ow">not</span> <span class="n">has_gridglobalid</span><span class="p">:</span>
-          <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">hostname</span><span class="p">:</span>
-               <span class="kn">import</span> <span class="nn">socket</span>
-               <span class="n">Config</span><span class="o">.</span><span class="n">hostname</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">()</span>
-          <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&quot;export GRID_GLOBAL_JOBID=&#39;gsiftp://</span><span class="si">%s</span><span class="s">:</span><span class="si">%s%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&quot;</span> <span class="o">%</span> \
-              <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">hostname</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">gm_port</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">gm_mount_point</span><span class="p">,</span> 
-               <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;gridid&#39;</span><span class="p">])</span>
-
-     <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span>
-     <span class="k">return</span> <span class="n">jobscript</span>
-
-</div>
-<div class="viewcode-block" id="set_req_mem"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.set_req_mem">[docs]</a><span class="k">def</span> <span class="nf">set_req_mem</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
+<div class="viewcode-block" id="set_req_mem"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.set_req_mem">[docs]</a><span class="k">def</span> <span class="nf">set_req_mem</span><span class="p">(</span><span class="n">jd</span><span class="p">):</span>
    <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">   Set memory requirement attributes in job description.</span>
 
-<span class="sd">   :param jobdescs: job description list object</span>
-<span class="sd">   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
+<span class="sd">   :param jd: job description object</span>
+<span class="sd">   :type jd: :py:class:`arc.JobDescription`</span>
 <span class="sd">   &quot;&quot;&quot;</span>
 
-   <span class="k">if</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+   <span class="k">if</span> <span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
        <span class="n">nodememory</span> <span class="o">=</span> <span class="mi">0</span>
        <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">defaultmemory</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
-           <span class="k">if</span> <span class="p">(</span><span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">QueueName</span> <span class="ow">in</span> <span class="n">Config</span><span class="o">.</span><span class="n">queue</span>
-               <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">queue</span><span class="p">[</span><span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">QueueName</span><span class="p">],</span> <span class="s">&#39;nodememory&#39;</span><span class="p">)):</span>
-                <span class="n">nodememory</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">queue</span><span class="p">[</span><span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">QueueName</span><span class="p">]</span><span class="o">.</span><span class="n">nodememory</span>
+           <span class="k">if</span> <span class="p">(</span><span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">QueueName</span> <span class="ow">in</span> <span class="n">Config</span><span class="o">.</span><span class="n">queue</span>
+               <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">queue</span><span class="p">[</span><span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">QueueName</span><span class="p">],</span> <span class="s">&#39;nodememory&#39;</span><span class="p">)):</span>
+                <span class="n">nodememory</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">queue</span><span class="p">[</span><span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">QueueName</span><span class="p">]</span><span class="o">.</span><span class="n">nodememory</span>
            <span class="k">elif</span> <span class="n">Config</span><span class="o">.</span><span class="n">nodememory</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">nodememory</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">nodememory</span>
 
-       <span class="n">D</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="o">*</span><span class="mi">69</span><span class="p">)</span> 
-       <span class="n">D</span><span class="p">(</span><span class="s">&#39;WARNING: The job description contains no explicit memory requirement.&#39;</span><span class="p">)</span>
+       <span class="n">debug</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="o">*</span><span class="mi">69</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+       <span class="n">debug</span><span class="p">(</span><span class="s">&#39;WARNING: The job description contains no explicit memory requirement.&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
        <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">defaultmemory</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-           <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">defaultmemory</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         A default memory limit taken from </span><span class="se">\&#39;</span><span class="s">defaultmemory</span><span class="se">\&#39;</span><span class="s"> in&#39;</span><span class="p">)</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         arc.conf will apply.&#39;</span><span class="p">)</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         Limit is: </span><span class="si">%s</span><span class="s"> mb.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">defaultmemory</span><span class="p">))</span>
+           <span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">defaultmemory</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         A default memory limit taken from </span><span class="se">\&#39;</span><span class="s">defaultmemory</span><span class="se">\&#39;</span><span class="s"> in&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         arc.conf will apply.&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         Limit is: </span><span class="si">%s</span><span class="s"> mb.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">defaultmemory</span><span class="p">),</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
        <span class="k">elif</span> <span class="n">nodememory</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-           <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">nodememory</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         A default memory limit taken from </span><span class="se">\&#39;</span><span class="s">nodememory</span><span class="se">\&#39;</span><span class="s"> in&#39;</span><span class="p">)</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         arc.conf will apply.&#39;</span><span class="p">)</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         You may want to set </span><span class="se">\&#39;</span><span class="s">defaultmemory</span><span class="se">\&#39;</span><span class="s"> to something&#39;</span><span class="p">)</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         else in arc.conf to better handle jobs with no memory&#39;</span><span class="p">)</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         specified.&#39;</span><span class="p">)</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         Limit is: </span><span class="si">%s</span><span class="s"> mb.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">nodememory</span><span class="p">))</span>
+           <span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">nodememory</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         A default memory limit taken from </span><span class="se">\&#39;</span><span class="s">nodememory</span><span class="se">\&#39;</span><span class="s"> in&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         arc.conf will apply.&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         You may want to set </span><span class="se">\&#39;</span><span class="s">defaultmemory</span><span class="se">\&#39;</span><span class="s"> to something&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         else in arc.conf to better handle jobs with no memory&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         specified.&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         Limit is: </span><span class="si">%s</span><span class="s"> mb.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">nodememory</span><span class="p">),</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
        <span class="k">else</span><span class="p">:</span>
-           <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="mi">1000</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         nodememory is not specified in arc.conf. A default&#39;</span><span class="p">)</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;         memory limit of 1GB will apply.&#39;</span><span class="p">)</span>
-       <span class="n">D</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="o">*</span><span class="mi">69</span><span class="p">)</span>
+           <span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="mi">1000</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         nodememory is not specified in arc.conf. A default&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         memory limit of 1GB will apply.&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+       <span class="n">debug</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="o">*</span><span class="mi">69</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
 
-   <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span> <span class="ow">and</span> \
-            <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">:</span>
-       <span class="n">D</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="o">*</span><span class="mi">69</span><span class="p">)</span>
-       <span class="n">D</span><span class="p">(</span><span class="s">&#39;WARNING: localtransfers are enabled and job has less than 1GB of&#39;</span><span class="p">)</span>
-       <span class="n">D</span><span class="p">(</span><span class="s">&#39;         ram. up- and downloaders take up a lot of ram,&#39;</span><span class="p">)</span>
-       <span class="n">D</span><span class="p">(</span><span class="s">&#39;         this can give you problems.&#39;</span><span class="p">)</span>
-       <span class="n">D</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="o">*</span><span class="mi">69</span><span class="p">)</span>
+   <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span> <span class="ow">and</span> <span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">IndividualPhysicalMemory</span><span class="o">.</span><span class="n">max</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">:</span>
+       <span class="n">debug</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="o">*</span><span class="mi">69</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+       <span class="n">debug</span><span class="p">(</span><span class="s">&#39;WARNING: localtransfers are enabled and job has less than 1GB of&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+       <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         ram. up- and downloaders take up a lot of ram,&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+       <span class="n">debug</span><span class="p">(</span><span class="s">&#39;         this can give you problems.&#39;</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+       <span class="n">debug</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="o">*</span><span class="mi">69</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
 
 
 <span class="c"># Limitation: In RTE stage 0, scripts MUST use the &#39;export&#39; command if any</span>
 <span class="c"># new variables are defined which should be picked up by the submit script.</span>
 <span class="c"># Also no output from the RTE script in stage 0 will be printed.</span></div>
-<div class="viewcode-block" id="RTE_stage0"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.RTE_stage0">[docs]</a><span class="k">def</span> <span class="nf">RTE_stage0</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">,</span> <span class="n">lrms</span><span class="p">,</span> <span class="o">**</span><span class="n">mapping</span><span class="p">):</span>
+<div class="viewcode-block" id="RTE_stage0"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.RTE_stage0">[docs]</a><span class="k">def</span> <span class="nf">RTE_stage0</span><span class="p">(</span><span class="n">jd</span><span class="p">,</span> <span class="n">lrms</span><span class="p">,</span> <span class="o">**</span><span class="n">mapping</span><span class="p">):</span>
    <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">   Source RTE scripts and update job description environment.</span>
 
-<span class="sd">   :param jobdescs: job description list object</span>
-<span class="sd">   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">   :param str lrms: name of the LRMS</span>
+<span class="sd">   :param jd: job description object</span>
+<span class="sd">   :type jd: :py:class:`arc.JobDescription`</span>
+<span class="sd">   :param dict **mapping: additional environment variables</span>
 <span class="sd">   &quot;&quot;&quot;</span>     
 
-   <span class="k">if</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span><span class="o">.</span><span class="n">getSoftwareList</span><span class="p">():</span>
+   <span class="k">if</span> <span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span><span class="o">.</span><span class="n">getSoftwareList</span><span class="p">():</span>
         <span class="kn">from</span> <span class="nn">parse</span> <span class="kn">import</span> <span class="n">RTE0EnvCreator</span>
-        <span class="n">envCreator</span> <span class="o">=</span> <span class="n">RTE0EnvCreator</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">Config</span><span class="p">,</span> <span class="n">mapping</span><span class="p">)</span>
+        <span class="n">envCreator</span> <span class="o">=</span> <span class="n">RTE0EnvCreator</span><span class="p">(</span><span class="n">jd</span><span class="p">,</span> <span class="n">Config</span><span class="p">,</span> <span class="n">mapping</span><span class="p">)</span>
         <span class="n">stage0_environ</span> <span class="o">=</span> <span class="n">envCreator</span><span class="o">.</span><span class="n">getShEnv</span><span class="p">()</span>
         <span class="n">stage0_environ</span><span class="p">[</span><span class="s">&#39;joboption_lrms&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">lrms</span>
+
         <span class="c"># Source RTE script and update the RTE stage0 dict</span>
         <span class="k">def</span> <span class="nf">source_sw</span><span class="p">(</span><span class="n">sw</span><span class="p">,</span> <span class="n">opts</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">runtimedir</span><span class="p">,</span> <span class="n">sw</span><span class="p">)):</span>
-                <span class="n">args</span> <span class="o">=</span> <span class="s">&#39;sourcewithargs () { script=$1; shift; . $script;};&#39;</span> \
-                       <span class="s">&#39;sourcewithargs </span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s"> 0&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">runtimedir</span><span class="p">,</span> <span class="n">sw</span><span class="p">)</span>
+                <span class="n">args</span> <span class="o">=</span> <span class="s">&#39;sourcewithargs () { script=$1; shift; . $script;}; sourcewithargs </span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s"> 0&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">runtimedir</span><span class="p">,</span> <span class="n">sw</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">opt</span> <span class="ow">in</span> <span class="n">opts</span><span class="p">:</span>
                     <span class="n">args</span> <span class="o">+=</span> <span class="s">&#39; &quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">opt</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\</span><span class="s">&quot;&#39;</span><span class="p">))</span>
                 <span class="n">args</span> <span class="o">+=</span> <span class="s">&#39; &gt; /dev/null 2&gt;&amp;1 &amp;&amp; env&#39;</span>
@@ -216,12 +172,12 @@
                 <span class="n">new_env</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span><span class="n">v</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">))</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span><span class="n">v</span> <span class="ow">in</span> <span class="p">(</span><span class="n">l</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;=&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">stdout</span> <span class="k">if</span> <span class="n">l</span> <span class="o">!=</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">))</span>
                 <span class="n">stage0_environ</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">new_env</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Runtime script </span><span class="si">%s</span><span class="s"> is missing&#39;</span> <span class="o">%</span> <span class="n">sw</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
+                <span class="n">warn</span><span class="p">(</span><span class="s">&#39;Runtime script </span><span class="si">%s</span><span class="s"> is missing&#39;</span> <span class="o">%</span> <span class="n">sw</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
                 <span class="c">#should we exit here?</span>
 
         <span class="c"># Source RTE scripts from the software list</span>
         <span class="n">sw_list</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">sw</span> <span class="ow">in</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span><span class="o">.</span><span class="n">getSoftwareList</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">sw</span> <span class="ow">in</span> <span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span><span class="o">.</span><span class="n">getSoftwareList</span><span class="p">():</span>
             <span class="n">sw_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">sw</span><span class="p">))</span>
             <span class="n">source_sw</span><span class="p">(</span><span class="n">sw</span><span class="p">,</span> <span class="n">sw</span><span class="o">.</span><span class="n">getOptions</span><span class="p">())</span>
 
@@ -253,492 +209,356 @@
 
    <span class="c"># joboption_count might have been changed by an RTE.</span>
    <span class="c"># Save it for accouting purposes.</span>
-   <span class="k">if</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+   <span class="k">if</span> <span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
        <span class="k">try</span><span class="p">:</span>
-           <span class="n">diagfilename</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/job.</span><span class="si">%s</span><span class="s">.diag&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">controldir</span><span class="p">,</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;gridid&#39;</span><span class="p">])</span>
+           <span class="n">diagfilename</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/job.</span><span class="si">%s</span><span class="s">.diag&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">controldir</span><span class="p">,</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;gridid&#39;</span><span class="p">])</span>
            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">diagfilename</span><span class="p">,</span> <span class="s">&#39;w+&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">diagfile</span><span class="p">:</span>
-               <span class="n">diagfile</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&#39;ExecutionUnits=</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span><span class="p">)</span>
+               <span class="n">diagfile</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&#39;ExecutionUnits=</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">jd</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span><span class="p">)</span>
        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
-           <span class="n">D</span><span class="p">(</span><span class="s">&#39;Unable to write to diag file (</span><span class="si">%s</span><span class="s">)&#39;</span> <span class="o">%</span> <span class="n">diagfilename</span><span class="p">)</span>
+           <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Unable to write to diag file (</span><span class="si">%s</span><span class="s">)&#39;</span> <span class="o">%</span> <span class="n">diagfilename</span><span class="p">)</span>
 
 </div>
-<div class="viewcode-block" id="RTE_stage1"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.RTE_stage1">[docs]</a><span class="k">def</span> <span class="nf">RTE_stage1</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
-   <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">   Get user RTE stage 1 section of job script.</span>
-
-<span class="sd">   :param jobdescs: job description list object</span>
-<span class="sd">   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">   :return: jobscript section</span>
-<span class="sd">   :rtype: :py:obj:`str`</span>
-<span class="sd">   &quot;&quot;&quot;</span>
-
-   <span class="n">jobscript</span> <span class="o">=</span> \
-       <span class="s">&#39;# Running runtime scripts</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;export RUNTIME_CONFIG_DIR=${RUNTIME_CONFIG_DIR:-</span><span class="si">%s</span><span class="s">}</span><span class="se">\n</span><span class="s">&#39;</span>  \
-       <span class="s">&#39;runtimeenvironments=</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> \
-       <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_runtimedir</span> <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_runtimedir</span> <span class="k">else</span> <span class="n">Config</span><span class="o">.</span><span class="n">runtimedir</span><span class="p">)</span>
-
-   <span class="k">if</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
-       <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span>
-       <span class="k">return</span> <span class="n">jobscript</span>
-
-   <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;if [ ! -z &quot;$RUNTIME_CONFIG_DIR&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span>
-   <span class="k">for</span> <span class="n">rte</span> <span class="ow">in</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span><span class="o">.</span><span class="n">getSoftwareList</span><span class="p">():</span>
-       <span class="n">jobscript</span> <span class="o">+=</span> \
-         <span class="s">&#39;  if [ -r &quot;${RUNTIME_CONFIG_DIR}/</span><span class="si">%s</span><span class="s">&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">rte</span><span class="p">)</span> <span class="o">+</span> \
-         <span class="s">&#39;    runtimeenvironments=&quot;${runtimeenvironments}</span><span class="si">%s</span><span class="s">;&quot;</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">rte</span><span class="p">)</span> <span class="o">+</span> \
-         <span class="s">&#39;    cmdl=${RUNTIME_CONFIG_DIR}/</span><span class="si">%s</span><span class="s"> </span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">rte</span><span class="p">)</span> <span class="o">+</span> \
-         <span class="s">&#39;    sourcewithargs $cmdl 1  &#39;</span>
-       <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">rte</span><span class="o">.</span><span class="n">getOptions</span><span class="p">():</span>
-            <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;&quot;</span><span class="si">%s</span><span class="s">&quot; &#39;</span> <span class="o">%</span> <span class="n">arg</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\</span><span class="s">&quot;&#39;</span><span class="p">)</span>
-       <span class="n">jobscript</span> <span class="o">+=</span> \
-               <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span> \
-               <span class="s">&quot;    if [ $? -ne &#39;0&#39; ] ; then </span><span class="se">\n</span><span class="s">&quot;</span> \
-               <span class="s">&#39;      echo &quot;Runtime </span><span class="si">%s</span><span class="s"> script failed &quot; 1&gt;&amp;2 </span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">rte</span><span class="p">)</span> <span class="o">+</span> \
-               <span class="s">&#39;      echo &quot;Runtime </span><span class="si">%s</span><span class="s"> script failed &quot; &#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">rte</span><span class="p">)</span> <span class="o">+</span> \
-               <span class="s">&#39;1&gt;&quot;$RUNTIME_JOB_DIAG&quot; </span><span class="se">\n</span><span class="s">&#39;</span> \
-               <span class="s">&#39;      exit 1</span><span class="se">\n</span><span class="s">&#39;</span> \
-               <span class="s">&#39;    fi </span><span class="se">\n</span><span class="s">&#39;</span> \
-               <span class="s">&#39;  fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-
-   <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;fi</span><span class="se">\n\n</span><span class="s">&#39;</span>
-   <span class="k">return</span> <span class="n">jobscript</span>
-
-</div>
-<div class="viewcode-block" id="configure_runtime"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.configure_runtime">[docs]</a><span class="k">def</span> <span class="nf">configure_runtime</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
-   <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">   Get runtime configuration section of job script.</span>
-
-<span class="sd">   :param jobdescs: job description list object</span>
-<span class="sd">   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">   :return: jobscript section</span>
-<span class="sd">   :rtype: :py:obj:`str`</span>
-<span class="sd">   &quot;&quot;&quot;</span>
-
-   <span class="k">if</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
-       <span class="k">return</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span>
-
-   <span class="n">jobscript</span> <span class="o">=</span> <span class="s">&#39;if [ ! -z &quot;$RUNTIME_CONFIG_DIR&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span>
-   <span class="k">for</span> <span class="n">rte</span> <span class="ow">in</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span><span class="o">.</span><span class="n">getSoftwareList</span><span class="p">():</span>
-       <span class="n">jobscript</span> <span class="o">+=</span> \
-           <span class="s">&#39;  if [ -r &quot;${RUNTIME_CONFIG_DIR}/</span><span class="si">%s</span><span class="s">&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">rte</span><span class="p">)</span> <span class="o">+</span> \
-           <span class="s">&#39;    cmdl=${RUNTIME_CONFIG_DIR}/</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">rte</span><span class="p">)</span> <span class="o">+</span> \
-           <span class="s">&#39;    sourcewithargs $cmdl 2  &#39;</span>
-       <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">rte</span><span class="o">.</span><span class="n">getOptions</span><span class="p">():</span>
-           <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;&quot;</span><span class="si">%s</span><span class="s">&quot; &#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">arg</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\</span><span class="s">&quot;&#39;</span><span class="p">))</span>
-       <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">  fi</span><span class="se">\n</span><span class="s">&#39;</span>
-
-   <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;fi</span><span class="se">\n\n</span><span class="s">&#39;</span>
-   <span class="k">return</span> <span class="n">jobscript</span>
-
-   </div>
-<div class="viewcode-block" id="setup_runtime_env"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.setup_runtime_env">[docs]</a><span class="k">def</span> <span class="nf">setup_runtime_env</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
+<div class="viewcode-block" id="JobscriptAssembler"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.JobscriptAssembler">[docs]</a><span class="k">class</span> <span class="nc">JobscriptAssembler</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
      <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">     Get runtime environment section of job script.</span>
+<span class="sd">     Parses and expands the jobscript stubs defined in job_script.stubs.</span>
+<span class="sd">     Each stub is initiated by a line starting with &#39;&gt;&gt;&#39;, followed by</span>
+<span class="sd">     the name of the stub. The stub must be enclosed within two &#39;&gt;&#39; on</span>
+<span class="sd">     separate lines.::</span>
 
-<span class="sd">     :param jobdescs: job description list object</span>
-<span class="sd">     :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">     :return: jobscript section</span>
-<span class="sd">     :rtype: :py:obj:`str`</span>
+<span class="sd">       &gt;&gt; set_some_vars</span>
+<span class="sd">       &gt;</span>
+<span class="sd">       export FOO=bar</span>
+<span class="sd">       export BAR=baz</span>
+<span class="sd">       &gt;</span>
+
+
+<span class="sd">     To expand variables, use the Python format syntax %(LOCAL)s.::</span>
+
+<span class="sd">       &gt;&gt; set_sessiondir</span>
+<span class="sd">       &gt;</span>
+<span class="sd">       export RUNTIME_SESSIONDIR=%(SESSIONDIR)s</span>
+<span class="sd">       &gt;</span>
+
+<span class="sd">     This will evaluate to the session directory specified in the </span>
+<span class="sd">     job description, for example::</span>
+
+<span class="sd">       export RUNTIME_SESSIONDIR=/scratch/grid/123456</span>
+<span class="sd">     </span>
+<span class="sd">      </span>
+<span class="sd">     It is also possible to define loops that depend on some iterable </span>
+<span class="sd">     in the job description object. For example, the attribute</span>
+<span class="sd">     Application.Environment is an iterable, where each item is a tuple</span>
+<span class="sd">     with two elements: name of environment variable and value of </span>
+<span class="sd">     environment variable. This is mapped to &#39;ENVS&#39; with macros</span>
+<span class="sd">     &#39;ENV&#39; and &#39;ENV_VAL&#39;.</span>
+
+<span class="sd">     Loops must be enclosed within two &#39;@&#39; on separate lines. The top &#39;@&#39;</span>
+<span class="sd">     must be followed by the map name of the iterable and the map name </span>
+<span class="sd">     of the macro(s) that resolves the string format variables. The </span>
+<span class="sd">     simplest macro is mapped to &#39;ITEM&#39; and simply returns the current </span>
+<span class="sd">     item in the iterable. This is only applicable when each item is a </span>
+<span class="sd">     string. Note the &#39;%&#39; in front of each macro name in the first line</span>
+<span class="sd">     following example.::</span>
+
+
+<span class="sd">         @ ENVS %ENV %ENV_VAL</span>
+<span class="sd">         export %(ENV)s=%(ENV_VAL)s</span>
+<span class="sd">         @</span>
+
+
+<span class="sd">     This will evaluate to a list of export lines for every environment </span>
+<span class="sd">     variable represented in Application.Environment.</span>
+
+
+<span class="sd">     All format variables, iterables and macros are defined in the </span>
+<span class="sd">     ``map`` attribute.</span>
 <span class="sd">     &quot;&quot;&quot;</span>
 
-     <span class="c"># Adjust working directory for tweaky nodes.</span>
-     <span class="c"># RUNTIME_GRIDAREA_DIR should be defined by external means on nodes.</span>
-     <span class="k">return</span> \
-         <span class="s">&#39;RUNTIME_JOB_DIR=</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> \
-          <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">]</span> <span class="o">+</span> \
-         <span class="s">&#39;RUNTIME_JOB_STDIN=</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span> <span class="o">+</span> \
-         <span class="s">&#39;RUNTIME_JOB_STDOUT=</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span> <span class="o">+</span> \
-         <span class="s">&#39;RUNTIME_JOB_STDERR=</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span> <span class="o">+</span> \
-         <span class="s">&#39;RUNTIME_JOB_DIAG=</span><span class="si">%s</span><span class="s">.diag</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> \
-          <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">]</span> <span class="o">+</span> \
-         <span class="s">&#39;if [ ! -z &quot;$RUNTIME_GRIDAREA_DIR&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;  RUNTIME_JOB_DIR=$RUNTIME_GRIDAREA_DIR/`basename &#39;</span> \
-         <span class="s">&#39;$RUNTIME_JOB_DIR`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;  RUNTIME_JOB_STDIN=`echo &quot;$RUNTIME_JOB_STDIN&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^$RUNTIME_JOB_DIR#$RUNTIME_GRIDAREA_DIR#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;  RUNTIME_JOB_STDOUT=`echo &quot;$RUNTIME_JOB_STDOUT&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^$RUNTIME_JOB_DIR#$RUNTIME_GRIDAREA_DIR#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;  RUNTIME_JOB_STDERR=`echo &quot;$RUNTIME_JOB_STDERR&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^$RUNTIME_JOB_DIR#$RUNTIME_GRIDAREA_DIR#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;  RUNTIME_JOB_DIAG=`echo &quot;$RUNTIME_JOB_DIAG&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^$RUNTIME_JOB_DIR#$RUNTIME_GRIDAREA_DIR#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;  RUNTIME_CONTROL_DIR=`echo &quot;$RUNTIME_CONTROL_DIR&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^$RUNTIME_JOB_DIR#$RUNTIME_GRIDAREA_DIR#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;fi</span><span class="se">\n</span><span class="s">&#39;</span>
+<div class="viewcode-block" id="JobscriptAssembler.get_standard_jobscript"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.JobscriptAssembler.get_standard_jobscript">[docs]</a>     <span class="k">def</span> <span class="nf">get_standard_jobscript</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+          <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">          Assemble a generic, out-of-the-box jobscript. This does</span>
+<span class="sd">          not contain the batch system-specific instructions you</span>
+<span class="sd">          typically find at the top of the jobscript.</span>
+<span class="sd">          </span>
+<span class="sd">          return: jobscript</span>
+<span class="sd">          rtype: :py:obj:`str`</span>
+<span class="sd">          &quot;&quot;&quot;</span>
+          
+          <span class="n">script</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;umask_and_sourcewithargs&#39;</span><span class="p">)</span>
+          <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;user_env&#39;</span><span class="p">)</span>
+          <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span><span class="p">:</span>
+               <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;local_transfer&#39;</span><span class="p">)</span>
+          <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;runtime_env&#39;</span><span class="p">)</span>
+          <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;move_files_to_node&#39;</span><span class="p">)</span>
+          <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span><span class="p">:</span>
+               <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;download_input_files&#39;</span><span class="p">)</span>
+          <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;rte_stage1&#39;</span><span class="p">)</span>
+          <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;cd_and_run&#39;</span><span class="p">)</span>
+          <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;rte_stage2&#39;</span><span class="p">)</span>
+          <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span><span class="p">:</span>
+               <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;upload_output_files&#39;</span><span class="p">)</span>
+          <span class="k">else</span><span class="p">:</span>
+               <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;clean_scratchdir&#39;</span><span class="p">)</span>
+          <span class="n">script</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_stub</span><span class="p">(</span><span class="s">&#39;move_files_to_frontend&#39;</span><span class="p">)</span>
+          <span class="k">return</span> <span class="n">script</span>
+</div>
+<div class="viewcode-block" id="JobscriptAssembler.get_stub"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.JobscriptAssembler.get_stub">[docs]</a>     <span class="k">def</span> <span class="nf">get_stub</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stub</span><span class="p">):</span>
+          <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">          Get formatted jobscript stub.</span>
+
+<span class="sd">          param str stub: name of jobscript stub </span>
+<span class="sd">          return: jobscript stub</span>
+<span class="sd">          rtype: :py:obj:`str`</span>
+<span class="sd">          &quot;&quot;&quot;</span>
+          <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stubs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">stub</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+     
+</div>
+     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">jobdesc</span><span class="p">):</span>
+
+          <span class="bp">self</span><span class="o">.</span><span class="n">jobdesc</span> <span class="o">=</span> <span class="n">jobdesc</span>
+          <span class="bp">self</span><span class="o">.</span><span class="n">_stubs</span> <span class="o">=</span> <span class="p">{}</span>
+          <span class="bp">self</span><span class="o">.</span><span class="n">_ignore</span> <span class="o">=</span> <span class="p">[]</span>
+          <span class="c"># String format map</span>
+          <span class="bp">self</span><span class="o">.</span><span class="n">map</span> <span class="o">=</span> <span class="p">{</span>
+               <span class="c"># Simple strings</span>
+               <span class="s">&#39;GRIDID&#39;</span>               <span class="p">:</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;gridid&#39;</span><span class="p">],</span>
+               <span class="s">&#39;SESSIONDIR&#39;</span>           <span class="p">:</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">],</span>
+               <span class="s">&#39;STDIN&#39;</span>                <span class="p">:</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span><span class="p">,</span>
+               <span class="s">&#39;STDOUT&#39;</span>               <span class="p">:</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="p">,</span>
+               <span class="s">&#39;STDERR&#39;</span>               <span class="p">:</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="p">,</span>
+               <span class="s">&#39;STDIN_REDIR&#39;</span>          <span class="p">:</span> <span class="s">&#39;&lt;$RUNTIME_JOB_STDIN&#39;</span> <span class="k">if</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span> <span class="k">else</span> <span class="s">&#39;&#39;</span><span class="p">,</span>
+               <span class="s">&#39;STDOUT_REDIR&#39;</span>         <span class="p">:</span> <span class="s">&#39;1&gt;$RUNTIME_JOB_STDOUT&#39;</span> <span class="k">if</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span> <span class="k">else</span> <span class="s">&#39;&#39;</span><span class="p">,</span>
+               <span class="s">&#39;STDERR_REDIR&#39;</span>         <span class="p">:</span> <span class="s">&#39;2&gt;$RUNTIME_JOB_STDERR&#39;</span> <span class="k">if</span> \
+                                        <span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span> <span class="o">!=</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span> <span class="k">else</span> <span class="s">&#39;2&gt;&amp;1&#39;</span><span class="p">,</span>
+               <span class="s">&#39;EXEC&#39;</span>                 <span class="p">:</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Executable</span><span class="o">.</span><span class="n">Path</span><span class="p">,</span> 
+               <span class="s">&#39;ARGS&#39;</span>                 <span class="p">:</span> <span class="s">&#39;&quot; &quot;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Executable</span><span class="o">.</span><span class="n">Argument</span><span class="p">)),</span>
+               <span class="s">&#39;PROCESSORS&#39;</span>           <span class="p">:</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span><span class="p">,</span>
+               <span class="s">&#39;NODENAME&#39;</span>             <span class="p">:</span> <span class="n">Config</span><span class="o">.</span><span class="n">nodename</span><span class="p">,</span>
+               <span class="s">&#39;GNU_TIME&#39;</span>             <span class="p">:</span> <span class="n">Config</span><span class="o">.</span><span class="n">gnu_time</span><span class="p">,</span>
+               <span class="s">&#39;GM_MOUNTPOINT&#39;</span>        <span class="p">:</span> <span class="n">Config</span><span class="o">.</span><span class="n">gm_mount_point</span><span class="p">,</span>
+               <span class="s">&#39;GM_PORT&#39;</span>              <span class="p">:</span> <span class="n">Config</span><span class="o">.</span><span class="n">gm_port</span><span class="p">,</span>
+               <span class="s">&#39;GM_HOST&#39;</span>              <span class="p">:</span> <span class="n">Config</span><span class="o">.</span><span class="n">hostname</span><span class="p">,</span>
+               <span class="s">&#39;LOCAL_SCRATCHDIR&#39;</span>     <span class="p">:</span> <span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> 
+               <span class="s">&#39;RUNTIMEDIR&#39;</span>           <span class="p">:</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_runtimedir</span> <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_runtimedir</span> <span class="k">else</span> <span class="n">Config</span><span class="o">.</span><span class="n">runtimedir</span><span class="p">,</span>
+               <span class="s">&#39;SHARED_SCRATCHDIR&#39;</span>    <span class="p">:</span> <span class="n">Config</span><span class="o">.</span><span class="n">shared_scratch</span><span class="p">,</span> 
+               <span class="s">&#39;IS_SHARED_FILESYSTEM&#39;</span> <span class="p">:</span> <span class="s">&#39;yes&#39;</span> <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">shared_filesystem</span> <span class="k">else</span> <span class="s">&#39;&#39;</span><span class="p">,</span>
+               <span class="s">&#39;ARC_LOCATION&#39;</span>         <span class="p">:</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">ArcLocation</span><span class="o">.</span><span class="n">Get</span><span class="p">(),</span>
+               <span class="s">&#39;ARC_TOOLSDIR&#39;</span>         <span class="p">:</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">ArcLocation</span><span class="o">.</span><span class="n">GetToolsDir</span><span class="p">(),</span>
+               <span class="s">&#39;GLOBUS_LOCATION&#39;</span>      <span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;GLOBUS_LOCATION&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">),</span>
+               <span class="c"># Iterables and associated macros</span>
+               <span class="s">&#39;ENVS&#39;</span>                 <span class="p">:</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Environment</span><span class="p">,</span> <span class="c"># Iterable</span>
+               <span class="s">&#39;ENV&#39;</span>                  <span class="p">:</span> <span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="c"># Macro</span>
+               <span class="s">&#39;ENV_VAL&#39;</span>              <span class="p">:</span> <span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="c"># Macro</span>
+
+               <span class="s">&#39;RTES&#39;</span>                 <span class="p">:</span> <span class="n">jobdesc</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">RunTimeEnvironment</span><span class="o">.</span><span class="n">getSoftwareList</span><span class="p">(),</span> <span class="c"># Iterable</span>
+               <span class="s">&#39;RTE&#39;</span>                  <span class="p">:</span> <span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">item</span><span class="p">),</span> <span class="c"># Macro</span>
+               <span class="s">&#39;OPTS&#39;</span>                 <span class="p">:</span> <span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="s">&#39;&quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="s">&#39;&quot; &quot;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">opt</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\</span><span class="s">&quot;&#39;</span><span class="p">)</span> <span class="k">for</span>
+                                                                          <span class="n">opt</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">getOptions</span><span class="p">()]),</span> <span class="c"># Macro</span>
+               <span class="c"># To be setup in a later method</span>
+               <span class="s">&#39;RUNTIME_CONTROLDIR&#39;</span>   <span class="p">:</span>	<span class="s">&#39;&#39;</span><span class="p">,</span> <span class="c"># Setup later if localtransfer</span>
+               <span class="s">&#39;OUTPUT_LISTS&#39;</span>         <span class="p">:</span>	<span class="s">&#39;&#39;</span><span class="p">,</span> <span class="c"># Setup later if NOT localtransfer</span>
+               <span class="s">&#39;OUTPUT_FILES&#39;</span>         <span class="p">:</span>	<span class="s">&#39;&#39;</span><span class="p">,</span> <span class="c"># Setup later if NOT localtransfer</span>
+               <span class="s">&#39;ITEM&#39;</span>                 <span class="p">:</span> <span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span> <span class="c"># Generic macro</span>
+               <span class="p">}</span>
+
+          <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span><span class="p">:</span>
+               <span class="bp">self</span><span class="o">.</span><span class="n">setup_local_transfer</span><span class="p">()</span>
+          <span class="k">else</span><span class="p">:</span>
+               <span class="bp">self</span><span class="o">.</span><span class="n">setup_cleaning</span><span class="p">()</span>
+          <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">shared_filesystem</span><span class="p">:</span>
+               <span class="bp">self</span><span class="o">.</span><span class="n">setup_runtime_env</span><span class="p">()</span>
+          <span class="bp">self</span><span class="o">.</span><span class="n">_parse</span><span class="p">()</span>
+
+
+     <span class="k">def</span> <span class="nf">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+          <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+
+     <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+          <span class="bp">self</span><span class="o">.</span><span class="n">map</span><span class="p">[</span><span class="n">item</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+
+     <span class="k">def</span> <span class="nf">_parse</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+          <span class="n">PARSE</span> <span class="o">=</span> <span class="mi">0</span>
+          <span class="n">SKIP</span>  <span class="o">=</span> <span class="mi">1</span>
+          <span class="n">READ</span>  <span class="o">=</span> <span class="mi">2</span>
+          <span class="n">LOOP</span>  <span class="o">=</span> <span class="mi">4</span>
+
+          <span class="n">do</span> <span class="o">=</span> <span class="n">PARSE</span>
+          <span class="n">stub_name</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+          <span class="n">stub</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+          <span class="n">loop</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+          <span class="n">_iterable</span> <span class="o">=</span> <span class="bp">None</span>
+          <span class="n">_macros</span> <span class="o">=</span> <span class="bp">None</span>
+          <span class="n">_locals</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">map</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+                                        
+          <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s">&#39;/usr/local/arc5&#39;</span><span class="p">,</span> <span class="s">&#39;share/arc&#39;</span><span class="p">,</span> <span class="s">&#39;job_script.stubs&#39;</span><span class="p">),</span> <span class="s">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">stubs</span><span class="p">:</span>
+               <span class="k">for</span> <span class="n">num</span><span class="p">,</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">stubs</span><span class="p">):</span>
+                    <span class="k">try</span><span class="p">:</span>
+                         <span class="k">if</span> <span class="n">do</span> <span class="o">&amp;</span> <span class="n">READ</span><span class="p">:</span>
+                              <span class="c"># END of stub</span>
+                              <span class="c">#</span>
+                              <span class="c"># Save to stubs map</span>
+                              <span class="k">if</span> <span class="n">line</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;&gt;&#39;</span><span class="p">:</span>
+                                   <span class="k">if</span> <span class="n">stub_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignore</span><span class="p">:</span>
+                                        <span class="bp">self</span><span class="o">.</span><span class="n">_stubs</span><span class="p">[</span><span class="n">stub_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">stub</span>
+                                   <span class="n">do</span> <span class="o">=</span> <span class="n">PARSE</span>
+                         
+                              <span class="c"># Encountered loop tag</span>
+                              <span class="k">elif</span> <span class="n">line</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;@&#39;</span><span class="p">:</span>   
+
+                                   <span class="c"># END of loop stub</span>
+                                   <span class="c"># </span>
+                                   <span class="c"># Loop over the iterable, and for each item:</span>
+                                   <span class="c">#   run the macro(s) to resolve the string format variable(s)</span>
+                                   <span class="c">#   format the loop stub</span>
+                                   <span class="c">#   add formatted loop stub to stub</span>
+                                   <span class="k">if</span> <span class="n">do</span> <span class="o">&amp;</span> <span class="n">LOOP</span><span class="p">:</span>
+                                        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">_iterable</span><span class="p">:</span>
+                                             <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_macros</span><span class="p">:</span>
+                                                  <span class="n">_locals</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">map</span><span class="p">[</span><span class="n">key</span><span class="p">](</span><span class="n">item</span><span class="p">)</span>
+                                             <span class="n">stub</span> <span class="o">+=</span> <span class="n">loop</span> <span class="o">%</span> <span class="n">_locals</span>
+                                        <span class="n">do</span> <span class="o">^=</span> <span class="n">LOOP</span>
+
+                                   <span class="c"># BEGIN loop stub</span>
+                                   <span class="c">#</span>
+                                   <span class="c"># Get the iterable and macros to resolve the string format variables</span>
+                                   <span class="k">else</span><span class="p">:</span> 
+                                        <span class="n">loop</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+                                        <span class="n">keys</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+                                        <span class="n">key</span> <span class="o">=</span> <span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                                        <span class="n">_iterable</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">map</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                                        <span class="n">_macros</span> <span class="o">=</span> <span class="p">[]</span>
+                                        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+                                             <span class="k">assert</span><span class="p">(</span><span class="n">key</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;%&#39;</span><span class="p">)</span>
+                                             <span class="n">_macros</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+                                        <span class="n">do</span> <span class="o">|=</span> <span class="n">LOOP</span>
+
+                              <span class="c"># Inside loop. Add line to loop stub. Format later</span>
+                              <span class="k">elif</span> <span class="n">do</span> <span class="o">&amp;</span> <span class="n">LOOP</span><span class="p">:</span>
+                                   <span class="n">loop</span> <span class="o">+=</span> <span class="n">line</span>
+                              <span class="c"># Format line and add to stub</span>
+                              <span class="k">else</span><span class="p">:</span>
+                                   <span class="n">stub</span> <span class="o">+=</span> <span class="n">line</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">map</span>
+
+                         <span class="k">elif</span> <span class="n">do</span> <span class="o">&amp;</span> <span class="n">SKIP</span><span class="p">:</span>
+                              <span class="c"># BEGIN stub</span>
+                              <span class="c">#</span>
+                              <span class="c"># Everything after the &#39;&gt;&#39; tag is read into the stub string, inlcuding empty lines</span>
+                              <span class="n">stub</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+                              <span class="k">if</span> <span class="n">line</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;&gt;&#39;</span><span class="p">:</span>
+                                   <span class="n">do</span> <span class="o">=</span> <span class="n">READ</span>
+
+                         <span class="k">elif</span> <span class="n">line</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;&gt;&gt;&#39;</span><span class="p">:</span>
+                              <span class="c"># Signals that a new stub is coming up</span>
+                              <span class="n">stub_name</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                              <span class="n">stub</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+                              <span class="n">do</span> <span class="o">=</span> <span class="n">SKIP</span>
+
+                    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                         <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Incomplete format key. Maybe a missing </span><span class="se">\&#39;</span><span class="s">s</span><span class="se">\&#39;</span><span class="s"> after </span><span class="se">\&#39;</span><span class="si">%%</span><span class="s">( ... )</span><span class="se">\&#39;</span><span class="s">&#39;</span><span class="p">,</span>
+                                        <span class="s">&#39;common.submit.JobscriptAssembler&#39;</span><span class="p">)</span> 
+                    <span class="k">except</span> <span class="ne">AssertionError</span><span class="p">:</span>
+                         <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Syntax error at line </span><span class="si">%i</span><span class="s"> in job_script.stubs. Missing </span><span class="se">\&#39;</span><span class="si">%%</span><span class="se">\&#39;</span><span class="s">.&#39;</span>
+                                        <span class="o">%</span> <span class="n">num</span><span class="p">,</span> <span class="s">&#39;common.submit.JobscriptAssembler&#39;</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                         <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Unknown key </span><span class="si">%s</span><span class="s"> at line </span><span class="si">%i</span><span class="s"> in job_script.stubs.&#39;</span>
+                                        <span class="o">%</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">num</span><span class="p">),</span> <span class="s">&#39;common.submit.JobscriptAssembler&#39;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="JobscriptAssembler.setup_local_transfer"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.JobscriptAssembler.setup_local_transfer">[docs]</a>     <span class="k">def</span> <span class="nf">setup_local_transfer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+          <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">          Create runtime control directory and update job input and output files.</span>
+<span class="sd">          RUNTIME_CONTROLDIR is added to the string format map.</span>
+<span class="sd">          &quot;&quot;&quot;</span>
+
+          <span class="kn">import</span> <span class="nn">tempfile</span><span class="o">,</span> <span class="nn">shutil</span>
+          <span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">join</span>
+          <span class="c"># create runtime controldir</span>
+          <span class="bp">self</span><span class="p">[</span><span class="s">&#39;RUNTIME_CONTROLDIR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="nb">dir</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s">&#39;SESSIONDIR&#39;</span><span class="p">],</span> <span class="n">prefix</span> <span class="o">=</span> <span class="s">&#39;control.&#39;</span><span class="p">)</span>
+
+          <span class="n">ctrdir</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">controldir</span>
+          <span class="n">local_ctrdir</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s">&#39;RUNTIME_CONTROLDIR&#39;</span><span class="p">]</span>
+          <span class="n">gridid</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s">&#39;GRIDID&#39;</span><span class="p">]</span>
+
+          <span class="c"># securely copy proxy</span>
+          <span class="k">with</span> <span class="n">os</span><span class="o">.</span><span class="n">fdopen</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">local_ctrdir</span><span class="p">,</span> <span class="s">&#39;job.local.proxy&#39;</span><span class="p">),</span>
+                                 <span class="n">os</span><span class="o">.</span><span class="n">O_WRONLY</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">O_CREAT</span><span class="p">,</span> <span class="mo">0600</span><span class="p">),</span> <span class="s">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">local_proxy</span><span class="p">:</span>
+               <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.proxy&#39;</span> <span class="o">%</span> <span class="n">gridid</span><span class="p">),</span> <span class="s">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">proxy</span><span class="p">:</span>
+                    <span class="n">local_proxy</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">proxy</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+
+          <span class="c"># prepare input file</span>
+          <span class="n">job_local_input</span> <span class="o">=</span> <span class="n">join</span><span class="p">(</span><span class="n">local_ctrdir</span><span class="p">,</span> <span class="s">&#39;job.local.input&#39;</span><span class="p">)</span>
+          <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.input&#39;</span> <span class="o">%</span> <span class="n">gridid</span><span class="p">),</span> <span class="n">job_local_input</span><span class="p">)</span>
+          <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">job_local_input</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">local_input</span><span class="p">:</span>
+               <span class="n">local_input</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">local_ctrdir</span> <span class="o">+</span> <span class="s">&#39; *.*</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+               <span class="n">local_input</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%s</span><span class="s"> *.*</span><span class="se">\n</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="n">gridid</span><span class="p">))</span>
+               <span class="n">local_input</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%s</span><span class="s"> *.*</span><span class="se">\n</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="n">gridid</span><span class="p">))</span>
+
+          <span class="c"># add runtime controldir to output</span>
+          <span class="n">job_output</span> <span class="o">=</span> <span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.output&#39;</span> <span class="o">%</span> <span class="n">gridid</span><span class="p">)</span>
+          <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">job_output</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">output</span><span class="p">:</span>
+               <span class="n">output</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">local_ctrdir</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+          <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">job_output</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">local_ctrdir</span><span class="p">,</span> <span class="s">&#39;job.local.output&#39;</span><span class="p">))</span>
+
+          <span class="c"># copy the local file to runtime control dir, else create it</span>
+          <span class="k">try</span><span class="p">:</span>
+               <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.local&#39;</span> <span class="o">%</span> <span class="n">gridid</span><span class="p">),</span> <span class="n">join</span><span class="p">(</span><span class="n">local_ctrdir</span><span class="p">,</span> <span class="s">&#39;job.local.local&#39;</span><span class="p">))</span>
+          <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+               <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">local_ctrdir</span><span class="p">,</span> <span class="s">&#39;job.local.local&#39;</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)):</span>
+                    <span class="k">pass</span>
 
 </div>
-<div class="viewcode-block" id="move_files_to_node"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.move_files_to_node">[docs]</a><span class="k">def</span> <span class="nf">move_files_to_node</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
-     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">     Get move files to node section of job script.</span>
+<div class="viewcode-block" id="JobscriptAssembler.setup_cleaning"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.JobscriptAssembler.setup_cleaning">[docs]</a>     <span class="k">def</span> <span class="nf">setup_cleaning</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> 
+          <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">          Setup trash cleaning. No reason to keep trash until gm-kick runs.</span>
+<span class="sd">          &quot;&quot;&quot;</span>
+          
+          <span class="n">output</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">controldir</span> <span class="o">+</span> <span class="s">&#39;/job.&#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="p">[</span><span class="s">&#39;GRIDID&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s">&#39;.output&#39;</span>
+          <span class="k">try</span><span class="p">:</span>
+               <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">outputfile</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="p">[</span><span class="s">&#39;OUTPUT_LISTS&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+                    <span class="bp">self</span><span class="p">[</span><span class="s">&#39;OUTPUT_FILES&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+                    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">outputfile</span><span class="p">:</span>
+                         <span class="n">name</span> <span class="o">=</span> <span class="p">(</span>
+                              <span class="c"># Replace escaped back-slashes (\).                                </span>
+                              <span class="c"># Note: Backslash escapes in 2. argument             </span>
+                              <span class="c"># are processed. Pattern explained: First </span>
+                              <span class="c"># look for escaped backslashes (8x\), then</span>
+                              <span class="c"># look for other escaped chars (4x\).</span>
+                              <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s">r&#39;</span><span class="se">\\\\\\\\</span><span class="s">|</span><span class="se">\\\\</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\\\</span><span class="s">&#39;</span><span class="p">,</span>
+                                     <span class="c"># Remove possible remote destination (URL).</span>
+                                     <span class="c"># Take spaces and escaping into account.</span>
+                                     <span class="c"># URL is the first string which is preceded by</span>
+                                     <span class="c"># a space which is not escaped.  </span>
+                                     <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s">r&#39;([^</span><span class="se">\\</span><span class="s">](</span><span class="se">\\\\</span><span class="s">)*) .*&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\\</span><span class="s">1&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span><span class="o">.</span>
+                                     <span class="c"># Replace escaped spaces and single quotes</span>
+                                     <span class="n">replace</span><span class="p">(</span><span class="s">&#39;\ &#39;</span><span class="p">,</span> <span class="s">&#39; &#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s">&quot;&#39;</span><span class="se">\\</span><span class="s">&#39;&#39;&quot;</span><span class="p">)</span><span class="o">.</span>
+                                     <span class="c"># Strip leading slashes (/). </span>
+                                     <span class="n">lstrip</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="p">))</span>
+                              <span class="p">)</span>
+                         <span class="k">if</span> <span class="n">name</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;@&#39;</span><span class="p">:</span>
+                              <span class="bp">self</span><span class="p">[</span><span class="s">&#39;OUTPUT_LISTS&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+                         <span class="k">else</span><span class="p">:</span>
+                              <span class="bp">self</span><span class="p">[</span><span class="s">&#39;OUTPUT_FILES&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
 
-<span class="sd">     :param jobdescs: job description list object</span>
-<span class="sd">     :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type \</span>
-<span class="sd">&#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">     :return: jobscript section</span>
-<span class="sd">     :rtype: :py:obj:`str`</span>
-<span class="sd">     &quot;&quot;&quot;</span>
-
-     <span class="n">runtime_local_scratch_dir</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
-
-     <span class="k">if</span> <span class="p">(</span><span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span> <span class="o">==</span> <span class="mi">1</span>
-         <span class="ow">or</span> <span class="s">&#39;RUNTIME_ENABLE_MULTICORE_SCRATCH&#39;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">):</span>
-          <span class="n">runtime_local_scratch_dir</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span>
-
-     <span class="k">return</span> \
-         <span class="s">&#39;RUNTIME_LOCAL_SCRATCH_DIR=&#39;</span> \
-         <span class="s">&#39;${RUNTIME_LOCAL_SCRATCH_DIR:-</span><span class="si">%s</span><span class="s">}</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">runtime_local_scratch_dir</span><span class="p">)</span> <span class="o">+</span> \
-         <span class="s">&#39;RUNTIME_FRONTEND_SEES_NODE=&#39;</span> \
-         <span class="s">&#39;${RUNTIME_FRONTEND_SEES_NODE:-</span><span class="si">%s</span><span class="s">}</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">shared_scratch</span><span class="p">)</span> <span class="o">+</span> \
-         <span class="s">&#39;RUNTIME_NODE_SEES_FRONTEND=${RUNTIME_NODE_SEES_FRONTEND:-</span><span class="si">%s</span><span class="s">}</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> \
-          <span class="p">(</span><span class="s">&#39;yes&#39;</span> <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">shared_filesystem</span> <span class="k">else</span> <span class="s">&#39;&#39;</span><span class="p">)</span> <span class="o">+</span> \
-         <span class="s">&#39;  if [ ! -z &quot;$RUNTIME_LOCAL_SCRATCH_DIR&quot; ] &amp;&amp; &#39;</span> \
-         <span class="s">&#39;[ ! -z &quot;$RUNTIME_NODE_SEES_FRONTEND&quot; ]; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    RUNTIME_NODE_JOB_DIR=&#39;</span> \
-         <span class="s">&#39;&quot;$RUNTIME_LOCAL_SCRATCH_DIR&quot;/`basename &quot;$RUNTIME_JOB_DIR&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    rm -rf &quot;$RUNTIME_NODE_JOB_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    mkdir -p &quot;$RUNTIME_NODE_JOB_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    # move directory contents</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    for f in &quot;$RUNTIME_JOB_DIR&quot;/.* &quot;$RUNTIME_JOB_DIR&quot;/*; do </span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      [ &quot;$f&quot; = &quot;$RUNTIME_JOB_DIR/*&quot; ] &amp;&amp; continue &#39;</span>\
-         <span class="s">&#39;# glob failed, no files</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      [ &quot;$f&quot; = &quot;$RUNTIME_JOB_DIR/.&quot; ] &amp;&amp; continue</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      [ &quot;$f&quot; = &quot;$RUNTIME_JOB_DIR/..&quot; ] &amp;&amp; continue</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      [ &quot;$f&quot; = &quot;$RUNTIME_JOB_DIR/.diag&quot; ] &amp;&amp; continue</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      [ &quot;$f&quot; = &quot;$RUNTIME_JOB_DIR/.comment&quot; ] &amp;&amp; continue</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      if ! mv &quot;$f&quot; &quot;$RUNTIME_NODE_JOB_DIR&quot;; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;        echo &quot;Failed to move </span><span class="se">\&#39;</span><span class="s">$f</span><span class="se">\&#39;</span><span class="s"> to &#39;</span> \
-         <span class="s">&#39;</span><span class="se">\&#39;</span><span class="s">$RUNTIME_NODE_JOB_DIR</span><span class="se">\&#39;</span><span class="s">&quot; 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;        exit 1</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    done</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    if [ ! -z &quot;$RUNTIME_FRONTEND_SEES_NODE&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      # creating link for whole directory</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;       ln -s &quot;$RUNTIME_FRONTEND_SEES_NODE&quot;&#39;</span> \
-         <span class="s">&#39;/`basename &quot;$RUNTIME_JOB_DIR&quot;` &quot;$RUNTIME_JOB_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    else</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      # keep stdout, stderr and control directory on frontend</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      # recreate job directory</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      mkdir -p &quot;$RUNTIME_JOB_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      # make those files</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      mkdir -p `dirname &quot;$RUNTIME_JOB_STDOUT&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      mkdir -p `dirname &quot;$RUNTIME_JOB_STDERR&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      touch &quot;$RUNTIME_JOB_STDOUT&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      touch &quot;$RUNTIME_JOB_STDERR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      RUNTIME_JOB_STDOUT__=`echo &quot;$RUNTIME_JOB_STDOUT&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^${RUNTIME_JOB_DIR}#${RUNTIME_NODE_JOB_DIR}#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      RUNTIME_JOB_STDERR__=`echo &quot;$RUNTIME_JOB_STDERR&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^${RUNTIME_JOB_DIR}#${RUNTIME_NODE_JOB_DIR}#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      rm &quot;$RUNTIME_JOB_STDOUT__&quot; 2&gt;/dev/null</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      rm &quot;$RUNTIME_JOB_STDERR__&quot; 2&gt;/dev/null</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      if [ ! -z &quot;$RUNTIME_JOB_STDOUT__&quot; ] &amp;&amp; &#39;</span> \
-         <span class="s">&#39;[ &quot;$RUNTIME_JOB_STDOUT&quot; != &quot;$RUNTIME_JOB_STDOUT__&quot; ]; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;        ln -s &quot;$RUNTIME_JOB_STDOUT&quot; &quot;$RUNTIME_JOB_STDOUT__&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      if [ &quot;$RUNTIME_JOB_STDOUT__&quot; != &#39;</span> \
-         <span class="s">&#39;&quot;$RUNTIME_JOB_STDERR__&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;        if [ ! -z &quot;$RUNTIME_JOB_STDERR__&quot; ] &amp;&amp; &#39;</span> \
-         <span class="s">&#39;[ &quot;$RUNTIME_JOB_STDERR&quot; != &quot;$RUNTIME_JOB_STDERR__&quot; ]; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;          ln -s &quot;$RUNTIME_JOB_STDERR&quot; &#39;</span> \
-         <span class="s">&#39;&quot;$RUNTIME_JOB_STDERR__&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;        fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      if [ ! -z &quot;$RUNTIME_CONTROL_DIR&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;        # move control directory back to frontend</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;        RUNTIME_CONTROL_DIR__=`echo &quot;$RUNTIME_CONTROL_DIR&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^${RUNTIME_JOB_DIR}#${RUNTIME_NODE_JOB_DIR}#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;        mv &quot;$RUNTIME_CONTROL_DIR__&quot; &quot;$RUNTIME_CONTROL_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;      fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    # adjust stdin,stdout &amp; stderr pointers</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    RUNTIME_JOB_STDIN=`echo &quot;$RUNTIME_JOB_STDIN&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^${RUNTIME_JOB_DIR}#${RUNTIME_NODE_JOB_DIR}#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    RUNTIME_JOB_STDOUT=`echo &quot;$RUNTIME_JOB_STDOUT&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^${RUNTIME_JOB_DIR}#${RUNTIME_NODE_JOB_DIR}#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    RUNTIME_JOB_STDERR=`echo &quot;$RUNTIME_JOB_STDERR&quot; &#39;</span> \
-         <span class="s">&#39;| sed &quot;s#^${RUNTIME_JOB_DIR}#${RUNTIME_NODE_JOB_DIR}#&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    RUNTIME_FRONTEND_JOB_DIR=&quot;$RUNTIME_JOB_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    RUNTIME_JOB_DIR=&quot;$RUNTIME_NODE_JOB_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;  fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;  if [ -z &quot;$RUNTIME_NODE_SEES_FRONTEND&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;    mkdir -p &quot;$RUNTIME_JOB_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-         <span class="s">&#39;  fi</span><span class="se">\n</span><span class="s">&#39;</span>
+          <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span> <span class="c"># Skip cleaning, else output files will be deleted</span>
+               <span class="bp">self</span><span class="o">.</span><span class="n">_ignore</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s">&#39;clean_scratchdir&#39;</span><span class="p">)</span>
+               <span class="n">verbose</span><span class="p">(</span><span class="s">&#39;Failed to read job output file (</span><span class="si">%s</span><span class="s">)&#39;</span> <span class="o">%</span> <span class="n">output</span><span class="p">,</span> <span class="s">&#39;common.submit&#39;</span><span class="p">)</span>
 
 </div>
-<div class="viewcode-block" id="move_files_to_frontend"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.move_files_to_frontend">[docs]</a><span class="k">def</span> <span class="nf">move_files_to_frontend</span><span class="p">():</span>
-   <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">   Get move files to frontend section of job script.</span>
-
-<span class="sd">   :return: jobscript section</span>
-<span class="sd">   :rtype: :py:obj:`str`</span>
-<span class="sd">   &quot;&quot;&quot;</span>
-
-   <span class="k">return</span> \
-       <span class="s">&#39;  if [ ! -z &quot;$RUNTIME_LOCAL_SCRATCH_DIR&quot; ] &amp;&amp; &#39;</span> \
-       <span class="s">&#39;[ ! -z &quot;$RUNTIME_NODE_SEES_FRONTEND&quot; ]; then </span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    if [ ! -z &quot;$RUNTIME_FRONTEND_SEES_NODE&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      # just move it</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      rm -rf &quot;$RUNTIME_FRONTEND_JOB_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      destdir=`dirname &quot;$RUNTIME_FRONTEND_JOB_DIR&quot;`</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      if ! mv &quot;$RUNTIME_NODE_JOB_DIR&quot; &quot;$destdir&quot;; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;        echo &quot;Failed to move </span><span class="se">\&#39;</span><span class="s">$RUNTIME_NODE_JOB_DIR</span><span class="se">\&#39;</span><span class="s"> to &#39;</span> \
-       <span class="s">&#39;</span><span class="se">\&#39;</span><span class="s">$destdir</span><span class="se">\&#39;</span><span class="s">&quot; 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;        RESULT=1</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    else</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      # remove links</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      rm -f &quot;$RUNTIME_JOB_STDOUT&quot; 2&gt;/dev/null</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      rm -f &quot;$RUNTIME_JOB_STDERR&quot; 2&gt;/dev/null</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      # move directory contents</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      for f in &quot;$RUNTIME_NODE_JOB_DIR&quot;/.* &#39;</span> \
-       <span class="s">&#39;&quot;$RUNTIME_NODE_JOB_DIR&quot;/*; do </span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;        [ &quot;$f&quot; = &quot;$RUNTIME_NODE_JOB_DIR/*&quot; ] &amp;&amp; &#39;</span> \
-       <span class="s">&#39;continue # glob failed, no files</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;        [ &quot;$f&quot; = &quot;$RUNTIME_NODE_JOB_DIR/.&quot; ] &amp;&amp; continue</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;        [ &quot;$f&quot; = &quot;$RUNTIME_NODE_JOB_DIR/..&quot; ] &amp;&amp; continue</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;        [ &quot;$f&quot; = &quot;$RUNTIME_NODE_JOB_DIR/.diag&quot; ] &amp;&amp; continue</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;        [ &quot;$f&quot; = &quot;$RUNTIME_NODE_JOB_DIR/.comment&quot; ] &amp;&amp; &#39;</span> \
-       <span class="s">&#39;continue</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;        if ! mv &quot;$f&quot; &quot;$RUNTIME_FRONTEND_JOB_DIR&quot;; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;          echo &quot;Failed to move </span><span class="se">\&#39;</span><span class="s">$f</span><span class="se">\&#39;</span><span class="s"> to &#39;</span> \
-       <span class="s">&#39;</span><span class="se">\&#39;</span><span class="s">$RUNTIME_FRONTEND_JOB_DIR</span><span class="se">\&#39;</span><span class="s">&quot; 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;          RESULT=1</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;        fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      done</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      rm -rf &quot;$RUNTIME_NODE_JOB_DIR&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  echo &quot;exitcode=$RESULT&quot; &gt;&gt; &quot;$RUNTIME_JOB_DIAG&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  exit $RESULT</span><span class="se">\n</span><span class="s">&#39;</span> \
-
-</div>
-<div class="viewcode-block" id="upload_output_files"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.upload_output_files">[docs]</a><span class="k">def</span> <span class="nf">upload_output_files</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
-   <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">   Get upload output files section of job script.</span>
-
-<span class="sd">   :param jobdescs: job description list object</span>
-<span class="sd">   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">   :return: jobscript section</span>
-<span class="sd">   :rtype: :py:obj:`str`</span>
-<span class="sd">   &quot;&quot;&quot;</span>
-
-   <span class="k">return</span> \
-       <span class="s">&#39;UPLOADER=${UPLOADER:-</span><span class="si">%s</span><span class="s">/uploader}</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> \
-        <span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">ArcLocation</span><span class="o">.</span><span class="n">GetToolsDir</span><span class="p">())</span> <span class="o">+</span> \
-       <span class="s">&#39;     if [ &quot;$RESULT&quot; = </span><span class="se">\&#39;</span><span class="s">0</span><span class="se">\&#39;</span><span class="s"> ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;       $UPLOADER -p -c </span><span class="se">\&#39;</span><span class="s">local</span><span class="se">\&#39;</span><span class="s"> &quot;$RUNTIME_CONTROL_DIR&quot; &#39;</span> \
-       <span class="s">&#39;&quot;$RUNTIME_JOB_DIR&quot; 2&gt;&gt;${RUNTIME_CONTROL_DIR}/job.local.errors</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;       if [ $? -ne </span><span class="se">\&#39;</span><span class="s">0</span><span class="se">\&#39;</span><span class="s"> ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;         echo </span><span class="se">\&#39;</span><span class="s">ERROR: Uploader failed.</span><span class="se">\&#39;</span><span class="s"> 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;         if [ &quot;$RESULT&quot; = </span><span class="se">\&#39;</span><span class="s">0</span><span class="se">\&#39;</span><span class="s"> ] ; then RESULT=1 ; fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;       fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;     fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;     rm -f &quot;${RUNTIME_CONTROL_DIR}/job.local.proxy&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-
-</div>
-<div class="viewcode-block" id="download_input_files"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.download_input_files">[docs]</a><span class="k">def</span> <span class="nf">download_input_files</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
-   <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">   Get download input files section of job script.</span>
-
-<span class="sd">   :param jobdescs: job description list object</span>
-<span class="sd">   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">   :return: jobscript section</span>
-<span class="sd">   :rtype: :py:obj:`str`</span>
-<span class="sd">   &quot;&quot;&quot;</span>
-
-   <span class="k">return</span> \
-       <span class="s">&#39;ARC_LOCATION=${ARC_LOCATION:-</span><span class="si">%s</span><span class="s">}</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">ArcLocation</span><span class="o">.</span><span class="n">Get</span><span class="p">()</span> <span class="o">+</span> \
-       <span class="s">&#39;GLOBUS_LOCATION=${GLOBUS_LOCATION:-</span><span class="si">%s</span><span class="s">}</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> \
-        <span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s">&#39;GLOBUS_LOCATION&#39;</span><span class="p">]</span> 
-         <span class="k">if</span> <span class="s">&#39;GLOBUS_LOCATION&#39;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span> <span class="k">else</span> <span class="s">&#39;&#39;</span><span class="p">)</span> <span class="o">+</span> \
-       <span class="s">&#39;DOWNLOADER=${DOWNLOADER:-</span><span class="si">%s</span><span class="s">/downloader}</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> \
-        <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">ArcLocation</span><span class="o">.</span><span class="n">GetToolsDir</span><span class="p">()</span> <span class="o">+</span> \
-       <span class="s">&#39;    if [ -z &quot;$ARC_LOCATION&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      echo </span><span class="se">\&#39;</span><span class="s">Variable ARC_LOCATION is not set</span><span class="se">\&#39;</span><span class="s"> 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      exit 1</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    if [ -z &quot;$GLOBUS_LOCATION&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      echo </span><span class="se">\&#39;</span><span class="s">Variable GLOBUS_LOCATION is not set</span><span class="se">\&#39;</span><span class="s"> 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      exit 1</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    export GLOBUS_LOCATION</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    export ARC_LOCATION</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    if [ &quot;x$LD_LIBRARY_PATH&quot; = &quot;x&quot; ]; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      export LD_LIBRARY_PATH=&quot;$GLOBUS_LOCATION/lib&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    else</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      export &#39;</span> \
-       <span class="s">&#39;LD_LIBRARY_PATH=&quot;$GLOBUS_LOCATION/lib:$LD_LIBRARY_PATH&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    export SASL_PATH=&quot;$GLOBUS_LOCATION/lib/sasl&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    export X509_USER_KEY=&#39;</span> \
-       <span class="s">&#39;&quot;${RUNTIME_CONTROL_DIR}/job.local.proxy&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    export X509_USER_CERT=&#39;</span> \
-       <span class="s">&#39;&quot;${RUNTIME_CONTROL_DIR}/job.local.proxy&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    export X509_USER_PROXY=&#39;</span> \
-       <span class="s">&#39;&quot;${RUNTIME_CONTROL_DIR}/job.local.proxy&quot;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    unset X509_RUN_AS_SERVER</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    $DOWNLOADER -p -c </span><span class="se">\&#39;</span><span class="s">local</span><span class="se">\&#39;</span><span class="s"> &quot;$RUNTIME_CONTROL_DIR&quot; &#39;</span> \
-       <span class="s">&#39;&quot;$RUNTIME_JOB_DIR&quot; 2&gt;&gt;${RUNTIME_CONTROL_DIR}/job.local.errors</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    if [ $? -ne </span><span class="se">\&#39;</span><span class="s">0</span><span class="se">\&#39;</span><span class="s"> ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      echo </span><span class="se">\&#39;</span><span class="s">ERROR: Downloader failed.</span><span class="se">\&#39;</span><span class="s"> 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;      exit 1</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-
-</div>
-<div class="viewcode-block" id="setup_local_transfer"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.setup_local_transfer">[docs]</a><span class="k">def</span> <span class="nf">setup_local_transfer</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
-   <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">   Create and get path to control directory.</span>
-
-<span class="sd">   :param jobdescs: job description list object</span>
-<span class="sd">   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">   :return: path to control directory</span>
-<span class="sd">   :rtype: :py:obj:`str`</span>
-<span class="sd">   &quot;&quot;&quot;</span>
-
-   <span class="kn">import</span> <span class="nn">tempfile</span><span class="o">,</span> <span class="nn">shutil</span>
-   <span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">join</span>
-   <span class="n">jd</span> <span class="o">=</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-   <span class="n">gridid</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;gridid&#39;</span><span class="p">]</span>
-   <span class="n">sessiondir</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;local_directory&#39;</span><span class="p">]</span>
-   <span class="c"># create runtime controldir</span>
-   <span class="n">runtime_control_dir</span> <span class="o">=</span> <span class="n">rcd</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="nb">dir</span> <span class="o">=</span> <span class="n">sessiondir</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">=</span> <span class="s">&#39;control.&#39;</span><span class="p">)</span>
-
-   <span class="c"># safely copy the .proxy to runtime controldir</span>
-   <span class="k">with</span> <span class="n">os</span><span class="o">.</span><span class="n">fdopen</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">rcd</span><span class="p">,</span> <span class="s">&#39;job.local.proxy&#39;</span><span class="p">),</span> <span class="n">os</span><span class="o">.</span><span class="n">O_WRONLY</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">O_CREAT</span><span class="p">,</span> <span class="mo">0600</span><span class="p">),</span> <span class="s">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">local_proxy</span><span class="p">:</span>
-        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;controldir&#39;</span><span class="p">],</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.proxy&#39;</span> <span class="o">%</span> <span class="n">gridid</span><span class="p">),</span> <span class="s">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">proxy</span><span class="p">:</span>
-             <span class="n">local_proxy</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">proxy</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
-
-   <span class="n">rcd_rel</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">rcd</span><span class="p">)</span>
-   <span class="n">job_local_input_filename</span> <span class="o">=</span> <span class="n">join</span><span class="p">(</span><span class="n">rcdm</span><span class="p">,</span> <span class="s">&#39;job.local.input&#39;</span><span class="p">)</span>
-
-   <span class="c"># copy the .input file to runtime controldir</span>
-   <span class="k">try</span><span class="p">:</span>
-       <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">controldir</span><span class="p">,</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.input&#39;</span> <span class="o">%</span> <span class="n">gridid</span><span class="p">),</span> <span class="n">job_local_input_filename</span><span class="p">)</span>
-   <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-       <span class="k">pass</span>
-   <span class="c"># write to the .input file (in runtime controldir)</span>
-   <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">job_local_input_filename</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">local_input</span><span class="p">:</span>
-       <span class="n">local_input</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">rcd_rel</span> <span class="o">+</span> <span class="s">&#39; *.*</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
-       <span class="n">local_input</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">lremove</span><span class="p">(</span><span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="p">,</span> <span class="n">gridid</span><span class="p">)</span> <span class="o">+</span> <span class="s">&#39; *.*</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
-       <span class="n">local_input</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">lremove</span><span class="p">(</span><span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="p">,</span> <span class="n">gridid</span><span class="p">)</span> <span class="o">+</span> <span class="s">&#39; *.*</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
-
-   <span class="c"># write to the .output file </span>
-   <span class="n">job_output</span> <span class="o">=</span> <span class="n">join</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">controldir</span><span class="p">,</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.output&#39;</span> <span class="o">%</span> <span class="n">gridid</span><span class="p">)</span>
-   <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">job_output</span> <span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">output</span><span class="p">:</span>
-       <span class="n">output</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">rcd_rel</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
-   <span class="c"># copy the .output file to runtime controldir</span>
-   <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">job_output</span><span class="p">,</span> <span class="n">join</span><span class="p">(</span><span class="n">rcd</span><span class="p">,</span> <span class="s">&#39;job.local.output&#39;</span><span class="p">))</span>
-
-   <span class="c"># copy the .local file to runtime control dir, else create it</span>
-   <span class="k">try</span><span class="p">:</span>
-       <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">controldir</span><span class="p">,</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.local&#39;</span> <span class="o">%</span> <span class="n">gridid</span><span class="p">),</span> <span class="n">join</span><span class="p">(</span><span class="n">rcd</span><span class="p">,</span> <span class="s">&#39;job.local.local&#39;</span><span class="p">))</span>
-   <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-       <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="n">rcd</span><span class="p">,</span> <span class="s">&#39;job.local.local&#39;</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)):</span>
-           <span class="k">pass</span>
-
-   <span class="k">return</span> <span class="s">&#39;RUNTIME_CONTROL_DIR=</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">runtime_control_dir</span>
-
-</div>
-<div class="viewcode-block" id="cd_and_run"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.cd_and_run">[docs]</a><span class="k">def</span> <span class="nf">cd_and_run</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
-   <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">   Get cd and run section of job script.</span>
-
-<span class="sd">   :param jobdescs: job description list object</span>
-<span class="sd">   :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">   :return: jobscript section</span>
-<span class="sd">   :rtype: :py:obj:`str`</span>
-<span class="sd">   &quot;&quot;&quot;</span>
-
-   <span class="n">args</span> <span class="o">=</span> <span class="s">&#39;&quot; &quot;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Executable</span><span class="o">.</span><span class="n">Path</span><span class="p">]</span> <span class="o">+</span>
-                     <span class="nb">list</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Executable</span><span class="o">.</span><span class="n">Argument</span><span class="p">))</span>
-   <span class="n">input_redirect</span>  <span class="o">=</span> <span class="s">&#39;&lt;$RUNTIME_JOB_STDIN&#39;</span> <span class="k">if</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span>  <span class="k">else</span> <span class="s">&#39;&#39;</span>
-   <span class="n">output_redirect</span> <span class="o">=</span> <span class="s">&#39;1&gt;$RUNTIME_JOB_STDOUT&#39;</span> <span class="k">if</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span> <span class="k">else</span> <span class="s">&#39;&#39;</span>
-   <span class="k">if</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="p">:</span>
-       <span class="n">output_redirect</span> <span class="o">+=</span> <span class="s">&#39; 2&gt;&amp;1&#39;</span> \
-           <span class="k">if</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span> <span class="o">==</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span> \
-           <span class="k">else</span> <span class="s">&#39; 2&gt;$RUNTIME_JOB_STDERR&#39;</span>
-
-   <span class="n">jobscript</span> <span class="o">=</span> \
-       <span class="s">&#39;  # Changing to session directory</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  HOME=$RUNTIME_JOB_DIR</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  export HOME</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  if ! cd &quot;$RUNTIME_JOB_DIR&quot;; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    echo &quot;Failed to switch to </span><span class="se">\&#39;</span><span class="s">$RUNTIME_JOB_DIR</span><span class="se">\&#39;</span><span class="s">&quot; 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    RESULT=1</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  if [ ! -z &quot;$RESULT&quot; ] &amp;&amp; [ &quot;$RESULT&quot; != 0 ]; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;    exit $RESULT</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  fi</span><span class="se">\n</span><span class="s">&#39;</span>
-
-   <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">nodename</span><span class="p">:</span>
-       <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;nodename=`</span><span class="si">%s</span><span class="s">`</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">nodename</span><span class="p">)</span>
-       <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;echo &quot;nodename=$nodename&quot; &gt;&gt; &quot;$RUNTIME_JOB_DIAG&quot;</span><span class="se">\n</span><span class="s">&#39;</span>
-
-   <span class="c">#TODO this should probably be done on headnode instead</span>
-   <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;echo &quot;ExecutionUnits=</span><span class="si">%s</span><span class="s">&quot; &gt;&gt; &quot;$RUNTIME_JOB_DIAG&quot;</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> \
-       <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Resources</span><span class="o">.</span><span class="n">SlotRequirement</span><span class="o">.</span><span class="n">NumberOfSlots</span>
-
-   <span class="c"># In case the job executable does not exist the error message might be</span>
-   <span class="c"># printed by GNU_TIME, which can be confusing for the user.</span>
-   <span class="c"># This will print more appropriate error message.</span>
-   <span class="n">jobscript</span> <span class="o">+=</span> \
-       <span class="s">&#39;executable=</span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Executable</span><span class="o">.</span><span class="n">Path</span> <span class="o">+</span> \
-       <span class="s">&#39;# Check if executable exists</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;if [ ! -f &quot;$executable&quot; ]; </span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;then </span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  echo &quot;Path </span><span class="se">\\</span><span class="s">&quot;$executable</span><span class="se">\\</span><span class="s">&quot; does not seem to exist&quot; &#39;</span> \
-       <span class="s">&#39;1&gt;$RUNTIME_JOB_STDOUT 2&gt;$RUNTIME_JOB_STDERR 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  exit 1</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-
-   <span class="c"># In case the job executable is written in a scripting language and the</span>
-   <span class="c"># interpreter is not found, the error message printed by GNU_TIME is</span>
-   <span class="c"># misleading.  This will print a more appropriate error message.</span>
-   <span class="n">jobscript</span> <span class="o">+=</span> \
-       <span class="s">&#39;# See if executable is a script, &#39;</span> \
-       <span class="s">&#39;and extract the name of the interpreter</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;line1=`dd if=&quot;$executable&quot; count=1 2&gt;/dev/null | head -n 1`</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;command=`echo $line1 | sed -n </span><span class="se">\&#39;</span><span class="s">s/^#! *//p</span><span class="se">\&#39;</span><span class="s">`</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;interpreter=`echo $command | awk </span><span class="se">\&#39;</span><span class="s">{print $1}</span><span class="se">\&#39;</span><span class="s">`</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;if [ &quot;$interpreter&quot; = /usr/bin/env ]; &#39;</span> \
-       <span class="s">&#39;then interpreter=`echo $command | awk </span><span class="se">\&#39;</span><span class="s">{print $2}</span><span class="se">\&#39;</span><span class="s">`; fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;# If it</span><span class="se">\&#39;</span><span class="s">s a script and the interpreter is not found ...</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;[ &quot;x$interpreter&quot; = x ] || type &quot;$interpreter&quot; &gt; /dev/null 2&gt;&amp;1&#39;</span> \
-       <span class="s">&#39; || {</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  echo &quot;Cannot run $executable: $interpreter: not found&quot; &#39;</span> \
-       <span class="s">&#39;1&gt;$RUNTIME_JOB_STDOUT 2&gt;$RUNTIME_JOB_STDERR 1&gt;&amp;2</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  exit 1; }</span><span class="se">\n</span><span class="s">&#39;</span>
-
-   <span class="c"># Check that gnu_time works</span>
-   <span class="n">jobscript</span> <span class="o">+=</span> \
-       <span class="s">&#39;GNU_TIME=</span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">Config</span><span class="o">.</span><span class="n">gnu_time</span> <span class="o">+</span> \
-       <span class="s">&#39;if [ ! -z &quot;$GNU_TIME&quot; ] &amp;&amp; ! &quot;$GNU_TIME&quot; &#39;</span> \
-       <span class="s">&#39;--version &gt;/dev/null 2&gt;&amp;1; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  echo &quot;WARNING: GNU time not found at: $GNU_TIME&quot; 2&gt;&amp;1;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  GNU_TIME=</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;fi </span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;if [ -z &quot;$GNU_TIME&quot; ] ; then</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;   &quot;</span><span class="si">%s</span><span class="s">&quot; </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">input_redirect</span><span class="p">,</span> <span class="n">output_redirect</span><span class="p">)</span> <span class="o">+</span> \
-       <span class="s">&#39;else</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;  $GNU_TIME -o &quot;$RUNTIME_JOB_DIAG&quot; -a -f </span><span class="se">\&#39;</span><span class="s">&#39;</span> \
-       <span class="s">&#39;WallTime=</span><span class="si">%e</span><span class="s">s</span><span class="se">\\</span><span class="s">nKernelTime=%Ss</span><span class="se">\\</span><span class="s">nUserTime=%Us</span><span class="se">\\</span><span class="s">nCPUUsage=%P</span><span class="se">\\</span><span class="s">n&#39;</span> \
-       <span class="s">&#39;MaxResidentMemory=%MkB</span><span class="se">\\</span><span class="s">nAverageResidentMemory=%tkB</span><span class="se">\\</span><span class="s">n&#39;</span> \
-       <span class="s">&#39;AverageTotalMemory=%KkB</span><span class="se">\\</span><span class="s">nAverageUnsharedMemory=%DkB</span><span class="se">\\</span><span class="s">n&#39;</span> \
-       <span class="s">&#39;AverageUnsharedStack=%pkB</span><span class="se">\\</span><span class="s">nAverageSharedMemory=</span><span class="si">%X</span><span class="s">kB</span><span class="se">\\</span><span class="s">n&#39;</span> \
-       <span class="s">&#39;PageSize=%ZB</span><span class="se">\\</span><span class="s">nMajorPageFaults=</span><span class="si">%F</span><span class="se">\\</span><span class="s">nMinorPageFaults=%R</span><span class="se">\\</span><span class="s">n&#39;</span> \
-       <span class="s">&#39;Swaps=%W</span><span class="se">\\</span><span class="s">nForcedSwitches=</span><span class="si">%c</span><span class="se">\\</span><span class="s">nWaitSwitches=%w</span><span class="se">\\</span><span class="s">n&#39;</span> \
-       <span class="s">&#39;Inputs=%I</span><span class="se">\\</span><span class="s">nOutputs=%O</span><span class="se">\\</span><span class="s">nSocketReceived=</span><span class="si">%r</span><span class="se">\\</span><span class="s">nSocketSent=</span><span class="si">%s</span><span class="se">\\</span><span class="s">n&#39;</span> \
-       <span class="s">&#39;Signals=%k</span><span class="se">\\</span><span class="s">n</span><span class="se">\&#39;</span><span class="s"> &#39;</span>
-   <span class="n">jobscript</span> <span class="o">+=</span> \
-       <span class="s">&#39; &quot;</span><span class="si">%s</span><span class="s">&quot; </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">input_redirect</span><span class="p">,</span> <span class="n">output_redirect</span><span class="p">)</span> <span class="o">+</span> \
-       <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;fi</span><span class="se">\n</span><span class="s">&#39;</span> \
-       <span class="s">&#39;RESULT=$?</span><span class="se">\n\n</span><span class="s">&#39;</span>
-
-   <span class="k">return</span> <span class="n">jobscript</span>
-</pre></div></div>
+<div class="viewcode-block" id="JobscriptAssembler.setup_runtime_env"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.submit.JobscriptAssembler.setup_runtime_env">[docs]</a>     <span class="k">def</span> <span class="nf">setup_runtime_env</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+          <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">          For non-shared filesystems, replace sessiondir with local scratchdir</span>
+<span class="sd">          in the stdin, stdout and stderr paths.</span>
+<span class="sd">          &quot;&quot;&quot;</span>
+          
+          <span class="bp">self</span><span class="p">[</span><span class="s">&#39;LOCAL_SCRATCHDIR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s">&#39;LOCAL_SCRATCHDIR&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="p">[</span><span class="s">&#39;GRIDID&#39;</span><span class="p">])</span>
+          <span class="n">sdir</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s">&#39;SESSIONDIR&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">sep</span>
+          <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&#39;STDIN&#39;</span><span class="p">,</span> <span class="s">&#39;STDOUT&#39;</span><span class="p">,</span> <span class="s">&#39;STDERR&#39;</span><span class="p">):</span>
+               <span class="k">if</span> <span class="bp">self</span><span class="p">[</span><span class="n">f</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">sdir</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="p">[</span><span class="n">f</span><span class="p">]</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s">&#39;LOCAL_SCRATCHDIR&#39;</span><span class="p">],</span> <span class="n">f</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="n">sdir</span><span class="p">))</span></div></div>
+</pre></div>
 
     </div>
     

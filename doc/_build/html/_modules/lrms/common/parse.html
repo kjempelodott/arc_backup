@@ -112,6 +112,7 @@
     <span class="c"># joboption_post_#_#, joboption_post_#_code</span>
     <span class="c"># TODO: Parse joboption_penv_type, joboption_penv_version,</span>
     <span class="c"># joboption_penv_processesperhost, joboption_penv_threadsperprocess</span>
+
     <span class="n">_shToPy</span> <span class="o">=</span> \
         <span class="p">{</span>
         <span class="s">&quot;RUNTIME_FRONTEND_SEES_NODE&quot;</span> <span class="p">:</span> <span class="s">&quot;config.shared_scratch&quot;</span><span class="p">,</span>
@@ -345,7 +346,7 @@
             <span class="n">env</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;</span><span class="se">\\\\</span><span class="s">&quot;</span><span class="p">,</span> <span class="s">&quot;</span><span class="se">\\</span><span class="s">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;=&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">r&quot;^\s*(#|$)&quot;</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span> <span class="p">)</span>
         <span class="k">except</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">False</span>
-        <span class="n">RTE0EnvCreator</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="n">Object</span><span class="p">(),</span> <span class="n">mapping</span><span class="p">)</span><span class="o">.</span><span class="n">setPyEnv</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+        <span class="n">RTE0EnvCreator</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="s">&#39;JobDescription&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nb">object</span><span class="p">,),</span> <span class="p">{})(),</span> <span class="n">mapping</span><span class="p">)</span><span class="o">.</span><span class="n">setPyEnv</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
         <span class="n">jobdescs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">j</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">True</span></div>
 </pre></div>

@@ -30,7 +30,7 @@ def set_fork(cfg):
 def Submit(config, jobdescs, jc):
     """
     Submits a job to the local or remote (SSH) machine. This method executes the required
-    Run Time Environment scripts and assembles the bash job script. The job script is
+    RunTimeEnvironment scripts and assembles the bash job script. The job script is
     written to file and run.
 
     :param str config: path to arc.conf
@@ -92,22 +92,22 @@ def Submit(config, jobdescs, jc):
         debug('----- exiting forkSubmitter.py -----', 'fork.Submit')
 
         endpointURL = arc.common.URL(Config.remote_endpoint)
-        newJob = arc.Job()
-        newJob.JobID = endpointURL.Host() + ':' + jobid if endpointURL.Host() else jobid
+        job = arc.Job()
+        job.JobID = jobid
         # TODO: What interface name to use?
-        newJob.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
-        newJob.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
-        newJob.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
+        job.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
+        job.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
+        job.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
         # TODO: Change returned endpoints for job. 
         # Currently these URLs are not usable.
-        newJob.ServiceInformationURL = arc.common.URL('test://localhost')
-        newJob.JobStatusURL = endpointURL
-        newJob.JobManagementURL = endpointURL
-        newJob.SessionDir  = arc.common.URL('file://' + directory)
-        newJob.StageInDir  = newJob.SessionDir
-        newJob.StageOutDir = newJob.SessionDir
-        newJob.IDFromEndpoint = jobid
-        jc.addEntity(newJob)
+        job.ServiceInformationURL = arc.common.URL('test://localhost')
+        job.JobStatusURL = endpointURL
+        job.JobManagementURL = endpointURL
+        job.SessionDir  = arc.common.URL('file://' + directory)
+        job.StageInDir  = job.SessionDir
+        job.StageOutDir = job.SessionDir
+        job.IDFromEndpoint = jobid
+        jc.addEntity(job)
         return True
 
     debug('Job *NOT* submitted successfully!', 'fork.Submit')

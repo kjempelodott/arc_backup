@@ -1,0 +1,56 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link REL="SHORTCUT ICON" HREF="http//www.nordugrid.org/favicon.ico">
+    <link rel="STYLESHEET" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="STYLESHEET" href="../../../_static/nordugrid_wrapper.css" type="text/css" />
+    <title>NorduGrid | Python LRMS backends</title>
+  </head>
+  
+  <body class="LONG">
+    <div class="MAIN">
+      <h1 class="TITLE">Python LRMS backends</h1>
+      
+      <h1>Source code for lrms.common.ssh</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Provides the ``SSHSession`` dictionary, which maps host</span>
+<span class="sd">to :py:class:`paramiko.transport.Transport`.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">log</span> <span class="kn">import</span> <span class="n">ArcError</span>
+
+<span class="n">SSHSession</span> <span class="o">=</span> <span class="p">{}</span>
+
+<div class="viewcode-block" id="ssh_connect"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.ssh.ssh_connect">[docs]</a><span class="k">def</span> <span class="nf">ssh_connect</span><span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">pkey</span><span class="p">,</span> <span class="n">window_size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">&lt;&lt;</span> <span class="mi">15</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates a :py:class:`paramiko.Transport` object and adds it to</span>
+<span class="sd">    ``SSHSession``.</span>
+
+<span class="sd">    :param str host: remote host</span>
+<span class="sd">    :param str user: username at remote host</span>
+<span class="sd">    :param str pkey: path to private RSA key</span>
+<span class="sd">    :param int window_size: TCP window size</span>
+<span class="sd">    :note: if command execution times out and output is truncated, it is likely that the TCP window is too small</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">paramiko.transport</span> <span class="kn">import</span> <span class="n">Transport</span>
+    <span class="kn">from</span> <span class="nn">paramiko</span> <span class="kn">import</span> <span class="n">RSAKey</span>
+
+    <span class="k">global</span> <span class="n">SSHSession</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">SSHSession</span><span class="p">[</span><span class="n">host</span><span class="p">]</span> <span class="o">=</span> <span class="n">Transport</span><span class="p">((</span><span class="n">host</span><span class="p">,</span> <span class="mi">22</span><span class="p">))</span>
+        <span class="n">SSHSession</span><span class="p">[</span><span class="n">host</span><span class="p">]</span><span class="o">.</span><span class="n">window_size</span> <span class="o">=</span> <span class="n">window_size</span>
+        <span class="n">pkey</span> <span class="o">=</span> <span class="n">RSAKey</span><span class="o">.</span><span class="n">from_private_key_file</span><span class="p">(</span><span class="n">pkey</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+        <span class="n">SSHSession</span><span class="p">[</span><span class="n">host</span><span class="p">]</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">username</span> <span class="o">=</span> <span class="n">user</span><span class="p">,</span> <span class="n">pkey</span> <span class="o">=</span> <span class="n">pkey</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Failed to connect to </span><span class="si">%s</span><span class="s">:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.ssh&#39;</span><span class="p">)</span></div>
+</pre></div>
+
+    </div>
+    
+    <DIV>
+      <OBJECT type="text/html" data="http//www.nordugrid.org/styles/ngfooter.html" width="100%">
+	<center><a href="http//www.nordugrid.org">Nordugrid homepage</a></center>
+      </OBJECT>
+    </DIV>
+  </body>
+</html>

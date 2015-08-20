@@ -11,7 +11,7 @@ import os, arc
 from config import Config
 from files import read, write, getmtime
 from proc import execute_local, execute_remote
-
+from log import error, warn
 
 RUNNING  = ['PENDING','RUNNING','SUSPENDED','COMPLETING',     # slurm
             'PSUSP','USUSP','SUSSP','RUN','PEND',             # lsf
@@ -224,12 +224,12 @@ def read_local_file(job):
     """
 
     try:
-        content = dict(item.split('=', 1) for item in read(job.local_file))
-        job.localid = content['localid'].split(':', 1)[1].strip()
+        content = dict(item.split('=', 1) for item in read(job.local_file) if item)
+        job.localid = content['localid'].strip()
         job.sessiondir = content['sessiondir'].strip()
         return True
     except Exception as e: 
-        error('Failed to get local ID or sessiondir from local file (%s)' % globalid, 'common.scan')
+        error('Failed to get local ID or sessiondir from local file (%s)' % job.globalid, 'common.scan')
         return False
 
 

@@ -11,7 +11,7 @@ if __name__ == "__main__":
         uids = getpwnam(sys.argv[1])
         user, group = uids.pw_uid, uids.pw_gid
     except:
-        print('grid-username not given. Ownership set to %i.' % os.getuid())
+        print('Invalid or no grid-username given. Ownership set to %i.' % os.getuid())
 
     username = raw_input("Username: ")
     if isLoginUser(username):

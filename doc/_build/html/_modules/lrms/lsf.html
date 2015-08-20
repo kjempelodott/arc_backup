@@ -13,36 +13,39 @@
       
       <h1>Source code for lrms.lsf</h1><div class="highlight"><pre>
 <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Functions for LSF job handling.</span>
+<span class="sd">LSF batch system interface module.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">common.cancel</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">common.common</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">common.config</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">common.proc</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">import</span> <span class="nn">os</span><span class="o">,</span> <span class="nn">sys</span><span class="o">,</span> <span class="nn">time</span><span class="o">,</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">arc</span>
+<span class="kn">from</span> <span class="nn">common.cancel</span> <span class="kn">import</span> <span class="n">cancel</span>
+<span class="kn">from</span> <span class="nn">common.config</span> <span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">configure</span><span class="p">,</span> <span class="n">is_conf_setter</span>
+<span class="kn">from</span> <span class="nn">common.proc</span> <span class="kn">import</span> <span class="n">execute_local</span><span class="p">,</span> <span class="n">execute_remote</span>
+<span class="kn">from</span> <span class="nn">common.log</span> <span class="kn">import</span> <span class="n">debug</span><span class="p">,</span> <span class="n">verbose</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">warn</span><span class="p">,</span> <span class="n">error</span><span class="p">,</span> <span class="n">ArcError</span>
 <span class="kn">from</span> <span class="nn">common.scan</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">common.ssh</span> <span class="kn">import</span> <span class="n">ssh_connect</span>
 <span class="kn">from</span> <span class="nn">common.submit</span> <span class="kn">import</span> <span class="o">*</span>
 
+
+<span class="nd">@is_conf_setter</span>
 <div class="viewcode-block" id="set_lsf"><a class="viewcode-back" href="../../python-lrms.html#lrms.lsf.set_lsf">[docs]</a><span class="k">def</span> <span class="nf">set_lsf</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Fill :py:data:`~lrms.common.common.Config` with LSF-specific options.</span>
+<span class="sd">    Set LSF specific :py:data:`~lrms.common.Config` attributes.</span>
 
-<span class="sd">    :param cfg: parsed config (from :py:meth:`~lrms.common.config.get_parsed_config`)</span>
+<span class="sd">    :param cfg: parsed arc.conf</span>
 <span class="sd">    :type cfg: :py:class:`ConfigParser.ConfigParser`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">Config</span><span class="o">.</span><span class="n">lsf_bin_path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_bin_path&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span> <span class="k">if</span> \
-                          <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_bin_path&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="s">&#39;/usr/bin&#39;</span>
+    <span class="n">Config</span><span class="o">.</span><span class="n">lsf_bin_path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_bin_path&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_bin_path&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="s">&#39;/usr/bin&#39;</span>
 
     <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_profile_path&#39;</span><span class="p">):</span>
-        <span class="n">Config</span><span class="o">.</span><span class="n">lsf_cmd</span> <span class="o">=</span> <span class="s">&#39;source </span><span class="si">%s</span><span class="s"> &amp;&amp;&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_profile_path&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span>
+        <span class="n">Config</span><span class="o">.</span><span class="n">lsf_setup</span> <span class="o">=</span> <span class="s">&#39;source </span><span class="si">%s</span><span class="s"> &amp;&amp;&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_profile_path&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;lsf_profile_path not set in arc.conf&#39;</span><span class="p">,</span> <span class="s">&#39;lsf&#39;</span><span class="p">)</span>
-        <span class="n">Config</span><span class="o">.</span><span class="n">lsf_cmd</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+        <span class="n">warn</span><span class="p">(</span><span class="s">&#39;lsf_profile_path not set in arc.conf&#39;</span><span class="p">,</span> <span class="s">&#39;lsf&#39;</span><span class="p">)</span>
+        <span class="n">Config</span><span class="o">.</span><span class="n">lsf_setup</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
 
     <span class="n">Config</span><span class="o">.</span><span class="n">localtransfer</span> <span class="o">=</span> <span class="bp">False</span>
-    <span class="n">Config</span><span class="o">.</span><span class="n">lsf_architecture</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_architecture&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span> <span class="k">if</span> \
-                              <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_architecture&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="s">&#39;&#39;</span>
+    <span class="n">Config</span><span class="o">.</span><span class="n">lsf_architecture</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_architecture&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&#39;&quot;&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_option</span><span class="p">(</span><span class="s">&#39;common&#39;</span><span class="p">,</span> <span class="s">&#39;lsf_architecture&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="s">&#39;&#39;</span>
             
 <span class="c">#---------------------</span>
 <span class="c"># Submit methods</span>
@@ -50,41 +53,40 @@
 </div>
 <div class="viewcode-block" id="Submit"><a class="viewcode-back" href="../../python-lrms.html#lrms.lsf.Submit">[docs]</a><span class="k">def</span> <span class="nf">Submit</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">jobdescs</span><span class="p">,</span> <span class="n">jc</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Submit a job to LSF.</span>
+<span class="sd">    Submits a job to the LSF queue specified in arc.conf. This method executes the required</span>
+<span class="sd">    Run Time Environment scripts and assembles the bash job script. The job script is</span>
+<span class="sd">    written to file and submitted with ``bsub``.</span>
 
 <span class="sd">    :param str config: path to arc.conf</span>
 <span class="sd">    :param jobdescs: job description list object</span>
-<span class="sd">    :type jobdescs: :py:class:`arc.JobDescriptionList (Swig Object of type &#39;Arc::JobDescriptionList *&#39;)`</span>
-<span class="sd">    :param jc: job container object</span>
-<span class="sd">    :type jc: :py:class:`arc.compute.JobContainer (Swig Object of type Arc::EntityContainer&lt; Arc::Job &gt; *&#39;)`</span>
+<span class="sd">    :type jobdescs: :py:class:`arc.JobDescriptionList`</span>
+<span class="sd">    :param jc: job container object </span>
+<span class="sd">    :type jc: :py:class:`arc.compute.JobContainer`</span>
 <span class="sd">    :return: ``True`` if successfully submitted, else ``False``</span>
 <span class="sd">    :rtype: :py:obj:`bool`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">cfg</span> <span class="o">=</span> <span class="n">get_parsed_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-    <span class="n">set_common</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="n">set_gridmanager</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="n">set_cluster</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="n">set_queue</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="n">set_lsf</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">configure</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">set_lsf</span><span class="p">)</span>
 
     <span class="n">jd</span> <span class="o">=</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="n">validate_attributes</span><span class="p">(</span><span class="n">jd</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
+        <span class="n">ssh_connect</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">private_key</span><span class="p">)</span>
         
     <span class="c"># Run RTE stage0</span>
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- starting lsfSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----- starting lsfSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
     <span class="n">RTE_stage0</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">,</span> <span class="s">&#39;LSF&#39;</span><span class="p">)</span>
 
     <span class="c"># Create script file and write job script</span>
     <span class="n">jobscript</span> <span class="o">=</span> <span class="n">get_job_script</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
     <span class="n">script_file</span> <span class="o">=</span> <span class="n">write_script_file</span><span class="p">(</span><span class="n">jobscript</span><span class="p">)</span>
 
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;LSF jobname: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">jd</span><span class="o">.</span><span class="n">Identification</span><span class="o">.</span><span class="n">JobName</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;LSF job script built&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----------------- BEGIN job script -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;LSF jobname: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">jd</span><span class="o">.</span><span class="n">Identification</span><span class="o">.</span><span class="n">JobName</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;LSF job script built&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----------------- BEGIN job script -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">jobscript</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">):</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="n">line</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----------------- END job script -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+        <span class="n">debug</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----------------- END job script -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="s">&#39;ONLY_WRITE_JOBSCRIPT&#39;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s">&#39;ONLY_WRITE_JOBSCRIPT&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;yes&#39;</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">False</span>
@@ -96,74 +98,75 @@
     <span class="n">execute</span> <span class="o">=</span> <span class="n">excute_local</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">else</span> <span class="n">execute_remote</span>
     <span class="n">directory</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">OtherAttributes</span><span class="p">[</span><span class="s">&#39;joboption;directory&#39;</span><span class="p">]</span>
 
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Session directory: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">directory</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Session directory: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">directory</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
 
     <span class="n">LSF_TRIES</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">args</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s">/bsub &lt; </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">lsf_cmd</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">lsf_bin_path</span><span class="p">,</span> <span class="n">script_file</span><span class="p">)</span>
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">,</span> <span class="s">&#39;executing </span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;</span><span class="s"> on </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> 
-        <span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">else</span> <span class="s">&#39;localhost&#39;</span><span class="p">),</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-    <span class="n">bsub_handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">bsub_handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s">/bsub &lt; </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">lsf_setup</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">lsf_bin_path</span><span class="p">,</span> <span class="n">script_file</span><span class="p">)</span>
+    <span class="n">verbose</span><span class="p">(</span><span class="s">&#39;executing </span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;</span><span class="s"> on </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">else</span> <span class="s">&#39;localhost&#39;</span><span class="p">),</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
 
-        <span class="n">jobID</span> <span class="o">=</span> <span class="n">get_job_id</span><span class="p">(</span><span class="n">bsub_handle</span><span class="p">)</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;job submitted successfully!&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;local job id: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">jobID</span><span class="p">),</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- exiting lsfSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">job</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">Job</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">set_job_id</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="n">job</span><span class="p">):</span>
+
+        <span class="n">debug</span><span class="p">(</span><span class="s">&#39;job submitted successfully!&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+        <span class="n">debug</span><span class="p">(</span><span class="s">&#39;local job id: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">JobID</span><span class="p">),</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+        <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----- exiting lsfSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
 
         <span class="n">endpointURL</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_endpoint</span><span class="p">)</span>
-        <span class="n">newJob</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">Job</span><span class="p">()</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">JobID</span> <span class="o">=</span> <span class="n">endpointURL</span><span class="o">.</span><span class="n">Host</span><span class="p">()</span> <span class="o">+</span> <span class="s">&#39;:&#39;</span> <span class="o">+</span> <span class="n">jobID</span> <span class="k">if</span> <span class="n">endpointURL</span><span class="o">.</span><span class="n">Host</span><span class="p">()</span> <span class="k">else</span> <span class="n">jobID</span>
+        <span class="k">if</span> <span class="n">endpointURL</span><span class="o">.</span><span class="n">Host</span><span class="p">():</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">JobID</span> <span class="o">=</span> <span class="n">endpointURL</span><span class="o">.</span><span class="n">Host</span><span class="p">()</span> <span class="o">+</span> <span class="s">&#39;:&#39;</span> <span class="o">+</span> <span class="n">job</span><span class="o">.</span><span class="n">JobID</span>
         <span class="c"># TODO: What interface name to use?</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">ServiceInformationInterfaceName</span> <span class="o">=</span> <span class="s">&#39;org.nordugrid.slurm.sbatch&#39;</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">JobStatusInterfaceName</span> <span class="o">=</span> <span class="s">&#39;org.nordugrid.slurm.sbatch&#39;</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">JobManagementInterfaceName</span> <span class="o">=</span> <span class="s">&#39;org.nordugrid.slurm.sbatch&#39;</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">ServiceInformationInterfaceName</span> <span class="o">=</span> <span class="s">&#39;org.nordugrid.slurm.sbatch&#39;</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">JobStatusInterfaceName</span> <span class="o">=</span> <span class="s">&#39;org.nordugrid.slurm.sbatch&#39;</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">JobManagementInterfaceName</span> <span class="o">=</span> <span class="s">&#39;org.nordugrid.slurm.sbatch&#39;</span>
         <span class="c"># TODO: Change returned endpoints for job.</span>
         <span class="c"># Currently these URLs are not usable.</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">ServiceInformationURL</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="s">&#39;test://localhost&#39;</span><span class="p">)</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">JobStatusURL</span> <span class="o">=</span> <span class="n">endpointURL</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">JobManagementURL</span> <span class="o">=</span> <span class="n">endpointURL</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">SessionDir</span>  <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="s">&#39;file://&#39;</span> <span class="o">+</span> <span class="n">directory</span><span class="p">)</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">StageInDir</span>  <span class="o">=</span> <span class="n">newJob</span><span class="o">.</span><span class="n">SessionDir</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">StageOutDir</span> <span class="o">=</span> <span class="n">newJob</span><span class="o">.</span><span class="n">SessionDir</span>
-        <span class="n">newJob</span><span class="o">.</span><span class="n">IDFromEndpoint</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">jobID</span><span class="p">)</span>
-        <span class="n">jc</span><span class="o">.</span><span class="n">addEntity</span><span class="p">(</span><span class="n">newJob</span><span class="p">)</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">ServiceInformationURL</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="s">&#39;test://localhost&#39;</span><span class="p">)</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">JobStatusURL</span> <span class="o">=</span> <span class="n">endpointURL</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">JobManagementURL</span> <span class="o">=</span> <span class="n">endpointURL</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">SessionDir</span>  <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="s">&#39;file://&#39;</span> <span class="o">+</span> <span class="n">directory</span><span class="p">)</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">StageInDir</span>  <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">SessionDir</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">StageOutDir</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">SessionDir</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">IDFromEndpoint</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">JobID</span><span class="p">)</span>
+        <span class="n">jc</span><span class="o">.</span><span class="n">addEntity</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">True</span>
 
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;job *NOT* submitted successfully!&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;got error code from bsub: </span><span class="si">%d</span><span class="s"> !&#39;</span> <span class="o">%</span> <span class="n">bsub_handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Output is:&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">bsub_handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">),</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Error output is:&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">bsub_handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">),</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
-    <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- exiting lsfSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;job *NOT* submitted successfully!&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;got error code from bsub: </span><span class="si">%d</span><span class="s"> !&#39;</span> <span class="o">%</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Output is:&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">),</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Error output is:&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">),</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----- exiting lsfSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
     <span class="k">return</span> <span class="bp">False</span>
 
 </div>
-<div class="viewcode-block" id="get_job_id"><a class="viewcode-back" href="../../python-lrms.html#lrms.lsf.get_job_id">[docs]</a><span class="k">def</span> <span class="nf">get_job_id</span><span class="p">(</span><span class="n">handle</span><span class="p">):</span>
+<div class="viewcode-block" id="set_job_id"><a class="viewcode-back" href="../../python-lrms.html#lrms.lsf.set_job_id">[docs]</a><span class="k">def</span> <span class="nf">set_job_id</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="n">job</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Get local job ID from bsub stdout or stderr.</span>
+<span class="sd">    Read local job ID from ``bsub`` output and set ``JobID`` attribute of job.</span>
 
-<span class="sd">    :param handle: list of job description objects</span>
-<span class="sd">    :type handle: :py:obj:`subprocess.Popen` or :py:data:`~lrms.common.common.Config`</span>
-<span class="sd">    :return: local ID</span>
+<span class="sd">    :param object handle: sbatch handle</span>
+<span class="sd">    :param job: job object </span>
+<span class="sd">    :type job: py:class:`arc.Job</span>
+<span class="sd">    :return: ``True`` if found, else ``False``</span>
 <span class="sd">    :rtype: :py:obj:`str`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">:</span>
         <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">r&#39;Job &lt;(\d+)&gt; .+&#39;</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-    <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Job ID not found in stdout&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">JobID</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">return</span> <span class="bp">False</span>
+    <span class="n">error</span><span class="p">(</span><span class="s">&#39;Job ID not found in stdout&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
 
 </div>
 <div class="viewcode-block" id="get_job_script"><a class="viewcode-back" href="../../python-lrms.html#lrms.lsf.get_job_script">[docs]</a><span class="k">def</span> <span class="nf">get_job_script</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Get the complete bsub job script.</span>
+<span class="sd">    Assemble bash job script for an LSF host.</span>
 
 <span class="sd">    :param jobdescs: list of job description objects</span>
-<span class="sd">    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription (Swig Object of type Arc::JobDescription *&#39;)` ... ]</span>
+<span class="sd">    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription` ... ]</span>
 <span class="sd">    :return: job script</span>
 <span class="sd">    :rtype: :py:obj:`str`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -192,23 +195,12 @@
     <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">shared_filesystem</span><span class="p">:</span>
         <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">setup_runtime_env</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">runtime_stdin</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">jobsessiondir</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span> \
-                        <span class="k">if</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">jobsessiondir</span> <span class="o">+</span><span class="s">&#39;/&#39;</span><span class="p">)</span> \
-                        <span class="k">else</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span>
-        <span class="k">if</span> <span class="n">runtime_stdin</span>  <span class="o">!=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span><span class="p">:</span>
-            <span class="n">runtime_stdin</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">,</span> <span class="n">runtime_stdin</span><span class="p">)</span>
-
-        <span class="n">runtime_stdout</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">jobsessiondir</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span> \
-                         <span class="k">if</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">jobsessiondir</span> <span class="o">+</span> <span class="s">&#39;/&#39;</span><span class="p">)</span> \
-                         <span class="k">else</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span>
-        <span class="k">if</span> <span class="n">runtime_stdout</span> <span class="o">!=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span><span class="p">:</span>
-            <span class="n">runtime_stdout</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">,</span> <span class="n">runtime_stdout</span><span class="p">)</span>
-
-        <span class="n">runtime_stderr</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">jobsessiondir</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span> \
-                         <span class="k">if</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">jobsessiondir</span> <span class="o">+</span> <span class="s">&#39;/&#39;</span><span class="p">)</span> \
-                         <span class="k">else</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span>
-        <span class="k">if</span> <span class="n">runtime_stderr</span> <span class="o">!=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span><span class="p">:</span>
-            <span class="n">runtime_stderr</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">,</span> <span class="n">runtime_stderr</span><span class="p">)</span>
+        <span class="n">runtime_stdin</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Input</span>
+        <span class="n">runtime_stdout</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Output</span>
+        <span class="n">runtime_stderr</span> <span class="o">=</span> <span class="n">jd</span><span class="o">.</span><span class="n">Application</span><span class="o">.</span><span class="n">Error</span>
+        <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="p">(</span><span class="n">runtime_stdin</span><span class="p">,</span> <span class="n">runtime_stdout</span><span class="p">,</span> <span class="n">runtime_stderr</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">jobsessiondir</span> <span class="o">+</span><span class="s">&#39;/&#39;</span><span class="p">):</span>
+                <span class="n">f</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">,</span> <span class="n">f</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">jobsessiondir</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:])</span>
 
         <span class="n">scratchdir</span> <span class="o">=</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scratchdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">)</span>
         <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;RUNTIME_JOB_DIR=</span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">scratchdir</span> <span class="o">+</span> \
@@ -228,8 +220,7 @@
 
     <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">RTE_stage1</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">shared_filesystem</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Nodes detached from gridarea are not supported when LSF is used. &#39;</span>
-                       <span class="s">&#39;Aborting job submit&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Nodes detached from gridarea are not supported when LSF is used. Aborting job submit.&#39;</span><span class="p">,</span> <span class="s">&#39;lsf.Submit&#39;</span><span class="p">)</span>
     <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">cd_and_run</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
     <span class="n">jobscript</span> <span class="o">+=</span> <span class="s">&#39;fi</span><span class="se">\n</span><span class="s">&#39;</span>
     <span class="n">jobscript</span> <span class="o">+=</span> <span class="n">configure_runtime</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">)</span>
@@ -243,20 +234,16 @@
 </div>
 <div class="viewcode-block" id="Cancel"><a class="viewcode-back" href="../../python-lrms.html#lrms.lsf.Cancel">[docs]</a><span class="k">def</span> <span class="nf">Cancel</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">jobid</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Cancel an LSF job.</span>
+<span class="sd">    Cancel a job running at an LSF host with ``bkill``.</span>
 
 <span class="sd">    :param str config: path to arc.conf</span>
-<span class="sd">    :param str jobid: local job ID</span>
+<span class="sd">    :param str grami_file: path to grami file</span>
 <span class="sd">    :return: ``True`` if successfully cancelled, else ``False``</span>
 <span class="sd">    :rtype: :py:obj:`bool`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">cfg</span> <span class="o">=</span> <span class="n">get_parsed_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-    <span class="n">set_gridmanager</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="n">set_lsf</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-
-    <span class="n">cmd</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s">/bkill -s 9 </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">lsf_cmd</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">lsf_bin_path</span><span class="p">,</span> <span class="n">jobid</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">cancel</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">jobid</span><span class="p">,</span> <span class="s">&#39;lsf&#39;</span><span class="p">)</span>
+    <span class="n">configure</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">set_lsf</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">cancel</span><span class="p">(</span><span class="s">&#39;lsf&#39;</span><span class="p">,</span> <span class="n">jobid</span><span class="p">)</span>
 
 
 <span class="c">#---------------------</span>
@@ -265,7 +252,13 @@
     </div>
 <div class="viewcode-block" id="Scan"><a class="viewcode-back" href="../../python-lrms.html#lrms.lsf.Scan">[docs]</a><span class="k">def</span> <span class="nf">Scan</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">ctr_dirs</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Scan and update status of LSF jobs.</span>
+<span class="sd">    Query the LSF host for all jobs in /[controldir]/processing with ``bjobs``.</span>
+<span class="sd">    If the job has stopped running, the exit code is read and the </span>
+<span class="sd">    diagnostics and comments files are updated. Finally ``gm-kick`` is executed</span>
+<span class="sd">    on all jobs with an exit code.</span>
+
+<span class="sd">    If the exit code can not be read from the diagnostics file, it will (after</span>
+<span class="sd">    5 tries) be kicked with status UNKNOWN.</span>
 
 <span class="sd">    :param str config: path to arc.conf</span>
 <span class="sd">    :param ctr_dirs: list of paths to control directories </span>
@@ -274,108 +267,85 @@
 
     <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
 
-    <span class="n">cfg</span> <span class="o">=</span> <span class="n">get_parsed_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-    <span class="n">set_gridmanager</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-    <span class="n">set_lsf</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
-
+    <span class="n">configure</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">set_lsf</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">scanscriptlog</span><span class="p">:</span>
         <span class="n">scanlogfile</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">LogFile</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scanscriptlog</span><span class="p">)</span>
         <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Logger_getRootLogger</span><span class="p">()</span><span class="o">.</span><span class="n">addDestination</span><span class="p">(</span><span class="n">scanlogfile</span><span class="p">)</span>
 
     <span class="n">jobs</span> <span class="o">=</span> <span class="n">get_jobs</span><span class="p">(</span><span class="n">ctr_dirs</span><span class="p">)</span>
-    <span class="n">process_jobs</span><span class="p">(</span><span class="n">jobs</span><span class="p">)</span>
-
-</div>
-<div class="viewcode-block" id="process_jobs"><a class="viewcode-back" href="../../python-lrms.html#lrms.lsf.process_jobs">[docs]</a><span class="k">def</span> <span class="nf">process_jobs</span><span class="p">(</span><span class="n">jobs</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Check if jobs are still running. If job is finished, get the exit code,</span>
-<span class="sd">    update the ``lrms_done_file`` and write to the ``comments_file``.</span>
-
-<span class="sd">    :param job: list of job objects (from :py:meth:`~lrms.common.scan.get_jobs`)</span>
-<span class="sd">    :type job: :py:obj:`list` [ :py:class:`~lrms.common.common.Object` ... ]</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
     <span class="k">if</span> <span class="ow">not</span> <span class="n">jobs</span><span class="p">:</span> <span class="k">return</span>
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
+        <span class="c"># NOTE: Assuming 256 B of TCP window needed for each job</span>
+        <span class="n">ssh_connect</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">private_key</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span> <span class="o">&lt;&lt;</span> <span class="mi">7</span><span class="p">)</span><span class="o">*</span><span class="nb">len</span><span class="p">(</span><span class="n">jobs</span><span class="p">))</span>
 
     <span class="n">lsf_bin_path</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">lsf_bin_path</span>
     <span class="n">execute</span> <span class="o">=</span> <span class="n">excute_local</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">else</span> <span class="n">execute_remote</span>
-    <span class="n">args</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">lsf_cmd</span> <span class="o">+</span> <span class="s">&#39; &#39;</span> <span class="o">+</span> <span class="n">lsf_bin_path</span> <span class="o">+</span> <span class="s">&#39;/bjobs -w -W &#39;</span> <span class="o">+</span> <span class="s">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">jobs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> 
+    <span class="n">args</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">lsf_setup</span> <span class="o">+</span> <span class="s">&#39; &#39;</span> <span class="o">+</span> <span class="n">lsf_bin_path</span> <span class="o">+</span> <span class="s">&#39;/bjobs -w -W &#39;</span> <span class="o">+</span> <span class="s">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">jobs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> 
     <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">has_key</span><span class="p">(</span><span class="s">&#39;__LSF_TEST&#39;</span><span class="p">):</span>
 	<span class="n">handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">env</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">))</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">kick_job</span><span class="p">(</span><span class="n">job</span><span class="p">):</span>
-        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">lrms_done_file</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%d</span><span class="s"> </span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">exitcode</span><span class="p">,</span> <span class="n">job</span><span class="o">.</span><span class="n">message</span><span class="p">))</span>
-        <span class="n">write_comments</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
-        <span class="n">update_diag</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
-        <span class="n">gm_kick</span><span class="p">([</span><span class="n">job</span><span class="p">])</span>
-
-    <span class="k">def</span> <span class="nf">handle_job</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">stats</span> <span class="o">=</span> <span class="p">[]):</span>
-
-        <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">state</span> <span class="ow">in</span> <span class="n">RUNNING</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">handle_job</span><span class="p">(</span><span class="n">info</span><span class="p">,</span> <span class="n">in_lsf</span> <span class="o">=</span> <span class="bp">True</span><span class="p">):</span>
+        <span class="n">job</span> <span class="o">=</span> <span class="n">jobs</span><span class="p">[</span><span class="n">info</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">info</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">status</span> <span class="ow">in</span> <span class="n">RUNNING</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">count_file</span><span class="p">):</span>
                 <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">count_file</span><span class="p">)</span>
             <span class="k">return</span>
 
         <span class="k">if</span> <span class="n">set_exit_code_from_diag</span><span class="p">(</span><span class="n">job</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">stats</span><span class="p">:</span>
-                <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+            <span class="k">if</span> <span class="n">in_lsf</span><span class="p">:</span>
+                <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">info</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
                 <span class="n">re_date</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">r&#39;^(?P&lt;mm&gt;\d\d)/(?P&lt;dd&gt;\d\d)-(?P&lt;HH&gt;\d\d):(?P&lt;MM&gt;\d\d)&#39;</span><span class="p">)</span>
                 <span class="n">job</span><span class="o">.</span><span class="n">LRMSStartTime</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span><span class="n">get_MDS</span><span class="p">(</span><span class="n">re_date</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">start</span><span class="p">)</span><span class="o">.</span><span class="n">groupdict</span><span class="p">()))</span>
                 <span class="k">if</span> <span class="n">end</span> <span class="o">!=</span> <span class="s">&#39;-&#39;</span><span class="p">:</span>
                     <span class="n">job</span><span class="o">.</span><span class="n">LRMSEndTime</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span><span class="n">get_MDS</span><span class="p">(</span><span class="n">re_date</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">end</span><span class="p">)</span><span class="o">.</span><span class="n">groupdict</span><span class="p">()))</span>
                     <span class="n">job</span><span class="o">.</span><span class="n">WallTime</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">LRMSEndTime</span> <span class="o">-</span> <span class="n">job</span><span class="o">.</span><span class="n">LRMSStartTime</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span>
-        <span class="c"># Job finished and exitcode found</span>
-        <span class="n">job</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="n">MESSAGES</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">state</span><span class="p">]</span>
-        <span class="n">kick_job</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+            <span class="c"># Job finished and exitcode found</span>
+            <span class="n">job</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="n">MESSAGES</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">state</span><span class="p">]</span>
+            <span class="k">return</span>
+        <span class="c"># else</span>
+        <span class="n">add_failure</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+
+    <span class="c"># Handle jobs known to LSF</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">info</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+            <span class="k">assert</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">info</span><span class="p">)</span> <span class="o">==</span> <span class="mi">15</span><span class="p">)</span>
+            <span class="n">handle_job</span><span class="p">(</span><span class="n">info</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">line</span><span class="p">:</span>
+                <span class="n">warn</span><span class="p">(</span><span class="s">&#39;Failed to parse bjobs line: &#39;</span> <span class="o">+</span> <span class="n">line</span><span class="p">,</span> <span class="s">&#39;lsf.Scan&#39;</span><span class="p">)</span>
 
     <span class="c"># Handle jobs lost in LSF</span>
     <span class="k">if</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Got error code </span><span class="si">%i</span><span class="s"> from bjobs&#39;</span> <span class="o">%</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">,</span> <span class="s">&#39;lsf.Scan&#39;</span><span class="p">)</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;Error output is:</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">),</span> <span class="s">&#39;lsf.Scan&#39;</span><span class="p">)</span>
+        <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Got error code </span><span class="si">%i</span><span class="s"> from bjobs&#39;</span> <span class="o">%</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">,</span> <span class="s">&#39;lsf.Scan&#39;</span><span class="p">)</span>
+        <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Error output is:</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">),</span> <span class="s">&#39;lsf.Scan&#39;</span><span class="p">)</span>
         <span class="n">lost_job</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">&#39;Job &lt;(\d+)&gt; is not found&#39;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">job</span> <span class="o">=</span> <span class="n">jobs</span><span class="p">[</span><span class="n">lost_job</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">line</span><span class="p">)</span><span class="o">.</span><span class="n">groups</span><span class="p">()[</span><span class="mi">0</span><span class="p">]]</span>
-                <span class="n">job</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="s">&#39;UNKNOWN&#39;</span>
-                <span class="n">handle_job</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
-            <span class="k">except</span><span class="p">:</span>
-                <span class="n">add_failure</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
-                <span class="c"># After 5 failures, job gets exitcode -1</span>
-                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="s">&#39;exitcode&#39;</span><span class="p">):</span>
-                    <span class="n">kick_job</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+            <span class="n">match</span> <span class="o">=</span> <span class="n">lost_job</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+                <span class="n">handle_job</span><span class="p">([</span><span class="n">match</span><span class="o">.</span><span class="n">groups</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&#39;UNKNOWN&#39;</span><span class="p">],</span> <span class="bp">False</span><span class="p">)</span>
 
-    <span class="c"># Handle jobs in LSF</span>
-    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">stats</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
-            <span class="k">assert</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">stats</span><span class="p">)</span> <span class="o">==</span> <span class="mi">15</span><span class="p">)</span>
-        <span class="k">except</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">line</span><span class="p">:</span>
-                <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Failed to parse bjobs line: &#39;</span> <span class="o">+</span> <span class="n">line</span><span class="p">,</span> <span class="s">&#39;lsf.Scan&#39;</span><span class="p">)</span>
-            <span class="k">continue</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">job</span> <span class="o">=</span> <span class="n">jobs</span><span class="p">[</span><span class="n">stats</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
-            <span class="n">job</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
-            <span class="n">handle_job</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">stats</span><span class="p">)</span>
-        <span class="k">except</span><span class="p">:</span>
-            <span class="n">add_failure</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
-            <span class="c"># After 5 failures, job gets exitcode -1</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="s">&#39;exitcode&#39;</span><span class="p">):</span>
-                <span class="n">kick_job</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+    <span class="n">kicklist</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="n">jobs</span><span class="o">.</span><span class="n">itervalues</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="s">&#39;exitcode&#39;</span><span class="p">):</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">lrms_done_file</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%d</span><span class="s"> </span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">exitcode</span><span class="p">,</span> <span class="n">job</span><span class="o">.</span><span class="n">message</span><span class="p">))</span>
+            <span class="n">write_comments</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+            <span class="n">update_diag</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+            <span class="n">kicklist</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+    <span class="n">gm_kick</span><span class="p">(</span><span class="n">kicklist</span><span class="p">)</span>
 
 </div>
 <div class="viewcode-block" id="assemble_BSUB"><a class="viewcode-back" href="../../python-lrms.html#lrms.lsf.assemble_BSUB">[docs]</a><span class="k">def</span> <span class="nf">assemble_BSUB</span><span class="p">(</span><span class="n">j</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Get bsub section of job script.</span>
+<span class="sd">    Assemble the ``bsub`` specific section of the job script.</span>
 
 <span class="sd">    :param jobdescs: job description object</span>
-<span class="sd">    :type jobdescs: :py:class:`arc.JobDescription (Swig Object of type &#39;Arc::JobDescription *&#39;)`</span>
-<span class="sd">    :return: jobscript section</span>
+<span class="sd">    :type jobdescs: :py:class:`arc.JobDescription`</span>
+<span class="sd">    :return: job script part</span>
 <span class="sd">    :rtype: :py:obj:`str`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 

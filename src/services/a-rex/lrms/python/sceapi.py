@@ -1,13 +1,26 @@
-from common.cancel import *
-from common.common import *
-from common.config import *
-from common.proc import *
+"""
+ScGrid SCEAPI interface module.
+"""
+
+import os, sys, time, re, json
+import arc
+from common.cancel import cancel
+from common.config import Config, configure, is_conf_setter
+from common.files import read
+from common.log import debug, verbose, info, warn, error, ArcError
 from common.scan import *
 from common.submit import *
-from common.files import read
-import json
+
 
 def setup_api():
+    """
+    Get SCEAPI client. Raises ArcError and prints login instruction to log if not logged in.
+
+    :return: SCEAPI client
+    :rtype: :py:class:`lrms.sceclient.ApiClient`
+    """
+
+
     from sceclient import isLogin, getHttpClient
     # JSON cookie lives for 5 minutes
     if not isLogin(): # Will also resets time of cookie
@@ -20,43 +33,67 @@ def setup_api():
     return client
 
 
+@is_conf_setter
 def set_sceapi(cfg):
-    for section in cfg.sections():
-        if section[:6] != 'queue/' or not section[6:]:
-            continue
-        if section[6:] not in Config.queue:
-            Config.queue[section[6:]] = Object()
-        if not cfg.has_option(section, 'sceapi_host'):
-            raise ArcError('SCEAPI requires \'sceapi_host\' in queue section of arc.conf', 'sceapi')
-        Config.queue[section[6:]].sceapi_host = cfg.get(section, 'sceapi_host').strip('"')
+    """
+    Set SCEAPI specific :py:data:`~lrms.common.Config attributes.
 
+    :param cfg: parsed arc.conf
+    :type cfg: :py:class:`ConfigParser.ConfigParser`
+    """
+
+    for name, queue in Config.queue.iteritems():
+        if not cfg.has_option('queue/' + name, 'scgrid_host'):
+            raise ArcError('SCEAPI backend requires \'scgrid_host\' in queue section of arc.conf', 'sceapi')
+        queue.sceapi_host = cfg.get('queue/' + name, 'scgrid_host').strip('"')
+                
+
+def translate(text):
+    """
+    Translate Chinese error message to English (requires Goslate).
+
+    :param str text: message to translate
+    :return: translated message if Goslate installed, else original message
+    :rtype: py:obj:`str`
+    """
+    try:
+        import goslate
+        return goslate.Goslate().translate(text, 'en')
+    except:
+        return text
     
-
 #---------------------
 # Submit methods
 #---------------------
 
 def Submit(config, jobdescs, jc):
+    """    
+    Submits an ATLAS job to the ScGrid host specified in arc.conf. This method executes the required
+    RunTimeEnvironment scripts and assembles the bash job script. The job script is
+    written to file and submitted with SCEAPI.
+                                                                                     
+    :param str config: path to arc.conf
+    :param jobdescs: job description list object                                 
+    :type jobdescs: :py:class:`arc.JobDescriptionList`        
+    :param jc: job container object
+    :type jc: :py:class:`arc.compute.JobContainer`
+    :return: ``True`` if successfully submitted, else ``False``
+    :rtype: :py:obj:`bool`
+    """
 
     import fcntl
     # Allow only one submit at the same time
     _lock = open('/tmp/sceapi-submit-job.lock', 'a')
     fcntl.flock(_lock, fcntl.LOCK_EX)
 
-    cfg = get_parsed_config(config)
-    set_common(cfg)
-    set_gridmanager(cfg)
-    set_cluster(cfg)
-    set_queue(cfg)
-    set_sceapi(cfg)
+    configure(config, set_sceapi)
     client = setup_api()
 
     jd = jobdescs[0]
     validate_attributes(jd)
 
     # Run RTE stage0
-
-    log(arc.DEBUG, '----- starting sceapiSubmitter.py -----', 'sceapi.Submit')
+    debug('----- starting sceapiSubmitter.py -----', 'sceapi.Submit')
     rel = re.compile(r'APPS/HEP/ATLAS-(?P<release>[\d\.]+-[\w_-]+)')
     release = None
     for rte in jd.Resources.RunTimeEnvironment.getSoftwareList():
@@ -72,19 +109,19 @@ def Submit(config, jobdescs, jc):
     args = jobJSDL.pop('arguments')
     input_dict = get_input_dict(jd, args)
 
-    log(arc.DEBUG, 'SCEAPI jobname: %s' % jd.Identification.JobName, 'sceapi.Submit')
-    log(arc.DEBUG, 'SCEAPI job dict built', 'sceapi.Submit')
-    log(arc.DEBUG, '----------------- BEGIN job dict -----', 'sceapi.Submit')
+    debug('SCEAPI jobname: %s' % jd.Identification.JobName, 'sceapi.Submit')
+    debug('SCEAPI job dict built', 'sceapi.Submit')
+    debug('----------------- BEGIN job dict -----', 'sceapi.Submit')
     for key, val in jobJSDL.items():
-        log(arc.DEBUG, '%s : %s' % (key, val), 'sceapi.Submit')
-    log(arc.DEBUG, '----------------- END job dict -----', 'sceapi.Submit')
+        debug('%s : %s' % (key, val), 'sceapi.Submit')
+    debug('----------------- END job dict -----', 'sceapi.Submit')
 
     #######################################
     #  Submit the job
     ######################################
 
     directory = jd.OtherAttributes['joboption;directory']
-    log(arc.DEBUG, 'session directory: %s' % directory, 'sceapi.Submit')
+    debug('session directory: %s' % directory, 'sceapi.Submit')
     resp = client.submitJSON(jobJSDL)
     handle = None
     try:
@@ -95,7 +132,7 @@ def Submit(config, jobdescs, jc):
     failure = ''
     if handle['status_code'] == 0:
 
-        jobID = handle['gidujid']['ujid']
+        jobid = handle['gidujid']['ujid']
         gid = handle['gidujid']['gid']
         
         upload_tries = 0
@@ -113,25 +150,24 @@ def Submit(config, jobdescs, jc):
                 raise ArcError('SCEAPI client response:\n%s' % str(resp_text), 'sceapi')
 
         if ret_code == 0:
-            if json.loads(client.run(jobID), 'utf8')['status_code'] == 0:
-                log(arc.DEBUG, 'job submitted successfully!', 'sceapi.Submit')
-                log(arc.DEBUG, 'local job id: %s' % (jobID), 'sceapi.Submit')
-                log(arc.DEBUG, '----- exiting sceapiSubmitter.py -----', 'sceapi.Submit')
+            if json.loads(client.run(jobid), 'utf8')['status_code'] == 0:
+                debug('job submitted successfully!', 'sceapi.Submit')
+                debug('local job id: %s' % (jobid), 'sceapi.Submit')
+                debug('----- exiting sceapiSubmitter.py -----', 'sceapi.Submit')
                 newJob = arc.Job()
-                newJob.IDFromEndpoint = str(jobID)
+                newJob.IDFromEndpoint = str(jobid)
                 jc.addEntity(newJob)
                 return True
             failure = 'Start job query failed.'
         else:
             failure = 'Failed to upload input files.'
     else:
-        failure = 'Status code %i' % handle['status_code']
-        # TODO: handle['status_reason'] in Chinese. Decode and print!
-
-    log(arc.DEBUG, 'job *NOT* submitted successfully!', 'sceapi.Submit')
+        failure = 'Status code %i: %s' % (handle['status_code'], translate(handle['status_reason']))
+        
+    debug('job *NOT* submitted successfully!', 'sceapi.Submit')
     if failure:
-        log(arc.DEBUG, str(failure), 'sceapi.Submit')
-    log(arc.DEBUG, '----- exiting sceapiSubmitter.py -----', 'sceapi.Submit')
+        debug(str(failure), 'sceapi.Submit')
+    debug('----- exiting sceapiSubmitter.py -----', 'sceapi.Submit')
     return False
 
 #---------------------
@@ -139,12 +175,20 @@ def Submit(config, jobdescs, jc):
 #---------------------
 
 def Cancel(config, jobid):
+    """
+    Cancel a job running at an ScGrid host with ``scancel``.
+
+    :param str config: path to arc.conf
+    :param str jobid: local job ID
+    :return: ``True`` if successfully cancelled, else ``False``
+    :rtype: :py:obj:`bool`
+    """
 
     client = setup_api()
     resp = client.killJob(str(jobid))
     put_cleanup_file(client, jobid)
     try:
-        return json.loads(resp, 'utf8')['status_code']
+        return json.loads(resp, 'utf8')['status_code'] == 0
     except:
         raise ArcError('SCEAPI client response:\n%s' % str(resp), 'sceapi.Cancel')
 
@@ -154,21 +198,23 @@ def Cancel(config, jobid):
 #---------------------
     
 def Scan(config, ctr_dirs):
-    # Before anything can go wrong ...
+    """
+    Query SCEAPI for all jobs in /[controldir]/processing. If the job has stopped running,
+    the diagnostics file is updated and ``gm-kick`` is executed.
+
+    :param str config: path to arc.conf
+    :param ctr_dirs: list of paths to control directories 
+    :type ctr_dirs: :py:obj:`list` [ :py:obj:`str` ... ]
+    """
+
     time.sleep(10)
-
-    cfg = get_parsed_config(config)
-    set_gridmanager(cfg)
-
+    configure(config, set_sceapi);
+                                          
     if Config.scanscriptlog:
         scanlogfile = arc.common.LogFile(Config.scanscriptlog)
         arc.common.Logger_getRootLogger().addDestination(scanlogfile)
 
     jobs = get_jobs(ctr_dirs)
-    process_jobs(jobs)
-
-
-def process_jobs(jobs):
     if not jobs: return
 
     sce_jobs = {}
@@ -182,7 +228,7 @@ def process_jobs(jobs):
             sce_jobs[localid] = ret_json['jobs_list'][0]
         except:
             add_failure(job)
-            log(Arc.ERROR, 'SCEAPI client response:\n%s' % str(resp), 'sceapi.Scan')
+            error('SCEAPI client response:\n%s' % str(resp), 'sceapi.Scan')
 
     for localid, jdict in sce_jobs.items():
         try:
@@ -190,7 +236,7 @@ def process_jobs(jobs):
             job.state = str(jdict['status'])
         except:
             add_failure(job)
-            log(arc.ERROR, 'Job (%s) query returned empty json.' % job.globalid, 'sceapi.Scan')
+            error('Job (%s) query returned empty json.' % job.globalid, 'sceapi.Scan')
             continue
 
         if job.state in RUNNING:
@@ -198,7 +244,7 @@ def process_jobs(jobs):
 
         if not download_output(job, client):
             add_failure(job)
-            log(arc.ERROR, 'Failed to download all files for job %s.' % job.globalid, 'sceapi.Scan')
+            error('Failed to download all files for job %s.' % job.globalid, 'sceapi.Scan')
             if os.path.isfile(job.count_file): # Count file is removed after 5 failures
                 continue
 
@@ -226,43 +272,58 @@ def process_jobs(jobs):
 
 
 def put_cleanup_file(client, jobid):
-    # Let cleanup cron job know this job can be deleted
+    """
+    Upload an empty TO_DELETE file to mark job for deletion.
+    
+    :param client: SCEAPI client
+    :param type: :py:class:`lrms.sceclient.ApiClient`
+    :param str jobid: local job ID
+    """
     TO_DELETE = '/tmp/TO_DELETE'
     open(TO_DELETE, 'w').close()
     client.putfiles(int(jobid), {'TO_DELETE': TO_DELETE})
 
 
-def assemble_dict(j, rel):
+def assemble_dict(jobdesc, rel):
+    """
+    Translate job description to JSDL.
 
+    :param jobdesc: job description object
+    :type jobdesc: :py:class:`arc.JobDescription` 
+    :param str rel: ATLAS release
+    :return: JSDL dictionary
+    :rtype: :py:obj:`dict`
+    """
+    
     job_dict = {}
-    gridid = j.OtherAttributes['joboption;gridid']
+    gridid = jobdesc.OtherAttributes['joboption;gridid']
     ### jobname #PBS -N
-    if j.Identification.JobName:
-        prefix = 'N' if not j.Identification.JobName[0].isalpha() else ''
-        job_dict['jobName'] = prefix + re.sub(r'\W', '_', j.Identification.JobName)[:15-len(prefix)]
+    if jobdesc.Identification.JobName:
+        prefix = 'N' if not jobdesc.Identification.JobName[0].isalpha() else ''
+        job_dict['jobName'] = prefix + re.sub(r'\W', '_', jobdesc.Identification.JobName)[:15-len(prefix)]
 
     ### stdout, stderr #PBS -o,-e
-    job_dict['stdout'] = os.path.basename(j.Application.Output)
-    job_dict['stderr'] = os.path.basename(j.Application.Error)
+    job_dict['stdout'] = os.path.basename(jobdesc.Application.Output)
+    job_dict['stderr'] = os.path.basename(jobdesc.Application.Error)
 
     ### ARCpilot-ATLAS app
     job_dict['execName'] = job_dict['appName'] = 'ARCpilot-ATLAS'
-    if str(j.Application.Executable.Argument[0]) == rel:
-	j.Application.Executable.Argument = j.Application.Executable.Argument[1:]
+    if str(jobdesc.Application.Executable.Argument[0]) == rel:
+	jobdesc.Application.Executable.Argument = jobdesc.Application.Executable.Argument[1:]
     job_dict['arguments'] = '%s %s %s' % (gridid, rel, 
-                            ' '.join("'%s'" % arg for arg in j.Application.Executable.Argument))
+                            ' '.join("'%s'" % arg for arg in jobdesc.Application.Executable.Argument))
     ### queue #PBS -q
-    queue = j.Resources.QueueName
+    queue = jobdesc.Resources.QueueName
     job_dict['queue'] = queue
     job_dict['hostName'] = Config.queue[queue].sceapi_host
    
     ### number of CPUs, #PBS -n
-    job_dict['cpuCount'] = j.Resources.SlotRequirement.NumberOfSlots \
-                       if j.Resources.SlotRequirement.NumberOfSlots > 1 else 1
+    job_dict['cpuCount'] = jobdesc.Resources.SlotRequirement.NumberOfSlots \
+                       if jobdesc.Resources.SlotRequirement.NumberOfSlots > 1 else 1
   
     ### walltime, #PBS -l walltime
-    cputime = j.Resources.TotalCPUTime.range.max
-    walltime = j.Resources.IndividualWallTime.range.max
+    cputime = jobdesc.Resources.TotalCPUTime.range.max
+    walltime = jobdesc.Resources.IndividualWallTime.range.max
     if walltime >= 0:
         job_dict['wallTime'] = walltime/60
     elif cputime >=0:
@@ -274,19 +335,36 @@ def assemble_dict(j, rel):
     return job_dict
 
 
-def get_output_list(j):
-    flist = [{'fileName':f.Name, 'url':f.Name, 'delFlag':True} for f in j.DataStaging.OutputFiles]
-    gridid = j.OtherAttributes['joboption;gridid']
+def get_output_list(jobdesc):
+    """
+    Create an output file JSDL.
+
+    :param jobdesc: job description object
+    :type jobdesc: :py:class:`arc.JobDescription` 
+    :return: output files JSDL
+    :rtype: :py:obj:`dict`
+    """
+
+    flist = [{'fileName':f.Name, 'url':f.Name, 'delFlag':True} for f in jobdesc.DataStaging.OutputFiles]
+    gridid = jobdesc.OtherAttributes['joboption;gridid']
     flist.append({'fileName':'*.root*'      , 'url':'*.root*'      , 'delFlag':True})
     flist.append({'fileName':'log*.tgz*'    , 'url':'log*.tgz*'    , 'delFlag':True})
     flist.append({'fileName':'%s.*' % gridid, 'url':'%s.*' % gridid, 'delFlag':True})
     return flist
 
 
-def get_input_dict(j, args):
+def get_input_dict(jobdesc, args):
+    """
+    Create an input file map.
+
+    :param jobdesc: job description object
+    :type jobdesc: :py:class:`arc.JobDescription` 
+    :return: input file map
+    :rtype: :py:obj:`dict`
+    """
 
     input_dict = {}
-    directory = j.OtherAttributes['joboption;directory']
+    directory = jobdesc.OtherAttributes['joboption;directory']
     args_fname = 'input.parameter'
     args_path = os.path.join(directory, args_fname)
     with open(args_path, 'w') as f:
@@ -294,7 +372,7 @@ def get_input_dict(j, args):
     input_dict[args_fname] = args_path
 
     # arcsub will download input files to local sessiondir
-    for f in j.DataStaging.InputFiles:
+    for f in jobdesc.DataStaging.InputFiles:
         fname = os.path.basename(f.Sources[0].fullstr())
         if not fname or fname == os.path.sep:
             continue
@@ -306,6 +384,17 @@ def get_input_dict(j, args):
 
 
 def download_output(job, client):
+    """
+    Download output files to local session directory.
+
+    :param job: job object from :py:meth:`lrms.common.scan.get_jobs`
+    :param type: :py:class:`object`
+    :param client: SCEAPI client
+    :param type: :py:class:`lrms.sceclient.ApiClient`
+    :return: True if all downloads succeeded, else False
+    :rtype: :py:obj:`bool`
+    """
+
     dest = job.sessiondir
     error = False
     files = None
@@ -328,20 +417,20 @@ def download_output(job, client):
             for line in fn:
                 _f = line.strip().lstrip('/')
                 if _f not in files:
-                    log(arc.DEBUG, 'File (%s) not found for job (%s)' % (str(_f), job.globalid),
+                    debug('File (%s) not found for job (%s)' % (str(_f), job.globalid),
                         'sceapi.Scan')
                     continue
                 _f_local = os.path.join(dest, _f)
                 if os.path.isfile(_f_local):
                     continue
                 client.downloadFile(jobid, _f, dest)['filePath'] 
-                log(arc.DEBUG, 'Downloaded output file (%s)' % str(_f), 'sceapi.Scan')
+                debug('Downloaded output file (%s)' % str(_f), 'sceapi.Scan')
                 os.chown(_f_local, job.uid, job.gid)
         except KeyError:
-            log(arc.DEBUG, 'Failed to download output file (%s)' % str(_f), 'sceapi.Scan')
+            debug('Failed to download output file (%s)' % str(_f), 'sceapi.Scan')
             error = True
     else:
-        log(arc.DEBUG, 'Failed to read file (%s)' % os.path.basename(job.output_file), 'sceapi.Scan')
+        debug('Failed to read file (%s)' % os.path.basename(job.output_file), 'sceapi.Scan')
         error = True
 
     # Then continue with files in 'output.list'
@@ -352,20 +441,20 @@ def download_output(job, client):
             for line in fn:
                 _f = line.strip().split()[0] # Second field is rucio destination
                 if _f not in files:
-                    log(arc.DEBUG, 'File (%s) not found for job (%s)' % (str(_f), job.globalid),
+                    debug('File (%s) not found for job (%s)' % (str(_f), job.globalid),
                         'sceapi.Scan')
                     continue
                 _f_local = os.path.join(dest, _f)
                 if os.path.isfile(_f_local):
                     continue
                 client.downloadFile(jobid, _f, dest)['filePath'] 
-                log(arc.DEBUG, 'Downloaded output file (%s)' % str(_f), 'sceapi.Scan')
+                debug('Downloaded output file (%s)' % str(_f), 'sceapi.Scan')
                 os.chown(_f_local, job.uid, job.gid)
         except KeyError:
-            log(arc.DEBUG, 'Failed to download output file (%s)' % str(_f), 'sceapi.Scan')
+            debug('Failed to download output file (%s)' % str(_f), 'sceapi.Scan')
             error = True
     else:
-        log(arc.DEBUG, 'Failed to read file (%s)' % output_list, 'sceapi.Scan')
+        debug('Failed to read file (%s)' % output_list, 'sceapi.Scan')
         error = True
     return not error
     
@@ -374,7 +463,7 @@ def download_output(job, client):
 
 # j = job()
 # job.globalid = "jjNODm1sbJmnBw7jSoCD2RhnABFKDmABFKDm92KKDmABFKDmKSYh4n"
-# j.sessiondir = "/scratch/grid/" + job.globalid
+# jobdesc.sessiondir = "/scratch/grid/" + job.globalid
 # job.localid = 7001
 # job.uid = 500
 # job.gid = 500

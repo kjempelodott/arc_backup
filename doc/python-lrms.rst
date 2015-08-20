@@ -4,6 +4,7 @@ Module tree >
 :mod:`lrms <lrms>`
  | |– :mod:`fork <lrms.fork>`
  | |– :mod:`lsf <lrms.lsf>`
+ | |– :mod:`sceapi <lrms.sceapi>`
  | |– :mod:`slurm <lrms.slurm>`
  | |– :mod:`common <lrms.common>`
  |      |– :mod:`cancel <lrms.common.cancel>`
@@ -41,6 +42,17 @@ Module: lrms.lsf
 ++++++++++++++++
 
 .. automodule:: lrms.lsf
+    :members:
+
+|
+
+....
+
+|
+
+Module: lrms.sceapi
++++++++++++++++++++
+.. automodule:: lrms.sceapi
     :members:
 
 |

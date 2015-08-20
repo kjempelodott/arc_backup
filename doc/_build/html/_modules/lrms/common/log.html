@@ -1,0 +1,104 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link REL="SHORTCUT ICON" HREF="http//www.nordugrid.org/favicon.ico">
+    <link rel="STYLESHEET" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="STYLESHEET" href="../../../_static/nordugrid_wrapper.css" type="text/css" />
+    <title>NorduGrid | Python LRMS backends</title>
+  </head>
+  
+  <body class="LONG">
+    <div class="MAIN">
+      <h1 class="TITLE">Python LRMS backends</h1>
+      
+      <h1>Source code for lrms.common.log</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Methods for logging.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<span class="kn">import</span> <span class="nn">sys</span><span class="o">,</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">arc</span>
+
+<div class="viewcode-block" id="debug"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.log.debug">[docs]</a><span class="k">def</span> <span class="nf">debug</span><span class="p">(</span><span class="n">message</span> <span class="o">=</span> <span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">caller</span> <span class="o">=</span> <span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Print a ``DEBUG`` message to the log.</span>
+
+<span class="sd">    :param str message: log message</span>
+<span class="sd">    :param str caller: name of function</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">caller</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="verbose"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.log.verbose">[docs]</a><span class="k">def</span> <span class="nf">verbose</span><span class="p">(</span><span class="n">message</span> <span class="o">=</span> <span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">caller</span> <span class="o">=</span> <span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Print a ``VERBOSE`` message to the log.</span>
+
+<span class="sd">    :param str message: log message</span>
+<span class="sd">    :param str caller: name of function</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">VERBOSE</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">caller</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="info"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.log.info">[docs]</a><span class="k">def</span> <span class="nf">info</span><span class="p">(</span><span class="n">message</span> <span class="o">=</span> <span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">caller</span> <span class="o">=</span> <span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Print an ``INFO`` message to the log.</span>
+
+<span class="sd">    :param str message: log message</span>
+<span class="sd">    :param str caller: name of function</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">caller</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="warn"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.log.warn">[docs]</a><span class="k">def</span> <span class="nf">warn</span><span class="p">(</span><span class="n">message</span> <span class="o">=</span> <span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">caller</span> <span class="o">=</span> <span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Print a ``WARNING`` message to the log.</span>
+
+<span class="sd">    :param str message: log message</span>
+<span class="sd">    :param str caller: name of function</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">caller</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="error"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.log.error">[docs]</a><span class="k">def</span> <span class="nf">error</span><span class="p">(</span><span class="n">message</span> <span class="o">=</span> <span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">caller</span> <span class="o">=</span> <span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Print an ``ERROR`` message to the log.</span>
+
+<span class="sd">    :param str message: log message</span>
+<span class="sd">    :param str caller: name of function</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">ERROR</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">caller</span><span class="p">)</span>
+</div>
+<span class="k">def</span> <span class="nf">_log</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">caller</span> <span class="o">=</span> <span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Print a message to the log. This method is usually wrapped by the above.</span>
+
+<span class="sd">    :param int level: log level</span>
+<span class="sd">    :param str message: log message</span>
+<span class="sd">    :param str caller: name of function</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">caller</span><span class="p">:</span>
+        <span class="n">caller</span> <span class="o">=</span> <span class="s">&#39;PythonLRMS.</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">caller</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">caller</span> <span class="o">=</span> <span class="s">&#39;PythonLRMS&#39;</span>
+    <span class="n">arc</span><span class="o">.</span><span class="n">Logger</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">Logger_getRootLogger</span><span class="p">(),</span> <span class="n">caller</span><span class="p">)</span><span class="o">.</span><span class="n">msg</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ArcError"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.log.ArcError">[docs]</a><span class="k">class</span> <span class="nc">ArcError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;                                       </span>
+<span class="sd">    Print an ``ERROR`` to the log, sleep for 10 seconds and exit.</span>
+
+<span class="sd">    :param str msg: error message</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">caller</span> <span class="o">=</span> <span class="bp">None</span><span class="p">):</span>
+        <span class="n">error</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">caller</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span></div>
+</pre></div>
+
+    </div>
+    
+    <DIV>
+      <OBJECT type="text/html" data="http//www.nordugrid.org/styles/ngfooter.html" width="100%">
+	<center><a href="http//www.nordugrid.org">Nordugrid homepage</a></center>
+      </OBJECT>
+    </DIV>
+  </body>
+</html>

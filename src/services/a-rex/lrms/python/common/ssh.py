@@ -27,5 +27,6 @@ def ssh_connect(host, user, pkey, window_size = (2 << 15) - 1):
         SSHSession[host].window_size = window_size
         pkey = RSAKey.from_private_key_file(pkey, '')
         SSHSession[host].connect(username = user, pkey = pkey)
+        SSHSession[host].__del__ = SSHSession[host].close
     except Exception as e:
         raise ArcError('Failed to connect to %s:\n%s' % (host, str(e)), 'common.ssh')

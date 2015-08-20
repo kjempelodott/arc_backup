@@ -226,10 +226,6 @@ public:
   bool UseSSH() const { return ssh_config.ok; }
   /// Check if remote directory is mounted
   bool SSHFS_OK(const std::string& mount_point) const;
-  /// Remount remote directories
-  bool MountSessionDir() { return mount_sessiondir.run(*this); }
-  bool MountRuntimeDir() { return mount_runtimedir.run(*this); }
-  bool MountCacheDir() { return mount_cachedir.run(*this); }
 
 private:
 
@@ -340,9 +336,6 @@ private:
   std::string cancelScriptName;
 
   SSHConfig ssh_config;
-  ExternalHelper mount_sessiondir;
-  ExternalHelper mount_runtimedir;
-  ExternalHelper mount_cachedir;
 
   /// Logger object
   static Arc::Logger logger;

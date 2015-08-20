@@ -16,7 +16,6 @@ except:
 
 
 if __name__ =="__main__":
-    set_log_name("forkScanner")
 
     if len(sys.argv) != 4:
         raise ArcError("Usage: %s --config <arc.conf> <control directories>" % (sys.argv[0]))

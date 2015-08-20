@@ -13,25 +13,28 @@
       
       <h1>Source code for lrms.common.proc</h1><div class="highlight"><pre>
 <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Classes for executing commands locally or via SSH.</span>
+<span class="sd">Execute bash commands locally or remotely (SSH).</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">subprocess</span> <span class="kn">import</span> <span class="n">Popen</span>
+<span class="kn">from</span> <span class="nn">log</span> <span class="kn">import</span> <span class="n">ArcError</span>
+<span class="kn">from</span> <span class="nn">config</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span> <span class="nn">ssh</span> <span class="kn">import</span> <span class="n">SSHSession</span>
 
 <div class="viewcode-block" id="execute_local"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.proc.execute_local">[docs]</a><span class="k">def</span> <span class="nf">execute_local</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">env</span> <span class="o">=</span> <span class="p">{}):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Execute a command locally using :py:class:`subprocess.Popen`</span>
-<span class="sd">    with ``shell=True``.</span>
+<span class="sd">    Execute a command locally. This method is a wrapper for</span>
+<span class="sd">    :py:class:`subprocess.Popen` with stdout and stderr piped to</span>
+<span class="sd">    temporary files and ``shell=True``.</span>
 <span class="sd">    </span>
 <span class="sd">    :param str args: command with arguments (e.g. &#39;sbatch myjob.sh&#39;)</span>
 <span class="sd">    :param dict env: environment variables  (default: {})</span>
-<span class="sd">    :return: handle object</span>
+<span class="sd">    :return: handle</span>
 <span class="sd">    :rtype: :py:class:`subprocess.Popen`</span>
-<span class="sd">    :note: ``wait()`` is called, and ``stdout`` and ``stderr`` is read.</span>
+<span class="sd">    :note: ``wait()`` is called, and ``stdout`` and ``stderr`` are read and splitted by newlines</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c"># TODO: What if args longer than kernel ARG_MAX (e.g. scan millions of jobs)?</span>
     <span class="kn">from</span> <span class="nn">tempfile</span> <span class="kn">import</span> <span class="n">TemporaryFile</span>
+    <span class="kn">from</span> <span class="nn">subprocess</span> <span class="kn">import</span> <span class="n">Popen</span>
     <span class="c"># Note: PIPE will cause deadlock if output is larger than 65K</span>
     <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span> <span class="o">=</span> <span class="n">TemporaryFile</span><span class="p">(),</span> <span class="n">TemporaryFile</span><span class="p">()</span>
     <span class="n">handle</span> <span class="o">=</span> <span class="n">Popen</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">stdout</span> <span class="o">=</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span> <span class="o">=</span> <span class="n">stderr</span><span class="p">,</span> <span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="p">,</span> <span class="n">shell</span> <span class="o">=</span> <span class="bp">True</span><span class="p">)</span>
@@ -48,13 +51,12 @@
 <span class="sd">    :param str args: command with arguments (e.g. &#39;sbatch myjob.sh&#39;)</span>
 <span class="sd">    :return: object with attributes ``stdout``, ``stderr`` \</span>
 <span class="sd">    and ``returncode``</span>
-<span class="sd">    :rtype: :py:class:`~lrms.common.common.Object`</span>
+<span class="sd">    :rtype: :py:obj:`object`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c"># TODO: What if args longer than kernel ARG_MAX (e.g. scan millions of jobs)?</span>
     <span class="kn">from</span> <span class="nn">time</span> <span class="kn">import</span> <span class="n">sleep</span>
-    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">Config</span><span class="p">,</span> <span class="s">&#39;ssh_timeout&#39;</span><span class="p">):</span>
-        <span class="n">timeout</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">ssh_timeout</span>
 
+    <span class="n">timeout</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">ssh_timeout</span>
     <span class="k">def</span> <span class="nf">is_timeout</span><span class="p">(</span><span class="n">test</span><span class="p">):</span>
         <span class="n">wait_time</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">while</span> <span class="ow">not</span> <span class="n">test</span><span class="p">():</span>
@@ -65,13 +67,13 @@
         <span class="k">return</span> <span class="bp">False</span>
 
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">p</span> <span class="o">=</span> <span class="n">Object</span><span class="p">()</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="s">&#39;Handle&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nb">object</span><span class="p">,),</span> <span class="p">{})()</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">SSHSession</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;There is no active SSH session! Run lrms.common.common.ssh_connect&#39;</span><span class="p">,</span> <span class="s">&#39;common.proc&#39;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;There is no active SSH session! Run lrms.common.ssh.ssh_connect&#39;</span><span class="p">,</span> <span class="s">&#39;common.proc&#39;</span><span class="p">)</span>
         <span class="n">session</span> <span class="o">=</span> <span class="n">SSHSession</span><span class="p">[</span><span class="n">host</span> <span class="k">if</span> <span class="n">host</span> <span class="k">else</span> <span class="n">SSHSession</span><span class="o">.</span><span class="n">keys</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span><span class="o">.</span><span class="n">open_session</span><span class="p">()</span>
         <span class="n">session</span><span class="o">.</span><span class="n">exec_command</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">is_timeout</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">exit_status_ready</span><span class="p">):</span>
-            <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Session timed out. Some output might not be received. Guessing exit code from stderr.&#39;</span><span class="p">,</span> <span class="s">&#39;common.proc&#39;</span><span class="p">)</span>
+            <span class="n">warn</span><span class="p">(</span><span class="s">&#39;Session timed out. Some output might not be received. Guessing exit code from stderr.&#39;</span><span class="p">,</span> <span class="s">&#39;common.proc&#39;</span><span class="p">)</span>
         <span class="n">p</span><span class="o">.</span><span class="n">returncode</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">exit_status</span>
 
         <span class="n">chnksz</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">&lt;&lt;</span> <span class="mi">9</span>
@@ -91,7 +93,7 @@
         <span class="n">p</span><span class="o">.</span><span class="n">stderr</span> <span class="o">=</span> <span class="n">stderr</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
-            <span class="n">p</span><span class="o">.</span><span class="n">returncode</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">stderr</span><span class="p">)</span>
+            <span class="n">p</span><span class="o">.</span><span class="n">returncode</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">stderr</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
         <span class="k">return</span> <span class="n">p</span>
 
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>

@@ -13,21 +13,21 @@
       
       <h1>Source code for lrms.common.files</h1><div class="highlight"><pre>
 <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Functions for reading and writing files.</span>
+<span class="sd">Wrapper methods for stat-ing, reading and writing files.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">import</span> <span class="nn">tools</span>
-
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">ssh</span> <span class="kn">import</span> <span class="n">SSHSession</span>
+<span class="kn">from</span> <span class="nn">log</span> <span class="kn">import</span> <span class="n">warn</span><span class="p">,</span> <span class="n">error</span>
 
 <div class="viewcode-block" id="read"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.files.read">[docs]</a><span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">tail</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;                               </span>
-<span class="sd">    Read content from file.</span>
+<span class="sd">    Read file content.</span>
 
 <span class="sd">    :param str path: path to file   </span>
 <span class="sd">    :param int tail: number of lines to read (from end), entire file if 0</span>
-<span class="sd">    :return: ``True`` and the file content (:py:meth:file.readlines()) if read was successful, else ``False`` and an error message</span>
-<span class="sd">    :rtype: :py:obj:`tuple` ( :py:obj:`bool`, [ :py:obj:`str` ... ] )</span>
+<span class="sd">    :return: file content splitted by newline</span>
+<span class="sd">    :rtype: :py:obj:`list` [ :py:obj:`str` ... ]</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">try</span><span class="p">:</span>
@@ -37,8 +37,45 @@
             <span class="k">with</span> <span class="n">os</span><span class="o">.</span><span class="n">fdopen</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">O_RDONLY</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">O_NONBLOCK</span><span class="p">))</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Cannot read file at </span><span class="si">%s</span><span class="s">:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.files&#39;</span><span class="p">)</span>
+        <span class="n">warn</span><span class="p">(</span><span class="s">&#39;Cannot read file at </span><span class="si">%s</span><span class="s">:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.files&#39;</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">[]</span>
+
+</div>
+<div class="viewcode-block" id="tail"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.files.tail">[docs]</a><span class="k">def</span> <span class="nf">tail</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">BUFSIZ</span> <span class="o">=</span> <span class="mi">4096</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Similar to GNU tail -n [N].</span>
+<span class="sd">    </span>
+<span class="sd">    :param str path: path to file</span>
+<span class="sd">    :param int n: number of lines to read</span>
+<span class="sd">    :param int BUFSIZ: chunk size in bytes (default: 4096)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="kn">import</span> <span class="nn">os</span>
+    <span class="n">fsize</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path</span><span class="p">)[</span><span class="mi">6</span><span class="p">]</span>
+    <span class="n">block</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+    <span class="k">with</span> <span class="n">os</span><span class="o">.</span><span class="n">fdopen</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">O_RDONLY</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">O_NONBLOCK</span><span class="p">),</span> <span class="s">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+        <span class="k">while</span> <span class="n">pos</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">lines</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">pos</span> <span class="o">-</span> <span class="n">BUFSIZ</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="c"># seek back one BUFSIZ</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">block</span><span class="o">*</span><span class="n">BUFSIZ</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+                <span class="c"># read buffer</span>
+                <span class="n">new_data</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">BUFSIZ</span><span class="p">)</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">new_data</span> <span class="o">+</span> <span class="n">data</span>
+                <span class="n">lines</span> <span class="o">+=</span> <span class="n">new_data</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c"># file too small, start from beginning</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">)</span>
+                <span class="c"># only read what was not read</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="o">+</span> <span class="n">data</span>
+                <span class="k">break</span>
+            <span class="n">pos</span> <span class="o">-=</span> <span class="n">BUFSIZ</span>
+            <span class="n">block</span> <span class="o">-=</span> <span class="mi">1</span>
+    <span class="c"># return n last lines of file</span>
+    <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)[</span><span class="o">-</span><span class="n">n</span><span class="p">:]</span>
 
 </div>
 <div class="viewcode-block" id="write"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.files.write">[docs]</a><span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">mode</span> <span class="o">=</span> <span class="mo">0644</span><span class="p">,</span> <span class="n">append</span> <span class="o">=</span> <span class="bp">False</span><span class="p">,</span> <span class="n">remote_host</span> <span class="o">=</span> <span class="bp">None</span><span class="p">):</span>
@@ -46,8 +83,8 @@
 <span class="sd">    Write buffer to file.</span>
 <span class="sd">  </span>
 <span class="sd">    :param str path: path to file </span>
-<span class="sd">    :param str buf: string buffer to be written                          </span>
-<span class="sd">    :param int mode: file mode        </span>
+<span class="sd">    :param str buf: buffer</span>
+<span class="sd">    :param int mode: file mode</span>
 <span class="sd">    :param bool append: ``True`` if buffer should be appended to existing file</span>
 <span class="sd">    :param bool remote_host: file will be opened with sftp at the specified hostname</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -64,7 +101,7 @@
                 <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
 
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">WARNING</span><span class="p">,</span> <span class="s">&#39;Cannot write to file at </span><span class="si">%s</span><span class="s">:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.files&#39;</span><span class="p">)</span>
+        <span class="n">warn</span><span class="p">(</span><span class="s">&#39;Cannot write to file at </span><span class="si">%s</span><span class="s">:</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.files&#39;</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">False</span>
 
     <span class="k">return</span> <span class="bp">True</span>
@@ -72,7 +109,7 @@
 </div>
 <div class="viewcode-block" id="getmtime"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.files.getmtime">[docs]</a><span class="k">def</span> <span class="nf">getmtime</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;                               </span>
-<span class="sd">    Get modification time of a file.</span>
+<span class="sd">    Get modification time of ``path``.</span>
 
 <span class="sd">    :param str path: path to file</span>
 <span class="sd">    :return str: modification time</span>
@@ -81,7 +118,8 @@
     <span class="k">try</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">getmtime</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="k">except</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Failed to stat file: </span><span class="si">%s</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.files&#39;</span><span class="p">)</span></div>
+        <span class="n">error</span><span class="p">(</span><span class="s">&#39;Failed to stat file: </span><span class="si">%s</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span> <span class="s">&#39;common.files&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">False</span></div>
 </pre></div>
 
     </div>

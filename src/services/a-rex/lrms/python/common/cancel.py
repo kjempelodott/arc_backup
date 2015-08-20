@@ -3,7 +3,7 @@ Module for job cancelling.
 """
 
 from config import Config
-from ssh import *
+from ssh import ssh_connect
 from proc import *
 
 def cancel(lrms, job_id):

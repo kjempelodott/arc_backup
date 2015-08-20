@@ -13,56 +13,47 @@
       
       <h1>Source code for lrms.common.cancel</h1><div class="highlight"><pre>
 <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Common job cancel functions.</span>
+<span class="sd">Module for job cancelling.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">config</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span> <span class="nn">ssh</span> <span class="kn">import</span> <span class="o">*</span>
 <span class="kn">from</span> <span class="nn">proc</span> <span class="kn">import</span> <span class="o">*</span>
 
-<div class="viewcode-block" id="cancel"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.cancel.cancel">[docs]</a><span class="k">def</span> <span class="nf">cancel</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">lrms</span><span class="p">,</span> <span class="n">remote</span> <span class="o">=</span> <span class="bp">False</span><span class="p">):</span>
+<div class="viewcode-block" id="cancel"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.cancel.cancel">[docs]</a><span class="k">def</span> <span class="nf">cancel</span><span class="p">(</span><span class="n">lrms</span><span class="p">,</span> <span class="n">job_id</span><span class="p">):</span>
      <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">     Cancel job (applicable for all LRMSs except fork and boinc).</span>
+<span class="sd">     Cancel job with ID ``job_id`` within the given batch system.</span>
 
-<span class="sd">     :param str cmd: cancel command (e.g. &#39;/usr/bin/scancel&#39;)</span>
-<span class="sd">     :param str job_id: job ID within the LRMS</span>
-<span class="sd">     :param str lrms: name of the LRMS</span>
+<span class="sd">     :param str lrms: batch system (e.g. slurm)</span>
+<span class="sd">     :param str job_id: local job ID within the batch system</span>
 <span class="sd">     :param str remote: ``True`` if remote host</span>
 <span class="sd">     :return: command return code</span>
 <span class="sd">     :rtype: :py:obj:`int`</span>
 <span class="sd">     &quot;&quot;&quot;</span>
 
-     <span class="n">executable</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">cmd</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span>
-     
+
+     <span class="n">executable</span> <span class="o">=</span> <span class="bp">None</span>
+     <span class="n">cmd</span> <span class="o">=</span> <span class="bp">None</span>
+     <span class="k">if</span> <span class="n">lrms</span> <span class="o">==</span> <span class="s">&#39;slurm&#39;</span><span class="p">:</span>
+          <span class="n">executable</span> <span class="o">=</span> <span class="s">&#39;scancel&#39;</span>
+          <span class="n">cmd</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">/s</span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">slurm_bin_path</span><span class="p">,</span> <span class="n">executable</span><span class="p">,</span> <span class="n">jobid</span><span class="p">)</span>
+     <span class="k">elif</span> <span class="n">lrms</span> <span class="o">==</span> <span class="s">&#39;lsf&#39;</span><span class="p">:</span>
+          <span class="n">executable</span> <span class="o">=</span> <span class="s">&#39;bkill&#39;</span>
+          <span class="n">cmd</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s">/</span><span class="si">%s</span><span class="s"> -s 9 </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">lsf_setup</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">lsf_bin_path</span><span class="p">,</span> <span class="n">executable</span><span class="p">,</span> <span class="n">jobid</span><span class="p">)</span>
+
+     <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
+          <span class="n">ssh_connect</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">private_key</span><span class="p">)</span>
+
      <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- starting </span><span class="si">%s</span><span class="s">Cancel.py -----&#39;</span> <span class="o">%</span> <span class="n">lrms</span><span class="p">,</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span>
-     <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;executing </span><span class="si">%s</span><span class="s"> with job id </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">executable</span><span class="p">,</span><span class="n">job_id</span><span class="p">),</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span>
-     <span class="n">execute</span> <span class="o">=</span> <span class="n">excute_local</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">remote</span> <span class="k">else</span> <span class="n">execute_remote</span>
+     <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;executing </span><span class="si">%s</span><span class="s"> with job id </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">executable</span><span class="p">,</span> <span class="n">job_id</span><span class="p">),</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span>
+     <span class="n">execute</span> <span class="o">=</span> <span class="n">excute_local</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">else</span> <span class="n">execute_remote</span>
      <span class="n">handle</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
      <span class="n">rc</span> <span class="o">=</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span>
 
      <span class="k">if</span> <span class="n">rc</span><span class="p">:</span>
           <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">ERROR</span><span class="p">,</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s"> failed&#39;</span> <span class="o">%</span> <span class="n">executable</span><span class="p">,</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span>
      <span class="n">log</span><span class="p">(</span><span class="n">arc</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s">&#39;----- exiting </span><span class="si">%s</span><span class="s">Cancel.py -----&#39;</span> <span class="o">%</span> <span class="n">lrms</span><span class="p">,</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span>
-     <span class="k">return</span> <span class="ow">not</span> <span class="n">rc</span>
-
-</div>
-<div class="viewcode-block" id="get_status_file"><a class="viewcode-back" href="../../../python-lrms.html#lrms.common.cancel.get_status_file">[docs]</a><span class="k">def</span> <span class="nf">get_status_file</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">):</span>
-     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">     Get the job status file (for fork and boinc).</span>
-
-<span class="sd">     :param str ctrdir: path to GRID control directory</span>
-<span class="sd">     :param str gridid: GRID (global) job ID</span>
-<span class="sd">     :return: path to job status file</span>
-<span class="sd">     :rtype: :py:obj:`str`</span>
-<span class="sd">     &quot;&quot;&quot;</span>
-
-     <span class="n">status_file</span> <span class="o">=</span> <span class="s">&#39;job.</span><span class="si">%s</span><span class="s">.status&#39;</span> <span class="o">%</span> <span class="n">gridid</span>
-     <span class="n">paths</span> <span class="o">=</span> <span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;accepting&#39;</span><span class="p">,</span> <span class="n">status_file</span><span class="p">),</span>
-              <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;processing&#39;</span><span class="p">,</span> <span class="n">status_file</span><span class="p">),</span>
-              <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="s">&#39;finished&#39;</span><span class="p">,</span> <span class="n">status_file</span><span class="p">))</span>
-     <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
-          <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">R_OK</span><span class="p">):</span> <span class="k">return</span> <span class="n">p</span>
-     <span class="k">raise</span> <span class="n">ArcError</span><span class="p">(</span><span class="s">&#39;Status file for job </span><span class="si">%s</span><span class="s"> not found in </span><span class="se">\&#39;</span><span class="si">%s</span><span class="se">\&#39;</span><span class="s">. &#39;</span>
-                    <span class="s">&#39;Job was not killed, if running at all.&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">gridid</span><span class="p">,</span> <span class="n">ctrdir</span><span class="p">),</span> <span class="s">&#39;common.cancel&#39;</span><span class="p">)</span></div>
+     <span class="k">return</span> <span class="ow">not</span> <span class="n">rc</span></div>
 </pre></div>
 
     </div>

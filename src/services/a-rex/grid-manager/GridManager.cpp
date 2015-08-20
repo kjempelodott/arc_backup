@@ -292,15 +292,12 @@ bool GridManager::thread() {
       // TODO: can there be more than one session root?
       while (!config_.SSHFS_OK(config_.SessionRoots().front())) {
 	logger.msg(Arc::WARNING, "Sessiondir SSHFS mount point is broken, waiting for reconnect ...");
-	// sshfs should reconnect automatically ...
-	//config_.MountSessionDir();
 	active_.wait(10000);
       }
       std::string remote_rte = config_.GetSSHConfig().remote_runtime_dir;
       if (!remote_rte.empty())
 	while(!config_.SSHFS_OK(config_.RTEDir())) {
 	  logger.msg(Arc::WARNING, "Runtimedir SSHFS mount point is broken, waiting for reconnect ...");
-	  //config_.MountRuntimeDir();
 	  active_.wait(10000);
 	}
       std::string remote_cache = config_.GetSSHConfig().remote_cache_dir;
@@ -308,7 +305,6 @@ bool GridManager::thread() {
       if (!remote_cache.empty())
 	while(!config_.SSHFS_OK(config_.CacheParams().getCacheDirs().front())) {
 	  logger.msg(Arc::WARNING, "Cachedir SSHFS mount point is broken, waiting for reconnect ...");
-	  //config_.MountCacheDir();
 	  active_.wait(10000);
 	}
     }

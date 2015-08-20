@@ -2,7 +2,7 @@
 import sys
 import os
 
-sys.path.append(os.path.abspath('/usr/local/arc5/lib/python2.6/site-packages'))
+#sys.path.append(os.path.abspath('/usr/local/arc5/lib/python2.6/site-packages'))
 
 # -- General configuration ------------------------------------------------
 

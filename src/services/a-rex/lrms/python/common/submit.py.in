@@ -128,7 +128,7 @@ def set_req_mem(jd):
 # Limitation: In RTE stage 0, scripts MUST use the 'export' command if any
 # new variables are defined which should be picked up by the submit script.
 # Also no output from the RTE script in stage 0 will be printed.
-def RTE_stage0(jd, lrms, **mapping):
+def RTE_stage0(jobdescs, lrms, **mapping):
    """
    Source RTE scripts and update job description environment.
 
@@ -136,7 +136,8 @@ def RTE_stage0(jd, lrms, **mapping):
    :type jd: :py:class:`arc.JobDescription`
    :param dict mapping: additional environment variables
    """     
-
+   
+   jd = jobdescs[0]
    if jd.Resources.RunTimeEnvironment.getSoftwareList():
         from parse import RTE0EnvCreator
         envCreator = RTE0EnvCreator(jd, Config, mapping)
@@ -476,8 +477,8 @@ class JobscriptAssembler(object):
           shutil.copyfile(join(ctrdir, 'job.%s.input' % gridid), job_local_input)
           with open(job_local_input, 'a') as local_input:
                local_input.write(local_ctrdir + ' *.*\n')
-               local_input.write("%s *.*\n" % jd.Application.Output.lstrip(gridid))
-               local_input.write("%s *.*\n" % jd.Application.Error.lstrip(gridid))
+               local_input.write("%s *.*\n" % self['STDOUT'].lstrip(gridid))
+               local_input.write("%s *.*\n" % self['STDERR'].lstrip(gridid))
 
           # add runtime controldir to output
           job_output = join(ctrdir, 'job.%s.output' % gridid)
@@ -489,7 +490,7 @@ class JobscriptAssembler(object):
           try:
                shutil.copyfile(join(ctrdir, 'job.%s.local' % gridid), join(local_ctrdir, 'job.local.local'))
           except Exception as e:
-               with open(join(local_ctrdir, 'job.local.local', 'w')):
+               with open(join(local_ctrdir, 'job.local.local'), 'w'):
                     pass
 
 

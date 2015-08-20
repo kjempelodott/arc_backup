@@ -5,8 +5,7 @@ Provides the ``Config`` object, with each arc.conf option as an attribute.
 import os
 from log import debug
 
-class _object(object):
-    pass
+class _object(object): pass # Pickle can't serialize inline classes
 
 Config = _object()
 
@@ -177,9 +176,10 @@ def set_queue(cfg):
     for section in cfg.sections():
         if section[:6] != 'queue/' or not section[6:]:
             continue
-        if section[6:] not in Config.queue:
-            Config.queue[section[6:]] = _object()
+        name = section[6:]
+        if name not in Config.queue:
+            Config.queue[name] = _object()
             if cfg.has_option(section, 'nodememory'):
-                Config.queue[section[6:]].nodememory = \
+                Config.queue[name].nodememory = \
                     int(cfg.get(section, 'nodememory').strip('"'))
 

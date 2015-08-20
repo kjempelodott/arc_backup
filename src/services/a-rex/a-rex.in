@@ -873,8 +873,6 @@ stop() {
 	    if [ $? != 0 ]; then
 		log_failure_msg "sshfs sessiondir unmount - timeout"
 	    else
-	        # restore write mode
-		chmod 775 ${SESSIONDIR}
 	        # restore content of sessiondir
 		if [ -d ${SESSIONDIR}.0 ]; then
 		    cp -ru ${SESSIONDIR}.0/* ${SESSIONDIR}/. && \
@@ -889,8 +887,6 @@ stop() {
 	    if [ $? != 0 ]; then
 		log_failure_msg "sshfs runtimedir unmount - timeout"
 	    else
-	        # restore write mode
-		chmod 755 ${RUNTIMEDIR}
 	        # restore content of runtimedir
 		if [ -d ${RUNTIMEDIR}.0 ]; then
 		    cp -ru ${RUNTIMEDIR}.0/* ${RUNTIMEDIR}/. && \
@@ -905,8 +901,6 @@ stop() {
 	    if [ $? != 0 ]; then
 		log_failure_msg "sshfs cachedir unmount - timeout"
 	    else
-	        # restore write mode
-		chmod 755 ${CACHEDIR}
 	        # restore content of cachedir
 		if [ -d ${CACHEDIR}.0 ]; then
 		    cp -ru ${CACHEDIR}.0/* ${CACHEDIR}/. && \

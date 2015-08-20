@@ -13,23 +13,24 @@
       
       <h1>Source code for lrms.fork</h1><div class="highlight"><pre>
 <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Fork batch system interface module.</span>
+<span class="sd">No batch system (fork) interface module.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">import</span> <span class="nn">os</span><span class="o">,</span> <span class="nn">sys</span><span class="o">,</span> <span class="nn">time</span><span class="o">,</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">arc</span>
-<span class="kn">from</span> <span class="nn">common</span> <span class="kn">import</span> <span class="n">UserConfig</span>
-<span class="kn">from</span> <span class="nn">common.config</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">common.proc</span> <span class="kn">import</span> <span class="o">*</span> 
+<span class="kn">from</span> <span class="nn">common.config</span> <span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">configure</span><span class="p">,</span> <span class="n">is_conf_setter</span>
+<span class="kn">from</span> <span class="nn">common.proc</span> <span class="kn">import</span> <span class="n">execute_local</span><span class="p">,</span> <span class="n">execute_remote</span>
+<span class="kn">from</span> <span class="nn">common.log</span> <span class="kn">import</span> <span class="n">debug</span><span class="p">,</span> <span class="n">verbose</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">warn</span><span class="p">,</span> <span class="n">error</span><span class="p">,</span> <span class="n">ArcError</span>
 <span class="kn">from</span> <span class="nn">common.parse</span> <span class="kn">import</span> <span class="n">SimpleGramiParser</span>
 <span class="kn">from</span> <span class="nn">common.scan</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">common.ssh</span> <span class="kn">import</span> <span class="n">ssh_connect</span>
 <span class="kn">from</span> <span class="nn">common.submit</span> <span class="kn">import</span> <span class="o">*</span>
 
 
 <span class="nd">@is_conf_setter</span>
-<span class="k">def</span> <span class="nf">set_fork</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
+<div class="viewcode-block" id="set_fork"><a class="viewcode-back" href="../../python-lrms.html#lrms.fork.set_fork">[docs]</a><span class="k">def</span> <span class="nf">set_fork</span><span class="p">(</span><span class="n">cfg</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Set fork specific options in :py:data:`~lrms.common.common.Config`.</span>
+<span class="sd">    Set fork specific :py:data:`~lrms.common.Config` attributes.</span>
 
 <span class="sd">    :param cfg: parsed arc.conf</span>
 <span class="sd">    :type cfg: :py:class:`ConfigParser.ConfigParser`</span>
@@ -39,12 +40,12 @@
 <span class="c">#-------------------</span>
 <span class="c"># Submit methods</span>
 <span class="c">#-------------------</span>
-
+</div>
 <div class="viewcode-block" id="Submit"><a class="viewcode-back" href="../../python-lrms.html#lrms.fork.Submit">[docs]</a><span class="k">def</span> <span class="nf">Submit</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">jobdescs</span><span class="p">,</span> <span class="n">jc</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Submits a job to the host specified in arc.conf. This method executes the required</span>
+<span class="sd">    Submits a job to the local or remote (SSH) machine. This method executes the required</span>
 <span class="sd">    Run Time Environment scripts and assembles the bash job script. The job script is</span>
-<span class="sd">    written to file and submitted to the specified fork queue.</span>
+<span class="sd">    written to file and run.</span>
 
 <span class="sd">    :param str config: path to arc.conf</span>
 <span class="sd">    :param jobdescs: job description list object</span>
@@ -59,6 +60,8 @@
 
     <span class="n">jd</span> <span class="o">=</span> <span class="n">jobdescs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="n">validate_attributes</span><span class="p">(</span><span class="n">jd</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
+        <span class="n">ssh_connect</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">private_key</span><span class="p">)</span>
   
     <span class="c"># Run RTE stage0</span>
     <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----- starting forkSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
@@ -87,8 +90,8 @@
 
     <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Session directory: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">directory</span><span class="p">,</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
 
-    <span class="n">fork_handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">script_file</span><span class="p">)</span>
-    <span class="n">jobid</span> <span class="o">=</span> <span class="n">fork_handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">5</span><span class="p">:]</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">execute</span><span class="p">(</span><span class="n">script_file</span><span class="p">)</span>
+    <span class="n">jobid</span> <span class="o">=</span> <span class="n">handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">5</span><span class="p">:]</span>
 
     <span class="c"># Write output to comment file</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">directory</span> <span class="o">+</span> <span class="s">&#39;.comment&#39;</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">out</span><span class="p">:</span>
@@ -97,7 +100,7 @@
         <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">fork_handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">:</span>
             <span class="n">out</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">fork_handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Job submitted successfully!&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
         <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Local job id: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">jobid</span><span class="p">),</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span> 
         <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----- exiting forkSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
@@ -122,22 +125,24 @@
         <span class="k">return</span> <span class="bp">True</span>
 
     <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Job *NOT* submitted successfully!&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
-    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Got error code: </span><span class="si">%d</span><span class="s"> !&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">fork_handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">),</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Got error code: </span><span class="si">%d</span><span class="s"> !&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">),</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Output is:&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">stdout</span><span class="p">),</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;Error output is:&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
+    <span class="n">debug</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">handle</span><span class="o">.</span><span class="n">stderr</span><span class="p">),</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
     <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----- exiting forkSubmitter.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Submit&#39;</span><span class="p">)</span>
     <span class="k">return</span> <span class="bp">False</span>
 
                 </div>
 <div class="viewcode-block" id="get_job_script"><a class="viewcode-back" href="../../python-lrms.html#lrms.fork.get_job_script">[docs]</a><span class="k">def</span> <span class="nf">get_job_script</span><span class="p">(</span><span class="n">jobdescs</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Assemble bash job script for a fork host.</span>
+<span class="sd">    Assemble bash job script.</span>
 
 <span class="sd">    :param jobdescs: list of job description objects</span>
 <span class="sd">    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription` ... ]</span>
 <span class="sd">    :return: job script</span>
 <span class="sd">    :rtype: :py:obj:`str`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">set_log_name</span><span class="p">(</span><span class="s">&#39;fork&#39;</span><span class="p">)</span>
 
     <span class="n">jobscript</span> <span class="o">=</span> \
         <span class="s">&#39;#!/bin/sh</span><span class="se">\n</span><span class="s">&#39;</span> \
@@ -192,8 +197,10 @@
 </div>
 <div class="viewcode-block" id="Cancel"><a class="viewcode-back" href="../../python-lrms.html#lrms.fork.Cancel">[docs]</a><span class="k">def</span> <span class="nf">Cancel</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">grami_file</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Cancel a job running at a fork host.</span>
+<span class="sd">    Cancel a job. The TERM signal is sent to allow the process to terminate</span>
+<span class="sd">    gracefully within 5 seconds, followed by a KILL signal.</span>
 
+<span class="sd">    :param str config: path to arc.conf</span>
 <span class="sd">    :param str grami_file: path to grami file</span>
 <span class="sd">    :return: ``True`` if successfully cancelled, else ``False``</span>
 <span class="sd">    :rtype: :py:obj:`bool`</span>
@@ -202,6 +209,8 @@
     <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----- starting forkCancel.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Cancel&#39;</span><span class="p">)</span>
 
     <span class="n">configure</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
+        <span class="n">ssh_connect</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">private_key</span><span class="p">)</span>
 
     <span class="n">grami</span> <span class="o">=</span> <span class="n">SimpleGramiParser</span><span class="p">(</span><span class="n">grami_file</span><span class="p">)</span>
     <span class="n">ctrdir</span> <span class="o">=</span> <span class="n">grami</span><span class="o">.</span><span class="n">controldir</span>
@@ -209,31 +218,29 @@
     <span class="n">gridid</span> <span class="o">=</span> <span class="n">grami</span><span class="o">.</span><span class="n">gridid</span>
     <span class="n">jobdir</span> <span class="o">=</span> <span class="n">get_job_directory</span><span class="p">(</span><span class="n">ctrdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">)</span>
 
-    <span class="n">killed</span> <span class="o">=</span> <span class="bp">False</span>
     <span class="n">info</span><span class="p">(</span><span class="s">&#39;Deleting job </span><span class="si">%s</span><span class="s">, local id </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">gridid</span><span class="p">,</span> <span class="n">jobid</span><span class="p">),</span> <span class="s">&#39;fork.Cancel&#39;</span><span class="p">)</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s">/job.</span><span class="si">%s</span><span class="s">.status&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">jobdir</span><span class="p">,</span> <span class="n">gridid</span><span class="p">))</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
         <span class="n">line</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">&#39;INLRMS|CANCELING&#39;</span><span class="p">):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
                 <span class="kn">import</span> <span class="nn">signal</span>
-                <span class="n">os</span><span class="o">.</span><span class="n">kill</span><span class="p">(</span><span class="n">jobid</span><span class="p">,</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">)</span>
-                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
-                <span class="n">os</span><span class="o">.</span><span class="n">kill</span><span class="p">(</span><span class="n">jobid</span><span class="p">,</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGKILL</span><span class="p">)</span>
-                <span class="n">killed</span> <span class="o">=</span> <span class="bp">True</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">kill</span><span class="p">(</span><span class="n">jobid</span><span class="p">,</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">)</span>
+                    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">kill</span><span class="p">(</span><span class="n">jobid</span><span class="p">,</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGKILL</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+                    <span class="c"># Job already died or terminated gracefully after SIGTERM</span>
+                    <span class="k">pass</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">args</span> <span class="o">=</span> <span class="s">&#39;kill -s TERM </span><span class="si">%i</span><span class="s">; sleep 5; kill -s KILL </span><span class="si">%i</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">jobid</span><span class="p">,</span> <span class="n">jobid</span><span class="p">)</span>
                 <span class="n">handle</span> <span class="o">=</span> <span class="n">execute_remote</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">handle</span><span class="o">.</span><span class="n">returncode</span><span class="p">:</span>
-                    <span class="n">error</span><span class="p">(</span><span class="s">&#39;Failed to kill job </span><span class="si">%i</span><span class="s"> at remote host </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">jobid</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">),</span> <span class="s">&#39;fork.Cancel&#39;</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">killed</span> <span class="o">=</span> <span class="bp">True</span>
         <span class="k">elif</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">&#39;FINISHED|DELETED&#39;</span><span class="p">):</span>
             <span class="n">info</span><span class="p">(</span><span class="s">&#39;Job already died, won</span><span class="se">\&#39;</span><span class="s">t do anything&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Cancel&#39;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">info</span><span class="p">(</span><span class="s">&#39;Job is at unkillable state&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Cancel&#39;</span><span class="p">)</span>
 
     <span class="n">debug</span><span class="p">(</span><span class="s">&#39;----- exiting forkCancel.py -----&#39;</span><span class="p">,</span> <span class="s">&#39;fork.Cancel&#39;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">killed</span>
+    <span class="k">return</span> <span class="bp">True</span>
 
 
 <span class="c">#---------------------</span>
@@ -242,9 +249,9 @@
 </div>
 <div class="viewcode-block" id="Scan"><a class="viewcode-back" href="../../python-lrms.html#lrms.fork.Scan">[docs]</a><span class="k">def</span> <span class="nf">Scan</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">ctr_dirs</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Query the fork host for all jobs in /[controldir]/processing.</span>
-<span class="sd">    If the job has stopped running, the exit code is read and the </span>
-<span class="sd">    diagnostics and comments files are updated.</span>
+<span class="sd">    Query the local or remote (SSH) machine for all jobs in /[controldir]/processing.</span>
+<span class="sd">    If the job has stopped running, the exit code is read and the comments file</span>
+<span class="sd">    is updated.</span>
 
 <span class="sd">    :param str config: path to arc.conf</span>
 <span class="sd">    :param ctr_dirs: list of paths to control directories </span>
@@ -254,13 +261,14 @@
     <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
 
     <span class="n">configure</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">set_fork</span><span class="p">)</span>
-
     <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">scanscriptlog</span><span class="p">:</span>
         <span class="n">scanlogfile</span> <span class="o">=</span> <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">LogFile</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">scanscriptlog</span><span class="p">)</span>
         <span class="n">arc</span><span class="o">.</span><span class="n">common</span><span class="o">.</span><span class="n">Logger_getRootLogger</span><span class="p">()</span><span class="o">.</span><span class="n">addDestination</span><span class="p">(</span><span class="n">scanlogfile</span><span class="p">)</span>
 
     <span class="n">jobs</span> <span class="o">=</span> <span class="n">get_jobs</span><span class="p">(</span><span class="n">ctr_dirs</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">jobs</span><span class="p">:</span> <span class="k">return</span>
+    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">:</span>
+        <span class="n">ssh_connect</span><span class="p">(</span><span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_user</span><span class="p">,</span> <span class="n">Config</span><span class="o">.</span><span class="n">private_key</span><span class="p">)</span>
 
     <span class="n">execute</span> <span class="o">=</span> <span class="n">excute_local</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">Config</span><span class="o">.</span><span class="n">remote_host</span> <span class="k">else</span> <span class="n">execute_remote</span>
     <span class="n">args</span> <span class="o">=</span> <span class="s">&#39;ps -opid &#39;</span> <span class="o">+</span> <span class="p">(</span><span class="s">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">jobs</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
