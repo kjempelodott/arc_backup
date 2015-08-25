@@ -232,8 +232,8 @@ class LSFInfo(LRMSInfo, object):
                     'PSUSP' : 'S',
                     'USUSP' : 'S',
                     'SSUSP' : 'S',
-                    'DONE'  : 'EXECUTED', 
-                    'EXIT'  : 'EXECUTED'}
+                    'DONE'  : 'E', 
+                    'EXIT'  : 'E'}
 
         for jid in jids:
             try:

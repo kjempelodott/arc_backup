@@ -38,6 +38,10 @@ JobsList::JobsList(const GMConfig& gmconfig) :
     config(gmconfig), staging_config(gmconfig), old_dir(NULL), dtr_generator(NULL), job_desc_handler(config), jobs_pending(0) {
   for(int n = 0;n<JOB_STATE_NUM;n++) jobs_num[n]=0;
   jobs.clear();
+  if (gmconfig.use_python_lrms) {
+    //py.init(_config.default_lrms, "Submit");
+    py.init("test_mod", "submit");
+  }
 }
  
 JobsList::iterator JobsList::FindJob(const JobId &id){
@@ -285,6 +289,7 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
     else { cmd=Arc::ArcLocation::GetDataDir()+"/"+config.submitScriptName; }
     if(!cancel) {
       logger.msg(Arc::INFO,"%s: state SUBMIT: starting child: %s",i->job_id,cmd);
+      py.call((void *) &*i);
     } else {
       if(!job_lrms_mark_check(i->job_id,config)) {
         logger.msg(Arc::INFO,"%s: state CANCELING: starting child: %s",i->job_id,cmd);

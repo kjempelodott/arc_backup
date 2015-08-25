@@ -123,7 +123,6 @@ bool CoreConfig::ParseConf(GMConfig& config) {
 
 bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
 
-  bool use_python_lrms;
   // List of helper commands that will be substituted after all configuration is read
   std::list<std::string> helpers;
   ConfigSections cf(cfile);
@@ -406,7 +405,7 @@ bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
       helpers.push_back(rest);
     }
     else if (command == "use_python_lrms") {
-      if (!CheckYesNoCommand(use_python_lrms, command, rest)) return false;
+      if (!CheckYesNoCommand(config.use_python_lrms, command, rest)) return false;
     }
     // SSH
     else if (command == "remote_host") {
@@ -455,7 +454,7 @@ bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
   // End of parsing conf commands
 
   // Set default value for submitScriptName, scanScriptName and cancelScriptName
-  if (!use_python_lrms) {
+  if (!config.use_python_lrms) {
     config.submitScriptName = "submit-" + config.default_lrms + "-job";
     config.scanScriptName = "scan-" + config.default_lrms + "-job";
     config.cancelScriptName = "cancel-" + config.default_lrms + "-job";
@@ -464,6 +463,7 @@ bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
     config.submitScriptName = config.default_lrms + "Submitter.py";
     config.scanScriptName = config.default_lrms + "Scanner.py";
     config.cancelScriptName = config.default_lrms + "Cancel.py";
+    
   }
   CheckLRMSBackends(config);
 

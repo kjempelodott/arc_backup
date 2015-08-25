@@ -30,8 +30,8 @@ def configure(configfile, *func):
     that of arc.conf, the ``Config`` object will be loaded from this file.
     
     :param str configfile: path to arc.conf
-    :param *func: variable length setter function (e.g. set_slurm) list
-    :type *func: :py:obj:`list` [ :py:obj:`function` ... ]
+    :param func: variable length setter function (e.g. set_slurm) list
+    :type func: :py:obj:`list` [ :py:obj:`function` ... ]
     """
 
     import pickle

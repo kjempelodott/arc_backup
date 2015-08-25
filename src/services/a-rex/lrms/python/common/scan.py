@@ -50,10 +50,11 @@ def get_jobs(ctrdirs):
     :return: dictionary that maps local job ID to job object
     :rtype: :py:obj:`dict` { :py:obj:`str` : :py:obj:`object` ... }
 
-    .. note:: The returned job obects have the following attributes: 
-    ``localid``, ``gridid``, ``local_file``, ``lrms_done_file``, ``grami_file``,
-    ``output_file``, ``state``, ``uid``, ``gid``, ``sessiondir``,
+    .. note:: The returned job obects have the following attributes: \
+    ``localid``, ``gridid``, ``local_file``, ``lrms_done_file``, ``grami_file``, \
+    ``output_file``, ``state``, ``uid``, ``gid``, ``sessiondir``, \
     ``diag_file``, ``count_file``, ``errors_file`` and ``comment_file``.
+
     """
 
     import re
@@ -274,8 +275,7 @@ def get_MDS(dm, lc_time = 'en_US'):
     """
     Get date and time in MDS format.
     
-    :param dm: dictionary with keys 'yyyy', 'mm'|'bbb',
-    'dd', 'HH', 'MM' and 'SS'
+    :param dm: dictionary with keys 'yyyy', 'mm'|'bbb', 'dd', 'HH', 'MM' and 'SS'
     :type dm: :py:obj:`dict`
     :param str lc_time: the locale, if 'bbb' given
     :return: string on the form 'yyyy-mm-ddTHH:MM:SS'

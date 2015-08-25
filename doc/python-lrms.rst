@@ -10,11 +10,11 @@ Module tree >
  |      |– :mod:`cancel <lrms.common.cancel>`
  |      |– :mod:`config <lrms.common.config>`
  |      |– :mod:`files <lrms.common.files>`
- |      |– :mod:`log <lrms.common.common>`
+ |      |– :mod:`log <lrms.common.log>`
  |      |– :mod:`parse <lrms.common.parse>`
  |      |– :mod:`proc <lrms.common.proc>`
  |      |– :mod:`scan <lrms.common.scan>`
- |      |– :mod:`ssh <lrms.common.tools>`
+ |      |– :mod:`ssh <lrms.common.ssh>`
  |      |– :mod:`submit <lrms.common.submit>`
 
 |

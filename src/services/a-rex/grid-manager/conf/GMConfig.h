@@ -237,11 +237,8 @@ private:
     /// Object representing running process
     Arc::Run *proc;
    public:
-    ExternalHelper() : proc(NULL) {};
     ExternalHelper(const std::string &cmd);
     ~ExternalHelper();
-    /// Set command if empty
-    ExternalHelper& operator=(const std::string& cmd);
     /// Start process if it is not running yet
     bool run(const GMConfig& config);
     /// Stop process if it is running
@@ -328,6 +325,8 @@ private:
   /// WS-interface endpoint
   std::string arex_endpoint;
 
+  /// Use Python script, else Bash
+  bool use_python_lrms;
   /// Name of submit script - default name: submit-<default_lrms>-job (temporary attribute during rewrite).
   std::string submitScriptName;
   /// Name of scan script - default name: scan-<default_lrms>-job (temporary attribute during rewrite).

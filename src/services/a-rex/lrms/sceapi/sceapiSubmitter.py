@@ -5,26 +5,27 @@ import sys, time, traceback
 try:
     import arc
 except:
-    print("No module named arc")
+    sys.stderr.write('No module named arc\n')
     time.sleep(10)
     sys.exit(2)
 
 try:
     from lrms import sceapi
     from lrms.common.parse import JobDescriptionParserGRAMi
-    from lrms.common.common import *
+    from lrms.common.log import ArcError
 except:
-    raise ArcError("Failed to import lrms modules")
+    sys.stderr.write('Failed to import lrms module\n')
+    time.sleep(10)
+    sys.exit(3)
 
 
-if __name__ == "__main__":
-    set_log_name("sceapiSubmitter")
+if __name__ == '__main__':
 
     if len(sys.argv) != 4:
-        raise ArcError("Usage: %s --config <arc.conf> <grami>" % (sys.argv[0]))
+        raise ArcError('Usage: %s --config <arc.conf> <grami>' % (sys.argv[0]), 'sceapiSubmitter')
     
-    if sys.argv[1] != "--config":
-        raise ArcError("Error: First argument must be '--config' followed by path to arc.conf")
+    if sys.argv[1] != '--config':
+        raise ArcError('First argument must be \'--config\' followed by path to arc.conf', 'sceapiSubmitter')
     
     arc_conf = sys.argv[2]
     grami = sys.argv[3]
@@ -33,20 +34,20 @@ if __name__ == "__main__":
     try: 
         with open(grami, 'r') as jobdesc_file:
             content = jobdesc_file.read()
-            isParsed = JobDescriptionParserGRAMi.Parse(content, jobdescs)
-            if not isParsed or not jobdescs:
-                isParsed = arc.JobDescription.Parse(content, jobdescs)
-                if not isParsed or not jobdescs:
-                    raise ArcError("Unable to parse job description from file (%s)" % grami)
-                jobdescs[0].OtherAttributes["joboption;gridid"] = str(time.time())
+            is_parsed = JobDescriptionParserGRAMi.Parse(content, jobdescs)
+            if not is_parsed or not jobdescs:
+                is_parsed = arc.JobDescription.Parse(content, jobdescs)
+                if not is_parsed or not jobdescs:
+                    raise ArcError('Unable to parse job description from file (%s)' % grami, 'sceapiSubmitter')
+                jobdescs[0].OtherAttributes['joboption;gridid'] = str(time.time())
     except IOError:
-        raise ArcError("Error: File (%s) does not appear to exist" % grami)
+        raise ArcError('File (%s) does not appear to exist' % grami, 'sceapiSubmitter')
     
     try:
         jc = arc.compute.JobContainer()
         if sceapi.Submit(arc_conf, jobdescs, jc):
-            if grami[-6:] == ".grami":
-                with open(grami, "a") as fgrami:
-                    fgrami.write("joboption_jobid=%s\n" % (jc[0].IDFromEndpoint))
+            if grami[-6:] == '.grami':
+                with open(grami, 'a') as fgrami:
+                    fgrami.write('joboption_jobid=%s\n' % (jc[0].IDFromEndpoint))
     except Exception:
-        raise ArcError("Unexpected exception:\n%s" % traceback.format_exc())
+        raise ArcError('Unexpected exception:\n%s' % traceback.format_exc(), 'sceapiSubmitter')

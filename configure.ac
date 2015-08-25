@@ -96,6 +96,7 @@ AC_SUBST(pkglibdir)
 AC_SUBST(pkglibexecdir)
 
 ARC_API
+ARC_RELATIVE_PATHS
 
 AC_ARG_WITH(sysv-scripts-location,
   AC_HELP_STRING([--with-sysv-scripts-location=<PATH>], [Location of the SYSV init scripts. [[autodetect]]]),
@@ -121,8 +122,6 @@ AC_ARG_WITH(sysv-scripts-location,
 AM_CONDITIONAL([SYSV_SCRIPTS_ENABLED],[test "x$initddir" != "x"])
 AC_MSG_RESULT($initddir)
 AC_SUBST(initddir)
-
-ARC_RELATIVE_PATHS
 
 AC_ARG_WITH(cron-scripts-prefix,
   AC_HELP_STRING([--with-cron-scripts-prefix=<PATH>], [Specify the location of the cron directory. [[SYSCONFDIR/cron.d]]]),

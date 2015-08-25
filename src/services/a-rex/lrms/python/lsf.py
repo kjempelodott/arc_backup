@@ -131,7 +131,7 @@ def set_job_id(handle, job):
 
     :param object handle: sbatch handle
     :param job: job object 
-    :type job: py:class:`arc.Job
+    :type job: :py:class:`arc.Job`
     :return: ``True`` if found, else ``False``
     :rtype: :py:obj:`str`
     """
@@ -220,7 +220,7 @@ def Scan(config, ctr_dirs):
     def handle_job(info, in_lsf = True):
         job = jobs[info[0]]
         job.state = info[2]
-        if status in RUNNING:
+        if job.state in RUNNING:
             if os.path.exists(job.count_file):
                 os.remove(job.count_file)
             return
@@ -245,9 +245,9 @@ def Scan(config, ctr_dirs):
             info = line.strip().split()
             assert(len(info) == 15)
             handle_job(info)
-        except:
+        except Exception as e:
             if line:
-                warn('Failed to parse bjobs line: ' + line, 'lsf.Scan')
+                warn('Failed to parse bjobs line: %s\n%s' % (line, str(e)), 'lsf.Scan')
 
     # Handle jobs lost in LSF
     if handle.returncode != 0:
@@ -257,7 +257,7 @@ def Scan(config, ctr_dirs):
         for line in handle.stderr:
             match = lost_job.match(line)
             if match:
-                handle_job([match.groups()[0], 'UNKNOWN'], False)
+                handle_job([match.groups()[0], None, 'UNKNOWN'], False)
 
     kicklist = []
     for job in jobs.itervalues():

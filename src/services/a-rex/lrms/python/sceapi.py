@@ -36,7 +36,7 @@ def setup_api():
 @is_conf_setter
 def set_sceapi(cfg):
     """
-    Set SCEAPI specific :py:data:`~lrms.common.Config attributes.
+    Set SCEAPI specific :py:data:`~lrms.common.Config` attributes.
 
     :param cfg: parsed arc.conf
     :type cfg: :py:class:`ConfigParser.ConfigParser`
@@ -54,7 +54,7 @@ def translate(text):
 
     :param str text: message to translate
     :return: translated message if Goslate installed, else original message
-    :rtype: py:obj:`str`
+    :rtype: :py:obj:`str`
     """
     try:
         import goslate
@@ -330,7 +330,7 @@ def assemble_dict(jobdesc, rel):
         job_dict['wallTime'] = cputime/60
 
     ### output files
-    job_dict['targetFiles'] = get_output_list(j)
+    job_dict['targetFiles'] = get_output_list(jobdesc)
 
     return job_dict
 
@@ -406,15 +406,15 @@ def download_output(job, client):
         return False
 
     # First download files specified in output file in ctrdir (output.list ...)
-    is_good, fn = read(job.output_file)
-    if is_good:
+    fl = read(job.output_file)
+    if fl:
         try:
-            fn.remove('/gmlog\n')
-            fn.remove('/@output.list\n')
+            fl.remove('/gmlog')
+            fl.remove('/@output.list')
         except ValueError:
             pass
         try:
-            for line in fn:
+            for line in fl:
                 _f = line.strip().lstrip('/')
                 if _f not in files:
                     debug('File (%s) not found for job (%s)' % (str(_f), job.globalid),
@@ -435,10 +435,10 @@ def download_output(job, client):
 
     # Then continue with files in 'output.list'
     output_list = os.path.join(dest, 'output.list')    
-    is_good, fn = read(output_list)
-    if is_good:
+    fl = read(output_list)
+    if fl:
         try:
-            for line in fn:
+            for line in fl:
                 _f = line.strip().split()[0] # Second field is rucio destination
                 if _f not in files:
                     debug('File (%s) not found for job (%s)' % (str(_f), job.globalid),

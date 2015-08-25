@@ -206,7 +206,7 @@ def RTE_stage0(jobdescs, lrms, **mapping):
 
 class JobscriptAssembler(object):
      """
-     Parses and expands jobscript stubs defined in job_script.stubs.
+     Parses and expands jobscript stubs defined in ``job_script.stubs``.
      Each stub is initiated by a line starting with ``>>``, followed by
      the stub name. The stub must be enclosed within two ``>`` on
      separate lines::
@@ -232,7 +232,7 @@ class JobscriptAssembler(object):
      It is also possible to define loops that depend on some iterable 
      in the job description object. The attribute Application.Environment 
      is an iterable, where each item is a tuple of two elements, an 
-     environment variable and its respective value. The iterable is mapped
+     environment variable and its respective value. This iterable is mapped
      to ``ENVS``, and the macros that return the first and second tuple element
      are mapped to ``ENV`` and ``ENV_VAL``, respectively.
 
@@ -240,8 +240,7 @@ class JobscriptAssembler(object):
      must be followed by the map names of the iterable and the macros. The
      simplest macro is mapped to ``ITEM`` and simply returns the current 
      item in the iterable. This is only applicable when each item is a 
-     string. Note the ``%`` in front of each macro name in the first line
-     following example::
+     string. Note the ``%`` in front of each macro name in the following example::
 
         >> some_stuff
         >

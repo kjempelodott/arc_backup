@@ -47,10 +47,11 @@ class SCEAPIInfo(LRMSInfo, object):
             raise ArcError('\'apps_list\' or \'%s\' info missing from JSON: %s' % 
                            (sceapi.translate(handle['status_reason'].strip()), app), 'SCEAPIInfo')
         except:
-            raise ArcError('App query failed. Response: %s' % resp.text, 'SCEAPIInfo')
+            raise ArcError('App query failed. Response: %s' % str(resp), 'SCEAPIInfo')
 
 
     def read_jobs(self, jids):
+        self.jobs = {}
         for jid in jids:
             query = "/jobs?offset=0&ujids=" + jid
             resp = self.client._ApiClient__processHttpGET(query)
@@ -62,7 +63,7 @@ class SCEAPIInfo(LRMSInfo, object):
                      sceapi.translate(handle['status_reason'].strip()), 'SCEAPIInfo')
                 continue
             except:
-                raise ArcError('Job query failed. Response: %s' % resp.text, 'SCEAPIInfo')
+                raise ArcError('Job query failed. Response: %s' % str(resp), 'SCEAPIInfo')
 
 
     def nodes_info(self):
@@ -129,9 +130,9 @@ class SCEAPIInfo(LRMSInfo, object):
 
     def jobs_info(self, jids):
 
-        statemap = {1 : "R", 2 : "R", 4 : "R",8 : "R", 17 : "R", 18 : "R",
-                    16 : "Q", 33 : "O", 34 : "O",
-                    20 : "EXECUTED", 24 : "EXECUTED", 32 : "EXECUTED", 38 : "EXECUTED"}
+        statemap = {1 : 'R', 2 : 'R', 4 : 'R',8 : 'R', 17 : 'R', 18 : 'R',
+                    16 : 'Q', 33 : 'O', 34 : 'O',
+                    20 : 'E', 24 : 'E', 32 : 'E', 38 : 'E'}
 
         sceapi_to_arc = {'puser'      : lambda x: ('user',     x),
                          'queue_name' : lambda x: ('queue',    x),
@@ -139,15 +140,15 @@ class SCEAPIInfo(LRMSInfo, object):
                          'exec_host'  : lambda x: ('nodes',    [x]),
                          'walltime'   : lambda x: ('walltime', SCEAPIInfo.to_minutes(x)),
                          'corenum'    : lambda x: ('cpus',     x),
-                         'job_name'   : lambda x: ('comment',  x)}
+                         'job_name'   : lambda x: ('comment',  [x])}
 
         jobs = {}
-        for job in jids:
+        for jid in jids:
             if jid not in self.jobs: # Lost job or invalid job id!         
                 jobs[jid] = { 'status' : 'O' }
                 continue
-            job = dict(sceapi_to_arc[k](v) for k, v in sceapi_job.iteritems() if k in sceapi_to_arc)
-            job['cputime'] = job['cputime'] * job['cpus']
+            job = dict(sceapi_to_arc[k](v) for k, v in self.jobs[jid].iteritems() if k in sceapi_to_arc)
+            job['cputime'] = job['walltime'] * job['cpus']
             jobs[jid] = job
         self.lrms_info['jobs'] = jobs
 
@@ -158,7 +159,7 @@ class SCEAPIInfo(LRMSInfo, object):
                              '(?P<MM>\d\d)m(?P<SS>\d\d)s')
         try:
             time = re_time.match(time).groupdict()
-            return 45*(int(time["dd"]) << 5) + 15*(int(time["HH"]) << 2) + \
+            return 45*(int(time['dd']) << 5) + 15*(int(time['HH']) << 2) + \
                 int(time['MM']) + (int(time['SS']) > 0)
         except:
             return 0

@@ -368,11 +368,6 @@ GMConfig::ExternalHelper::~ExternalHelper() {
   }
 }
 
-GMConfig::ExternalHelper& GMConfig::ExternalHelper::operator=(const std::string& cmd) {
-  if (command.empty())
-    command = cmd;
-}
-
 bool GMConfig::ExternalHelper::run(const GMConfig& config) {
   if (proc != NULL) {
     if (proc->Running()) {

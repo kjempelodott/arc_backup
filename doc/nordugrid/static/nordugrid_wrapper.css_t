@@ -3,9 +3,9 @@
 
 div.highlight
 {
-  background-color: #FFF8ED	
+  background-color: #FFF8ED;
   padding: 0 0 0 5px;
-  margin: 10px, 10em, 10px, 10px;
+  margin: 10px 10em 10px 10px;
   font-family: Courier, "Courier New", monospace;
   border: 1px solid #C0C0C0;
   text-align: left;
