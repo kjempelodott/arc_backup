@@ -16,14 +16,16 @@ namespace ARex {
 
   class PythonPlugin {
   private:
-    PyObject* py_func;
+    PyObject* py_submit;
+    PyObject* py_cancel;
     PyObject* py_mod;
     PyObject* py_lrms;
     static Arc::Logger logger;
   public:
     PythonPlugin(void);
-    bool init(std::string submit_module);
-    void submit(Arc::JobDescription* arg);
+    bool init(const std::string& submit_module);
+    bool submit(Arc::JobDescription* arg);
+    bool cancel(const std::string& localid);
     ~PythonPlugin(void);
   };
 }

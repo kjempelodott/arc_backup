@@ -7,9 +7,9 @@ namespace ARex {
 
   Arc::Logger PythonPlugin::logger(Arc::Logger::getRootLogger(), "PythonPlugin");
 
-  PythonPlugin::PythonPlugin(void) : py_func(NULL), py_mod(NULL), py_lrms(NULL) {}
+  PythonPlugin::PythonPlugin(void) : py_submit(NULL), py_cancel(NULL), py_mod(NULL), py_lrms(NULL) {}
 
-  bool PythonPlugin::init(std::string lrms) {
+  bool PythonPlugin::init(const std::string& lrms) {
 
     Py_Initialize();
 
@@ -48,10 +48,13 @@ namespace ARex {
     if (!py_mod) return false;
 
     PyObject* py_mod_dict = PyModule_GetDict(py_mod);
-    PyObject* py_func_name = PyString_FromString("submit");
-    py_func = PyDict_GetItem(py_mod_dict, py_func_name);
-    Py_DECREF(py_func_name);
-    if (!py_func) return false;
+    PyObject* py_submit_name = PyString_FromString("submit");
+    PyObject* py_cancel_name = PyString_FromString("cancel");
+    py_submit = PyDict_GetItem(py_mod_dict, py_submit_name);
+    py_cacnel = PyDict_GetItem(py_mod_dict, py_cancel_name);
+    Py_DECREF(py_submit_name);
+    Py_DECREF(py_cancel_name);
+    if (!py_submit || !py_cancel) return false;
 
     py_lrms = PyString_FromString(lrms.c_str());
 
@@ -59,16 +62,32 @@ namespace ARex {
     return true;
   }
 
-  void PythonPlugin::submit(Arc::JobDescription* j) {
-    logger.msg(Arc::VERBOSE, "Starting submit function");
+  std::string PythonPlugin::submit(Arc::JobDescription* j) {
+    if (!py_submit) return false;
+    logger.msg(Arc::VERBOSE, "Calling SUBMIT function");
     PyObject* py_job = PyCObject_FromVoidPtr((void*) j, NULL);
-    PyObject* py_res = PyObject_CallFunctionObjArgs(py_func, py_job, py_lrms, NULL);    
+    PyObject* py_res = PyObject_CallFunctionObjArgs(py_submit, py_job, py_lrms, NULL);    
     Py_DECREF(py_job);
     Py_DECREF(py_job);
+    if (py_res)
+      return PyObject_AsString(py_res);
+    return '\0';
+  }
+
+  bool PythonPlugin::cancel(const std::string& localid) {
+    if (!py_cancel) return false;
+    logger.msg(Arc::VERBOSE, "Calling CANCEL function");
+    PyObject* py_localid = PyObject_FromString(localid.c_str());
+    PyObject* py_res = PyObject_CallFunctionObjArgs(py_cancel, py_localid, py_lrms, NULL);    
+    if (py_res)
+      return PyObject_AsInt(py_res) == 0;
+    return false;
   }
 
   PythonPlugin::~PythonPlugin(void) {
-    if (py_func) Py_DECREF(py_func);
+    if (py_submit) Py_DECREF(py_submit);
+    if (py_cancel) Py_DECREF(py_cancel);
     if (py_mod) Py_DECREF(py_mod);
+    if (py_lrms) Py_XDECREF(py_lrms);
   }
 }
