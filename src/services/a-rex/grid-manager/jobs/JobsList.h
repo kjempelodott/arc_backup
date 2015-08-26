@@ -151,8 +151,6 @@ class JobsList {
   // No of jobs staging out data after job execution
   int FinishingJobs() const;
 
-  // Python
-  void SetPython(PythonPlugin& py) { py = py; };
   // Set DTR Generator for data staging
   void SetDataGenerator(DTRGenerator* generator) { dtr_generator = generator; };
   // Call ActJob for all current jobs

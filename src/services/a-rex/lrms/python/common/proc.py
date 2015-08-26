@@ -2,7 +2,7 @@
 Execute bash commands locally or remotely (SSH).
 """
 
-from log import ArcError
+from log import warn, ArcError
 from config import Config
 from ssh import SSHSession
 
@@ -83,7 +83,7 @@ def execute_remote(args, host = None, timeout = 10):
         return p
 
     except Exception as e:
-        raise ArcError('Failed to execute command \'%s\':\n%s' % (args.split()[0], str(e)), 'common.proc')
+        raise ArcError('Failed to execute command \'%s (...) \':\n%s' % (args.split()[:4], str(e)), 'common.proc')
 
 
 # class SSHSubprocess_libssh(object):

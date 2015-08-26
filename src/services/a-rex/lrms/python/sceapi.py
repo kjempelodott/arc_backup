@@ -409,16 +409,15 @@ def download_output(job, client):
     fl = read(job.output_file)
     if fl:
         try:
-            fl.remove('/gmlog')
-            fl.remove('/@output.list')
+            fl.remove('/gmlog\n')
+            fl.remove('/@output.list\n')
         except ValueError:
             pass
         try:
             for line in fl:
                 _f = line.strip().lstrip('/')
                 if _f not in files:
-                    debug('File (%s) not found for job (%s)' % (str(_f), job.globalid),
-                        'sceapi.Scan')
+                    debug('File (%s) not found for job (%s)' % (str(_f), job.globalid), 'sceapi.Scan')
                     continue
                 _f_local = os.path.join(dest, _f)
                 if os.path.isfile(_f_local):
@@ -441,8 +440,7 @@ def download_output(job, client):
             for line in fl:
                 _f = line.strip().split()[0] # Second field is rucio destination
                 if _f not in files:
-                    debug('File (%s) not found for job (%s)' % (str(_f), job.globalid),
-                        'sceapi.Scan')
+                    debug('File (%s) not found for job (%s)' % (str(_f), job.globalid), 'sceapi.Scan')
                     continue
                 _f_local = os.path.join(dest, _f)
                 if os.path.isfile(_f_local):
