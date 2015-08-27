@@ -24,7 +24,7 @@ namespace ARex {
   public:
     PythonPlugin(void);
     bool init(const std::string& submit_module);
-    bool submit(Arc::JobDescription* arg);
+    std::string submit(Arc::JobDescription* arg);
     bool cancel(const std::string& localid);
     ~PythonPlugin(void);
   };

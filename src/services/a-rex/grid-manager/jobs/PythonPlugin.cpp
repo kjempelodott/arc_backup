@@ -51,36 +51,36 @@ namespace ARex {
     PyObject* py_submit_name = PyString_FromString("submit");
     PyObject* py_cancel_name = PyString_FromString("cancel");
     py_submit = PyDict_GetItem(py_mod_dict, py_submit_name);
-    py_cacnel = PyDict_GetItem(py_mod_dict, py_cancel_name);
+    py_cancel = PyDict_GetItem(py_mod_dict, py_cancel_name);
     Py_DECREF(py_submit_name);
     Py_DECREF(py_cancel_name);
     if (!py_submit || !py_cancel) return false;
 
     py_lrms = PyString_FromString(lrms.c_str());
 
-    logger.msg(Arc::VERBOSE, "PythonPlugin initialized");
+    logger.msg(Arc::INFO, "PythonPlugin initialized");
     return true;
   }
 
   std::string PythonPlugin::submit(Arc::JobDescription* j) {
-    if (!py_submit) return false;
-    logger.msg(Arc::VERBOSE, "Calling SUBMIT function");
+    if (!py_submit) '\0';
+    logger.msg(Arc::INFO, "Calling SUBMIT function");
     PyObject* py_job = PyCObject_FromVoidPtr((void*) j, NULL);
-    PyObject* py_res = PyObject_CallFunctionObjArgs(py_submit, py_job, py_lrms, NULL);    
+    PyObject* py_res = PyObject_CallFunctionObjArgs(py_submit, py_job, py_lrms, NULL);
     Py_DECREF(py_job);
     Py_DECREF(py_job);
-    if (py_res)
-      return PyObject_AsString(py_res);
+    if (py_res && PyString_Check(py_res))
+      return PyString_AsString(py_res);
     return '\0';
   }
 
   bool PythonPlugin::cancel(const std::string& localid) {
     if (!py_cancel) return false;
-    logger.msg(Arc::VERBOSE, "Calling CANCEL function");
-    PyObject* py_localid = PyObject_FromString(localid.c_str());
+    logger.msg(Arc::INFO, "Calling CANCEL function");
+    PyObject* py_localid = PyString_FromString(localid.c_str());
     PyObject* py_res = PyObject_CallFunctionObjArgs(py_cancel, py_localid, py_lrms, NULL);    
-    if (py_res)
-      return PyObject_AsInt(py_res) == 0;
+    if (py_res && PyInt_Check(py_res))
+      return PyInt_AsLong(py_res) == 0;
     return false;
   }
 
@@ -88,6 +88,5 @@ namespace ARex {
     if (py_submit) Py_DECREF(py_submit);
     if (py_cancel) Py_DECREF(py_cancel);
     if (py_mod) Py_DECREF(py_mod);
-    if (py_lrms) Py_XDECREF(py_lrms);
   }
 }

@@ -38,8 +38,8 @@ def Submit(config, jobdescs, jc):
     :type jobdescs: :py:class:`arc.JobDescriptionList`
     :param jc: job container object 
     :type jc: :py:class:`arc.compute.JobContainer`
-    :return: ``True`` if successfully submitted, else ``False``
-    :rtype: :py:obj:`bool`
+    :return: local job ID if successfully submitted, else ``None``
+    :rtype: :py:obj:`str`
     """
 
     configure(config, set_fork)
@@ -65,13 +65,13 @@ def Submit(config, jobdescs, jc):
     debug('----------------- END job script -----', 'fork.Submit')
 
     if 'ONLY_WRITE_JOBSCRIPT' in os.environ and os.environ['ONLY_WRITE_JOBSCRIPT'] == 'yes':
-        return False
+        return
 
     #######################################
     #  Submit the job
     ######################################
     
-    execute = excute_local if not Config.remote_host else execute_remote
+    execute = execute_local if not Config.remote_host else execute_remote
     directory = jd.OtherAttributes['joboption;directory']
 
     debug('Session directory: %s' % directory, 'fork.Submit')
@@ -88,7 +88,7 @@ def Submit(config, jobdescs, jc):
 
     if handle.returncode == 0:
         debug('Job submitted successfully!', 'fork.Submit')
-        debug('Local job id: %s' % (jobid), 'fork.Submit') 
+        debug('Local job id: ' + jobid, 'fork.Submit') 
         debug('----- exiting forkSubmitter.py -----', 'fork.Submit')
 
         endpointURL = arc.common.URL(Config.remote_endpoint)
@@ -108,16 +108,13 @@ def Submit(config, jobdescs, jc):
         job.StageOutDir = job.SessionDir
         job.IDFromEndpoint = jobid
         jc.addEntity(job)
-        return True
+        return jobid
 
     debug('Job *NOT* submitted successfully!', 'fork.Submit')
     debug('Got error code: %d !' % (handle.returncode), 'fork.Submit')
-    debug('Output is:', 'fork.Submit')
-    debug('\n'.join(handle.stdout), 'fork.Submit')
-    debug('Error output is:', 'fork.Submit')
-    debug('\n'.join(handle.stderr), 'fork.Submit')
+    debug('Output is:\n' + ''.join(handle.stdout), 'fork.Submit')
+    debug('Error output is:\n' + ''.join(handle.stderr), 'fork.Submit')
     debug('----- exiting forkSubmitter.py -----', 'fork.Submit')
-    return False
 
                 
 def get_job_script(jobdescs):
@@ -224,6 +221,7 @@ def Cancel(config, grami_file):
             info('Job already died, won\'t do anything', 'fork.Cancel')
         else:
             info('Job is at unkillable state', 'fork.Cancel')
+            return False
 
     debug('----- exiting forkCancel.py -----', 'fork.Cancel')
     return True
@@ -256,7 +254,7 @@ def Scan(config, ctr_dirs):
     if Config.remote_host:
         ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
 
-    execute = excute_local if not Config.remote_host else execute_remote
+    execute = execute_local if not Config.remote_host else execute_remote
     args = 'ps -opid ' + (' '.join(jobs.keys()))
     if os.environ.has_key('__FORK_TEST'):
         handle = execute(args, env=dict(os.environ))
@@ -264,10 +262,7 @@ def Scan(config, ctr_dirs):
         handle = execute(args)
     if handle.returncode != 0:
         debug('Got error code %i from ps -opid' % handle.returncode, 'fork.Scan')
-        #debug('Output is:', 'fork.Scan')
-        #debug('\n'.join(handle.stdout), 'fork.Scan')
-        debug('Error output is:', 'fork.Scan')
-        debug('\n'.join(handle.stderr), 'fork.Scan')
+        debug('Error output is:\n' + ''.join(handle.stderr), 'fork.Scan')
 
     running = [line.strip() for line in handle.stdout]
     for localid, job in jobs.items():

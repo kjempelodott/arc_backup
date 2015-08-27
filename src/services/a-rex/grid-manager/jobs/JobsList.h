@@ -79,6 +79,7 @@ class JobsList {
   // false if external process is still running.
   bool DestroyJob(iterator &i,bool finished=true,bool active=true);
   // Perform actions necessary in case job goes to/is in SUBMITTING/CANCELING state
+  bool state_submitting_py(const iterator &i,bool &state_changed,bool cancel=false);
   bool state_submitting(const iterator &i,bool &state_changed,bool cancel=false);
   // Same for PREPARING/FINISHING
   bool state_loading(const iterator &i,bool &state_changed,bool up);

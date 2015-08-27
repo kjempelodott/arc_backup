@@ -1,33 +1,40 @@
 #!/usr/bin/env python
 
-import sys, time, traceback
+import sys, traceback
 
 try:
     import arc
 except:
-    print("No module named arc")
-    time.sleep(10)
-    sys.exit(2)
+    sys.stderr.write('No module named arc\n')
+    return 2
 
 try:
     from lrms import fork
-    from lrms.common.log import ArcError
+    from lrms.common.parse import SimpleGramiParser
+    from lrms.common.log import ArcError, error
 except:
-    raise ArcError("Failed to import lrms modules")
+    sys.stderr.write('Failed to import lrms module\n')
+    return 3
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
 
     if len(sys.argv) != 4:
-        raise ArcError("Usage: %s --config <arc.conf> <grami>" % (sys.argv[0]))
+        error('Usage: %s --config <arc.conf> <grami>' % sys.argv[0], 'forkCancel')
+        return 1
 
-    if sys.argv[1] != "--config":
-        raise ArcError("Error: First argument must be '--config' followed by path to arc.conf")
+    if sys.argv[1] != '--config':
+        error('First argument must be \'--config\' followed by path to arc.conf', 'forkCancel')
+        return 1
   
     arc_conf = sys.argv[2]
     grami = sys.argv[3]
 
     try:
-        fork.Cancel(grami):
+        grami = SimpleGramiParser(grami)
+        return fork.Cancel(arc_conf, grami.jobid)
+    except ArcError:
+        pass
     except Exception:
-        raise ArcError("Unexpected exception:\n%s" % traceback.format_exc())
+        error('Unexpected exception:\n%s' % traceback.format_exc(), 'forkCancel')
+    return 1

@@ -38,8 +38,8 @@ JobsList::JobsList(const GMConfig& gmconfig) :
     config(gmconfig), staging_config(gmconfig), old_dir(NULL), dtr_generator(NULL), job_desc_handler(config), jobs_pending(0) {
   for(int n = 0;n<JOB_STATE_NUM;n++) jobs_num[n]=0;
   jobs.clear();
-  if (config.use_python_lrms) {
-    py.init(config.default_lrms);
+  if (config.use_python_lrms && !py.init(config.default_lrms)) {
+    logger.msg(Arc::FATAL, "Failed to initialize PythonPlugin");
   }
 }
  
@@ -249,8 +249,11 @@ bool JobsList::GetLocalDescription(const JobsList::iterator &i) {
 }
 
 bool JobsList::state_submitting_py(const JobsList::iterator &i,bool &state_changed,bool cancel) {
+  // TODO: run submit/cancel in threads. none write to controldir, so shouldn't
+  // need to worry about locks
+
   // Submit
-  if (!cancel) {
+  if (!cancel) {    
     // TODO: this one parses descripton file, no need to do it agan
     // instance of JobDescription should be a member of GMJob
     if (!job_desc_handler.set_execs(*i)) {

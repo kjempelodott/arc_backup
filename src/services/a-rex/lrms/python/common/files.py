@@ -6,7 +6,7 @@ import os
 from ssh import SSHSession
 from log import warn, error
 
-def read(path, tail = 0):
+def read(path, do_tail = 0):
     """                               
     Read file content.
 
@@ -17,8 +17,8 @@ def read(path, tail = 0):
     """
 
     try:
-        if tail:
-            return tools.tail(path, 1000)
+        if do_tail:
+            return tail(path, 1000)
         else:
             with os.fdopen(os.open(path, os.O_RDONLY | os.O_NONBLOCK)) as f:
                 return f.readlines()

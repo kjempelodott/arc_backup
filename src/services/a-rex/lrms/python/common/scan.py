@@ -7,7 +7,7 @@ UID: user ID of user running PythonLRMS
 GID: group ID of user running PythonLRMS
 """
 
-import os, arc
+import os, arc, time
 from config import Config
 from files import read, write, getmtime
 from proc import execute_local, execute_remote
@@ -263,7 +263,7 @@ def write_comments(job):
         '------- '
         'Contents of output stream forwarded by the LRMS '
         '---------\n'
-        buf += '\n'.join(comments)
+        buf += ''.join(comments)
         buf += \
         '------------------------- '
         'End of output '

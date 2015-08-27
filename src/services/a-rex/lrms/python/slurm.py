@@ -42,8 +42,8 @@ def Submit(config, jobdescs, jc):
     :type jobdescs: :py:class:`arc.JobDescriptionList`
     :param jc: job container object 
     :type jc: :py:class:`arc.compute.JobContainer`
-    :return: ``True`` if successfully submitted, else ``False``
-    :rtype: :py:obj:`bool`
+    :return: local job ID if successfully submitted, else ``None``
+    :rtype: :py:obj:`str`
     """
 
     configure(config, set_slurm)
@@ -69,7 +69,7 @@ def Submit(config, jobdescs, jc):
     debug('----------------- END job script -----', 'slurm.Submit')
 
     if 'ONLY_WRITE_JOBSCRIPT' in os.environ and os.environ['ONLY_WRITE_JOBSCRIPT'] == 'yes':
-        return False
+        return
 
     #######################################
     #  Submit the job
@@ -106,7 +106,7 @@ def Submit(config, jobdescs, jc):
         # is safe. Ulf Tigerstedt <tigerste@csc.fi> 1.5.2011 
 
         debug('Job submitted successfully!', 'slurm.Submit')
-        debug('Local job id: %s' % (job.JobID), 'slurm.Submit')
+        debug('Local job id: ' + job.JobID, 'slurm.Submit')
         debug('----- exiting submitSubmitter.py -----', 'slurm.Submit')
 
         # TODO: What interface name to use?
@@ -124,16 +124,13 @@ def Submit(config, jobdescs, jc):
         job.StageOutDir = job.SessionDir
         job.IDFromEndpoint = str(job.JobID)
         jc.addEntity(job)
-        return True
+        return job.JobID
 
     debug('job *NOT* submitted successfully!', 'slurm.Submit')
     debug('got error code from sbatch: %d !' % handle.returncode, 'slurm.Submit')
-    debug('Output is:', 'slurm.Submit')
-    debug('\n'.join(handle.stdout), 'slurm.Submit')
-    debug('Error output is:', 'slurm.Submit')
-    debug('\n'.join(handle.stderr), 'slurm.Submit')
+    debug('Output is:\n' + ''.join(handle.stdout), 'slurm.Submit')
+    debug('Error output is:\n', ''.join(handle.stderr), 'slurm.Submit')
     debug('----- exiting slurmSubmitter.py -----', 'slurm.Submit')
-    return False
 
 
 def wait_for_queue(handle):
@@ -264,8 +261,7 @@ def Scan(config, ctr_dirs):
         handle = execute(args)
     if handle.returncode != 0:
         debug('Got error code %i from squeue' % handle.returncode, 'slurm.Scan')
-        debug('Error output is:', 'slurm.Scan')
-        debug('\n'.join(handle.stderr), 'slurm.Scan')
+        debug('Error output is:\n' + ''.join(handle.stderr), 'slurm.Scan')
 
     # Slurm can report StartTime and EndTime in at least these two formats:
     # 2010-02-15T15:30:29 (MDS)
@@ -295,8 +291,7 @@ def Scan(config, ctr_dirs):
         scontrol_handle = execute(args)
         if scontrol_handle.returncode != 0:
             debug('Got error code %i from scontrol' % scontrol_handle.returncode, 'slurm.Scan')
-            debug('Error output is:', 'slurm.Scan')
-            debug('\n'.join(scontrol_handle.stderr), 'slurm.Scan')
+            debug('Error output is:\n' + ''.join(scontrol_handle.stderr), 'slurm.Scan')
 
         try:
             scontrol_dict = dict(item.split('=', 1) for item in re.split(' (?=[^ =]+=)', scontrol_handle.stdout[0]))

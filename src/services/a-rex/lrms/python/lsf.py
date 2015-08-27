@@ -117,10 +117,8 @@ def Submit(config, jobdescs, jc):
 
     debug('job *NOT* submitted successfully!', 'lsf.Submit')
     debug('got error code from bsub: %d !' % handle.returncode, 'lsf.Submit')
-    debug('Output is:', 'lsf.Submit')
-    debug('\n'.join(handle.stdout), 'lsf.Submit')
-    debug('Error output is:', 'lsf.Submit')
-    debug('\n'.join(handle.stderr), 'lsf.Submit')
+    debug('Output is:\n' + ''.join(handle.stdout), 'lsf.Submit')
+    debug('Error output is:\n' + ''.join(handle.stderr), 'lsf.Submit')
     debug('----- exiting lsfSubmitter.py -----', 'lsf.Submit')
     return False
 
@@ -252,7 +250,7 @@ def Scan(config, ctr_dirs):
     # Handle jobs lost in LSF
     if handle.returncode != 0:
         debug('Got error code %i from bjobs' % handle.returncode, 'lsf.Scan')
-        debug('Error output is:\n' + '\n'.join(handle.stderr), 'lsf.Scan')
+        debug('Error output is:\n' + ''.join(handle.stderr), 'lsf.Scan')
         lost_job = re.compile('Job <(\d+)> is not found')
         for line in handle.stderr:
             match = lost_job.match(line)
