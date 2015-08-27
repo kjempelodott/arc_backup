@@ -31,37 +31,34 @@ def set_slurm(cfg):
 # Submit methods
 #---------------------
 
-def Submit(config, jobdescs, jc):
+def Submit(config, jobdesc):
     """
     Submits a job to the SLURM queue specified in arc.conf. This method executes the required
     RunTimeEnvironment scripts and assembles the bash job script. The job script is
     written to file and submitted with ``sbatch``.
 
     :param str config: path to arc.conf
-    :param jobdescs: job description list object
-    :type jobdescs: :py:class:`arc.JobDescriptionList`
-    :param jc: job container object 
-    :type jc: :py:class:`arc.compute.JobContainer`
+    :param jobdesc: job description object
+    :type jobdesc: :py:class:`arc.JobDescription`
     :return: local job ID if successfully submitted, else ``None``
     :rtype: :py:obj:`str`
     """
 
     configure(config, set_slurm)
 
-    jd = jobdescs[0]
-    validate_attributes(jd)
+    validate_attributes(jobdesc)
     if Config.remote_host:
         ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
         
     # Run RTE stage0
     debug('----- starting slurmSubmitter.py -----', 'slurm.Submit')
-    RTE_stage0(jobdescs, 'SLURM', SBATCH_ACCOUNT = 'OtherAttributes.SBATCH_ACCOUNT')
+    RTE_stage0(jobdesc, 'SLURM', SBATCH_ACCOUNT = 'OtherAttributes.SBATCH_ACCOUNT')
 
     # Create script file and write job script
-    jobscript = get_job_script(jobdescs)
+    jobscript = get_job_script(jobdesc)
     script_file = write_script_file(jobscript)
 
-    debug('SLURM jobname: %s' % jd.Identification.JobName, 'slurm.Submit')
+    debug('SLURM jobname: %s' % jobdesc.Identification.JobName, 'slurm.Submit')
     debug('SLURM job script built', 'slurm.Submit')
     debug('----------------- BEGIN job script -----', 'slurm.Submit')
     for line in jobscript.split('\n'):
@@ -76,7 +73,7 @@ def Submit(config, jobdescs, jc):
     ######################################
 
     execute = excute_local if not Config.remote_host else execute_remote
-    directory = jd.OtherAttributes['joboption;directory']
+    directory = jobdesc.OtherAttributes['joboption;directory']
 
     debug('Session directory: %s' % directory, 'slurm.Submit')
 
@@ -173,20 +170,20 @@ def set_job_id(handle, job):
     return False
 
 
-def get_job_script(jobdescs):
+def get_job_script(jobdesc):
     """
     Assemble bash job script for a SLURM host.
 
-    :param jobdescs: list of job description objects
-    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription` ... ]
+    :param jobdesc: job description object
+    :type jobdesc: :py:class:`arc.JobDescription`
     :return: job script
     :rtype: :py:obj:`str`
     """
 
-    set_req_mem(jobdescs)
+    set_req_mem(jobdesc)
 
     # TODO: Maybe change way in which JobDescriptionParserSLURM is loaded.
-    jobscript = JobscriptAssemblerSLURM(jobdescs[0]).assemble()
+    jobscript = JobscriptAssemblerSLURM(jobdesc).assemble()
     if not jobscript:
         raise ArcError('Unable to assemble SLURM job option', 'slurm.Submit')
     return jobscript
@@ -241,8 +238,6 @@ def Scan(config, ctr_dirs):
     """
 
     configure(config, set_slurm)
-    time.sleep(Config.slurm_wakeupperiod)
-
     if Config.scanscriptlog:
         scanlogfile = arc.common.LogFile(Config.scanscriptlog)
         arc.common.Logger_getRootLogger().addDestination(scanlogfile)

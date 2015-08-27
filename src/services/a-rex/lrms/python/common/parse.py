@@ -2,8 +2,6 @@
 Classes for parsing GRAMI files.
 """
 
-from common import *
-
 class SimpleGramiParser(object):
     """
     Read grami file and set each option as a class attribute.

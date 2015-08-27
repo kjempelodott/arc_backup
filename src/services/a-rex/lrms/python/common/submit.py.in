@@ -22,12 +22,10 @@ def validate_attributes(jd):
   
      if 'joboption;gridid' not in jd.OtherAttributes:
           raise ArcError('Grid ID not specified', 'common.submit')
-     
-     if 'joboption;directory' not in jd.OtherAttributes:
+
+     if not 'joboption;directory' in jd.OtherAttributes:
           jd.OtherAttributes['joboption;directory'] = \
               os.path.join(Config.sessiondir, jd.OtherAttributes['joboption;gridid'])
-
-     jd.OtherAttributes['joboption;local_directory'] = jd.OtherAttributes['joboption;directory']
 
      if Config.remote_sessiondir:
           jd.OtherAttributes['joboption;directory'] = \
@@ -36,8 +34,6 @@ def validate_attributes(jd):
           jd.Application.Input = jd.Application.Input.replace(Config.sessiondir, Config.remote_sessiondir)
           jd.Application.Error = jd.Application.Error.replace(Config.sessiondir, Config.remote_sessiondir)
 
-     if 'joboption;controldir' in jd.OtherAttributes:
-          Config.controldir = jd.OtherAttributes['joboption;controldir']
      if not jd.Application.Executable.Path:
           raise ArcError('Executable is not specified', 'common.submit')
      if not jd.Resources.RunTimeEnvironment.isResolved():
@@ -71,7 +67,7 @@ def write_script_file(jobscript):
 
      jobscript += '\nrm -- "$0"\n' # delete jobscript at end of execution
      mode = stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXGRP | stat.S_IRGRP | stat.S_IXOTH | stat.S_IROTH
-     _f, path = tempfile.mkstemp('.sh', 'job')
+     path = tempfile.mktemp('.sh', 'job')
 
      if not write(path, jobscript, mode, False, Config.remote_host):
           raise ArcError('Failed to write jobscript', 'common.submit')
@@ -128,7 +124,7 @@ def set_req_mem(jd):
 # Limitation: In RTE stage 0, scripts MUST use the 'export' command if any
 # new variables are defined which should be picked up by the submit script.
 # Also no output from the RTE script in stage 0 will be printed.
-def RTE_stage0(jobdescs, lrms, **mapping):
+def RTE_stage0(jobdesc, lrms, **mapping):
    """
    Source RTE scripts and update job description environment.
 
@@ -137,10 +133,9 @@ def RTE_stage0(jobdescs, lrms, **mapping):
    :param dict mapping: additional environment variables
    """     
    
-   jd = jobdescs[0]
-   if jd.Resources.RunTimeEnvironment.getSoftwareList():
+   if jobdesc.Resources.RunTimeEnvironment.getSoftwareList():
         from parse import RTE0EnvCreator
-        envCreator = RTE0EnvCreator(jd, Config, mapping)
+        envCreator = RTE0EnvCreator(jobdesc, Config, mapping)
         stage0_environ = envCreator.getShEnv()
         stage0_environ['joboption_lrms'] = lrms
 
@@ -163,7 +158,7 @@ def RTE_stage0(jobdescs, lrms, **mapping):
 
         # Source RTE scripts from the software list
         sw_list = []
-        for sw in jd.Resources.RunTimeEnvironment.getSoftwareList():
+        for sw in jobdesc.Resources.RunTimeEnvironment.getSoftwareList():
             sw_list.append(str(sw))
             source_sw(sw, sw.getOptions())
 
@@ -195,11 +190,11 @@ def RTE_stage0(jobdescs, lrms, **mapping):
 
    # joboption_count might have been changed by an RTE.
    # Save it for accouting purposes.
-   if jd.Resources.SlotRequirement.NumberOfSlots > 0:
+   if jobdesc.Resources.SlotRequirement.NumberOfSlots > 0:
        try:
-           diagfilename = '%s/job.%s.diag' % (Config.controldir, jd.OtherAttributes['joboption;gridid'])
+           diagfilename = '%s/job.%s.diag' % (Config.controldir, jobdesc.OtherAttributes['joboption;gridid'])
            with open(diagfilename, 'w+') as diagfile:
-               diagfile.write('ExecutionUnits=%s\n' % jd.Resources.SlotRequirement.NumberOfSlots)
+               diagfile.write('ExecutionUnits=%s\n' % jobdesc.Resources.SlotRequirement.NumberOfSlots)
        except IOError:
            debug('Unable to write to diag file (%s)' % diagfilename)
 
@@ -312,7 +307,7 @@ class JobscriptAssembler(object):
                'STDERR'               : jobdesc.Application.Error,
                'STDIN_REDIR'          : '<$RUNTIME_JOB_STDIN' if jobdesc.Application.Input else '',
                'STDOUT_REDIR'         : '1>$RUNTIME_JOB_STDOUT' if jobdesc.Application.Output else '',
-               'STDERR_REDIR'         : '2>$RUNTIME_JOB_STDERR' if \
+               'STDERR_REDIR'         : '2>$RUNTIME_JOB_STDERR' if jobdesc.Application.Error and \
                                         jobdesc.Application.Output != jobdesc.Application.Error else '2>&1',
                'EXEC'                 : jobdesc.Application.Executable.Path, 
                'ARGS'                 : '" "'.join(list(jobdesc.Application.Executable.Argument)),

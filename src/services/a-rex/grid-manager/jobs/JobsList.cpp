@@ -38,7 +38,7 @@ JobsList::JobsList(const GMConfig& gmconfig) :
     config(gmconfig), staging_config(gmconfig), old_dir(NULL), dtr_generator(NULL), job_desc_handler(config), jobs_pending(0) {
   for(int n = 0;n<JOB_STATE_NUM;n++) jobs_num[n]=0;
   jobs.clear();
-  if (config.use_python_lrms && !py.init(config.default_lrms)) {
+  if (config.use_python_lrms && !py.init(config.default_lrms, config.conffile)) {
     logger.msg(Arc::FATAL, "Failed to initialize PythonPlugin");
   }
 }
@@ -272,7 +272,11 @@ bool JobsList::state_submitting_py(const JobsList::iterator &i,bool &state_chang
     // precreate file to store diagnostics from lrms
     job_diagnostics_mark_put(*i, config);
     job_lrmsoutput_mark_put(*i, config);
-    
+    job_errors_mark_put(*i,config);
+
+    job_desc.OtherAttributes["joboption;gridid"] = i->job_id;
+    job_desc.OtherAttributes["joboption;directory"] = i->session_dir;
+
     std::string local_id = py.submit(&job_desc);
     if (local_id.length() == 0) {
       JobFailStateRemember(i,JOB_STATE_SUBMITTING);
@@ -308,10 +312,12 @@ bool JobsList::state_submitting_py(const JobsList::iterator &i,bool &state_chang
 	}
 	i->local = job_desc;
       }
+      job_errors_mark_put(*i,config);
       if (!py.cancel(i->local->localid)) {
 	logger.msg(Arc::ERROR,"%s: Failed to cancel running job",i->job_id);
 	return false;
       }
+      job_diagnostics_mark_move(*i,config);
     } 
     else {
       logger.msg(Arc::INFO,"%s: Job has completed already. No action taken to cancel", i->job_id);

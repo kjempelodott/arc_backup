@@ -3,6 +3,8 @@ Provides the ``Config`` object, with each arc.conf option as an attribute.
 """
 
 import os
+
+import arc
 from log import debug
 
 class _object(object): pass # Pickle can't serialize inline classes
@@ -59,6 +61,8 @@ def configure(configfile, *func):
         except IOError:
             pass
             
+    arc.Logger_getRootLogger().setThreshold(Config.log_threshold)
+
 
 def set_common(cfg):
     """
@@ -82,6 +86,15 @@ def set_gridmanager(cfg):
    """
 
    global Config
+
+   # log threshold
+   Config.log_threshold = arc.INFO
+   if cfg.has_option('grid-manager', 'debug'):
+       try:
+           value = int(cfg.get('grid-manager', 'debug')).strip('"')
+           Config.log_threshold = (arc.FATAL, arc.ERROR, arc.WARNING, arc.INFO, arc.VERBOSE, arc.DEBUG)[value]
+       except:
+           pass
    # joboption_directory
    Config.sessiondir = str(cfg.get('grid-manager', 'sessiondir')).strip('"') \
        if cfg.has_option('grid-manager', 'sessiondir') else ''
@@ -126,7 +139,7 @@ def set_gridmanager(cfg):
    Config.private_key = \
        str(cfg.get('grid-manager', 'private_key')).strip('"') \
        if cfg.has_option('grid-manager', 'private_key') \
-       else os.path.join(os.getenv('HOME'), '.ssh', 'id_rsa')
+       else os.path.join('/home', getpwuid(os.getuid()).pw_name, '.ssh', 'id_rsa')
    Config.remote_endpoint = \
        'ssh://%s@%s:22' % (Config.remote_user, Config.remote_host) \
        if Config.remote_host else ''
@@ -152,7 +165,7 @@ def set_cluster(cfg):
     global Config
     Config.gm_port = int(cfg.get('cluster', 'gm_port').strip('"')) \
         if cfg.has_option('cluster', 'gm_port') else 2811
-    Config.gm_mount_point = cfg.get('cluster', 'gm_mount_point') \
+    Config.gm_mount_point = cfg.get('cluster', 'gm_mount_point').strip('"') \
         if cfg.has_option('cluster', 'gm_mount_point') else '/jobs'
     Config.defaultmemory = int(cfg.get('cluster', 'defaultmemory').strip('"')) \
         if cfg.has_option('cluster', 'defaultmemory') else 0

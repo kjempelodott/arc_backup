@@ -8,4 +8,4 @@ import sys
 import arc
 import cancel, config, files, log, parse, proc, scan, ssh, submit
 
-arc.Logger_getRootLogger().setThreshold(arc.DEBUG)
+

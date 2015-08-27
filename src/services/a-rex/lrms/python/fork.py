@@ -27,37 +27,34 @@ def set_fork(cfg):
 # Submit methods
 #-------------------
 
-def Submit(config, jobdescs, jc):
+def Submit(config, jobdesc):
     """
     Submits a job to the local or remote (SSH) machine. This method executes the required
     RunTimeEnvironment scripts and assembles the bash job script. The job script is
     written to file and run.
 
     :param str config: path to arc.conf
-    :param jobdescs: job description list object
-    :type jobdescs: :py:class:`arc.JobDescriptionList`
-    :param jc: job container object 
-    :type jc: :py:class:`arc.compute.JobContainer`
+    :param jobdesc: job description object
+    :type jobdesc: :py:class:`arc.JobDescription`
     :return: local job ID if successfully submitted, else ``None``
     :rtype: :py:obj:`str`
     """
 
     configure(config, set_fork)
 
-    jd = jobdescs[0]
-    validate_attributes(jd)
+    validate_attributes(jobdesc)
     if Config.remote_host:
         ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
   
     # Run RTE stage0
     debug('----- starting forkSubmitter.py -----', 'fork.Submit')
-    RTE_stage0(jobdesc)
+    RTE_stage0(jobdesc, 'fork')
 
     # Create tmp script file and write job script
-    jobscript = get_job_script(jobdescs)
+    jobscript = get_job_script(jobdesc)
     script_file = write_script_file(jobscript)
 
-    debug('Fork jobname: %s' % jd.Identification.JobName, 'fork.Submit')
+    debug('Fork jobname: %s' % jobdesc.Identification.JobName, 'fork.Submit')
     debug('Fork job script built', 'fork.Submit')
     debug('----------------- BEGIN job script -----', 'fork.Submit')
     for line in jobscript.split('\n'):
@@ -72,21 +69,20 @@ def Submit(config, jobdescs, jc):
     ######################################
     
     execute = execute_local if not Config.remote_host else execute_remote
-    directory = jd.OtherAttributes['joboption;directory']
+    directory = jobdesc.OtherAttributes['joboption;directory']
 
     debug('Session directory: %s' % directory, 'fork.Submit')
 
     handle = execute(script_file)
-    jobid = handle.stdout[0][5:]
-
     # Write output to comment file
     with open(directory + '.comment', 'w') as out:
-        for line in fork_handle.stdout:
+        for line in handle.stdout:
             out.write(line)
-        for line in fork_handle.stderr:
+        for line in handle.stderr:
             out.write(line)
 
     if handle.returncode == 0:
+        jobid = handle.stdout[0][5:]
         debug('Job submitted successfully!', 'fork.Submit')
         debug('Local job id: ' + jobid, 'fork.Submit') 
         debug('----- exiting forkSubmitter.py -----', 'fork.Submit')
@@ -117,12 +113,12 @@ def Submit(config, jobdescs, jc):
     debug('----- exiting forkSubmitter.py -----', 'fork.Submit')
 
                 
-def get_job_script(jobdescs):
+def get_job_script(jobdesc):
     """
     Assemble bash job script.
 
-    :param jobdescs: list of job description objects
-    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription` ... ]
+    :param jobdesc: job description object
+    :type jobdesc: :py:class:`arc.JobDescription`
     :return: job script
     :rtype: :py:obj:`str`
     """
@@ -134,43 +130,14 @@ def get_job_script(jobdescs):
         'echo pid: $$\n' # Print the pid (for SSH) \
 
     maxwalltime = 0
-    if jobdescs[0].Resources.IndividualWallTime.range.max > 0:
-        maxwalltime = jobdescs[0].Resources.IndividualWallTime.range.max
-    elif jobdescs[0].Resources.TotalCPUTime.range.max > 0:
-        maxwalltime = jobdescs[0].Resources.TotalCPUTime.range.max
+    if jobdesc.Resources.IndividualWallTime.range.max > 0:
+        maxwalltime = jobdesc.Resources.IndividualWallTime.range.max
+    elif jobdesc.Resources.TotalCPUTime.range.max > 0:
+        maxwalltime = jobdesc.Resources.TotalCPUTime.range.max
     if maxwalltime:
         jobscript += 'ulimit -t %d\n' % maxwalltime
 
-    jobscript += \
-        '# source with arguments for DASH shells\n' \
-        'sourcewithargs() {\n' \
-        'script=$1\n' \
-        'shift\n' \
-        '. $script\n' \
-        '}\n\n' \
-        '# Overide umask of execution node ' \
-        '(sometime values are really strange)\n' \
-        'umask 077\n'
-
-    jobscript += add_user_env(jobdescs)
-    if Config.localtransfer:
-        jobscript += setup_local_transfer(jobdescs)
-    jobscript += setup_runtime_env(jobdescs)
-    jobscript += move_files_to_node(jobdescs)
-    jobscript += '\nRESULT=0\n\n'
-    if Config.localtransfer:
-        jobscript += download_input_files(jobdescs)
-    jobscript += '\n'
-    jobscript += 'if [ "$RESULT" = \'0\' ] ; then\n'
-    jobscript += RTE_stage1(jobdescs)
-    jobscript += 'echo "runtimeenvironments=$runtimeenvironments" >> "$RUNTIME_JOB_DIAG"\n'
-    jobscript += cd_and_run(jobdescs)
-    jobscript += 'fi\n'
-    if Config.localtransfer:
-        jobscript += upload_output_files(jobdescs)
-    jobscript += '\n'
-    jobscript += configure_runtime(jobdescs)
-    jobscript += move_files_to_frontend()
+    jobscript += JobscriptAssembler(jobdesc).get_standard_jobscript()
     return jobscript
 
 
@@ -241,8 +208,6 @@ def Scan(config, ctr_dirs):
     :param ctr_dirs: list of paths to control directories 
     :type ctr_dirs: :py:obj:`list` [ :py:obj:`str` ... ]
     """
-
-    time.sleep(10)
 
     configure(config, set_fork)
     if Config.scanscriptlog:

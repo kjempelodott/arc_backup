@@ -75,5 +75,3 @@ class ArcError(Exception):
 
     def __init__(self, msg, caller = None):
         error(msg, caller)
-        time.sleep(10)
-        sys.exit(1)

@@ -1,29 +1,31 @@
 import sys, traceback
 
-def setup(lrms):
+def setup(lrmsname):
+    modules = {}
     try:
-        import arc
+        modules['arc'] = __import__('arc')
     except:
-        return 'No module named arc'
+        return 'Failed to import arc module'
 
     try:
-        from lrms.common.parse import JobDescriptionParserGRAMi
-        from lrms.common.log import ArcError, error
-        return __import__('lrms.' + lrms)
+        modules['lrms'] =  __import__('lrms.' + lrmsname, fromlist = ['lrms'])
+        return modules
     except:
         return 'Failed to import lrms module'
 
 
-def submit(jobdesc, gridid, lrms):
-    module = setup(lrms)
-    if type(module) != module:
-        return module
+def submit(arc_conf, jobdesc, lrmsname):
+    modules = setup(lrmsname)
+    if not type(modules) == dict:
+        return modules
 
     try:
-        localid = module.Submit(arc_conf, jobdesc)
+        from lrms.common.log import ArcError, error
+        jobdesc = modules['arc'].JobDescription._cast(jobdesc)
+        localid = modules['lrms'].Submit(arc_conf, jobdesc)
         assert(type(localid) == str)
         return int(localid)
-    except ArcError, AssertionError:
+    except (ArcError, AssertionError):
         pass
     except Exception:
         error('Unexpected exception:\n%s' % traceback.format_exc(), 'pyModule.submit')
@@ -31,13 +33,13 @@ def submit(jobdesc, gridid, lrms):
         return
 
 
-def cancel(localid, lrms):
-    module = setup(lrms)
-    if type(module) != module:
-        return module
+def cancel(arc_conf, localid, lrmsname):
+    modules = setup(lrmsname)
+    if not type(modules) == dict:
+        return modules
 
     try:
-        if module.Cancel(arc_conf, localid):
+        if modules['lrms'].Cancel(arc_conf, localid):
             return 0
     except Exception:
         error('Unexpected exception:\n%s' % traceback.format_exc(), 'pyModule.submit')
