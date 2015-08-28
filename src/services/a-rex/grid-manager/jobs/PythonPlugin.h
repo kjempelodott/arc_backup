@@ -18,7 +18,6 @@ namespace ARex {
   private:
     PyObject* py_submit;
     PyObject* py_cancel;
-    PyObject* py_mod;
     PyObject* py_lrms;
     PyObject* py_conf;
     static Arc::Logger logger;

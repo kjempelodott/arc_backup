@@ -12,7 +12,7 @@ except:
 
 try:
     from lrms import fork
-    from lrms.common.log import ArcError
+    from lrms.common.log import ArcError, error
 except:
     sys.stderr.write('Failed to import lrms module\n')
     sys.exit(3)

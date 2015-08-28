@@ -30,10 +30,17 @@ def validate_attributes(jd):
      if Config.remote_sessiondir:
           jd.OtherAttributes['joboption;directory'] = \
               os.path.join(Config.remote_sessiondir, jd.OtherAttributes['joboption;gridid'])
-          jd.Application.Output = jd.Application.Output.replace(Config.sessiondir, Config.remote_sessiondir)
           jd.Application.Input = jd.Application.Input.replace(Config.sessiondir, Config.remote_sessiondir)
+          jd.Application.Output = jd.Application.Output.replace(Config.sessiondir, Config.remote_sessiondir)
           jd.Application.Error = jd.Application.Error.replace(Config.sessiondir, Config.remote_sessiondir)
-
+     else:
+          if jd.Application.Input and not jd.Application.Input.startswith(os.path.sep):
+               jd.Application.Input = os.path.join(jd.OtherAttributes['joboption;directory'], jd.Application.Input)
+          if jd.Application.Output and not jd.Application.Output.startswith(os.path.sep):
+               jd.Application.Output = os.path.join(jd.OtherAttributes['joboption;directory'], jd.Application.Output)
+          if jd.Application.Error and not jd.Application.Error.startswith(os.path.sep):
+               jd.Application.Error = os.path.join(jd.OtherAttributes['joboption;directory'], jd.Application.Error)
+          
      if not jd.Application.Executable.Path:
           raise ArcError('Executable is not specified', 'common.submit')
      if not jd.Resources.RunTimeEnvironment.isResolved():

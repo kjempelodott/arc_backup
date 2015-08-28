@@ -120,7 +120,6 @@ def Submit(config, jobdesc):
         job.StageInDir  = job.SessionDir
         job.StageOutDir = job.SessionDir
         job.IDFromEndpoint = str(job.JobID)
-        jc.addEntity(job)
         return job.JobID
 
     debug('job *NOT* submitted successfully!', 'slurm.Submit')

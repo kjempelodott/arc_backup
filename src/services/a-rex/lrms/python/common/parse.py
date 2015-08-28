@@ -2,6 +2,8 @@
 Classes for parsing GRAMI files.
 """
 
+from log import ArcError
+
 class SimpleGramiParser(object):
     """
     Read grami file and set each option as a class attribute.

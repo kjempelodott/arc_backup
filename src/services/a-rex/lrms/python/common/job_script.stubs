@@ -167,6 +167,7 @@ if [ ! -z "$RUNTIME_CONFIG_DIR" ] ; then
     fi
   fi
 @
+  : # Null statement to avoid error in case of no RTEs
 fi
 echo "runtimeenvironments=$runtimeenvironments" >> "$RUNTIME_JOB_DIAG"
 
@@ -236,7 +237,8 @@ if [ ! -z "$RUNTIME_CONFIG_DIR" ] ; then
     cmdl=${RUNTIME_CONFIG_DIR}/%(RTE)s
     sourcewithargs $cmdl 2 %(OPTS)s
   fi
-@
+@ 
+  : # Null statement to avoid error in case of no RTEs
 fi
 
 >

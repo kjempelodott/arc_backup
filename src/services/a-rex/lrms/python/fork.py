@@ -7,7 +7,6 @@ import arc
 from common.config import Config, configure, is_conf_setter
 from common.proc import execute_local, execute_remote
 from common.log import debug, verbose, info, warn, error, ArcError
-from common.parse import SimpleGramiParser
 from common.scan import *
 from common.ssh import ssh_connect
 from common.submit import *
@@ -74,12 +73,6 @@ def Submit(config, jobdesc):
     debug('Session directory: %s' % directory, 'fork.Submit')
 
     handle = execute(script_file)
-    # Write output to comment file
-    with open(directory + '.comment', 'w') as out:
-        for line in handle.stdout:
-            out.write(line)
-        for line in handle.stderr:
-            out.write(line)
 
     if handle.returncode == 0:
         jobid = handle.stdout[0][5:]
@@ -103,7 +96,6 @@ def Submit(config, jobdesc):
         job.StageInDir  = job.SessionDir
         job.StageOutDir = job.SessionDir
         job.IDFromEndpoint = jobid
-        jc.addEntity(job)
         return jobid
 
     debug('Job *NOT* submitted successfully!', 'fork.Submit')
@@ -145,13 +137,13 @@ def get_job_script(jobdesc):
 # Cancel methods
 #-------------------
 
-def Cancel(config, grami_file):
+def Cancel(config, jobid):
     """
     Cancel a job. The TERM signal is sent to allow the process to terminate
     gracefully within 5 seconds, followed by a KILL signal.
 
     :param str config: path to arc.conf
-    :param str grami_file: path to grami file
+    :param str jobid: local job ID
     :return: ``True`` if successfully cancelled, else ``False``
     :rtype: :py:obj:`bool`
     """
@@ -162,33 +154,21 @@ def Cancel(config, grami_file):
     if Config.remote_host:
         ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
 
-    grami = SimpleGramiParser(grami_file)
-    ctrdir = grami.controldir
-    jobid = grami.jobid
-    gridid = grami.gridid
-    jobdir = get_job_directory(ctrdir, gridid)
-
-    info('Deleting job %s, local id %s' % (gridid, jobid), 'fork.Cancel')
-    with open('%s/job.%s.status' % (jobdir, gridid)) as f:
-        line = f.readline()
-        if re.search('INLRMS|CANCELING'):
-            if not Config.remote_host:
-                import signal
-                try:
-                    os.kill(jobid, signal.SIGTERM)
-                    time.sleep(5)
-                    os.kill(jobid, signal.SIGKILL)
-                except OSError:
-                    # Job already died or terminated gracefully after SIGTERM
-                    pass
-            else:
-                args = 'kill -s TERM %i; sleep 5; kill -s KILL %i' % (jobid, jobid)
-                handle = execute_remote(args)
-        elif re.search('FINISHED|DELETED'):
-            info('Job already died, won\'t do anything', 'fork.Cancel')
-        else:
-            info('Job is at unkillable state', 'fork.Cancel')
+    info('Killing job with pid %s' % jobid, 'fork.Cancel')
+    if not Config.remote_host:
+        import signal
+        try:
+            os.kill(jobid, signal.SIGTERM)
+            time.sleep(5)
+            os.kill(jobid, signal.SIGKILL)
+        except OSError:
+            # Job already died or terminated gracefully after SIGTERM
+            pass
+        except:
             return False
+    else:
+        args = 'kill -s TERM %i; sleep 5; kill -s KILL %i' % (jobid, jobid)
+        handle = execute_remote(args)
 
     debug('----- exiting forkCancel.py -----', 'fork.Cancel')
     return True
@@ -234,11 +214,7 @@ def Scan(config, ctr_dirs):
         if localid in running:
             continue
         if set_exit_code_from_diag(job):
-            grami = SimpleGramiParser(job.grami_file)
-            if job.exitcode != grami.arg_code:
-                job.message = 'Job finished with wrong exit code - %s != %s' % (job.exitcode, grami.arg_code)
-            else:
-                job.message = MESSAGES[job.state]
+            job.message = MESSAGES[job.state]
         else:
             job.exitcode = -1
         
