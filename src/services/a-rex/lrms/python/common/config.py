@@ -2,7 +2,7 @@
 Provides the ``Config`` object, with each arc.conf option as an attribute.
 """
 
-import os
+import sys, os
 
 import arc
 from log import debug
@@ -60,7 +60,7 @@ def configure(configfile, *func):
                 f.write(pickle.dumps(Config))
         except IOError:
             pass
-            
+
     arc.Logger_getRootLogger().setThreshold(Config.log_threshold)
 
 

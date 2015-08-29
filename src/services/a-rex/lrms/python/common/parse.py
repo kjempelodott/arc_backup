@@ -2,6 +2,8 @@
 Classes for parsing GRAMI files.
 """
 
+import arc
+import re
 from log import ArcError
 
 class SimpleGramiParser(object):

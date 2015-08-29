@@ -39,7 +39,7 @@ namespace Arc {
 
   JobDescription::JobDescription(const long int& ptraddr) { *this = *((JobDescription*)ptraddr); }
 
-  JobDescription* JobDescription::_cast(PyObject* j) { 
+  JobDescription* JobDescription::fromPy(PyObject* j) { 
     return static_cast<Arc::JobDescription*>(PyCObject_AsVoidPtr(j));
   }
 

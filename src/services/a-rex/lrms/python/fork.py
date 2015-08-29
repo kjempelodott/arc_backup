@@ -75,28 +75,15 @@ def Submit(config, jobdesc):
     handle = execute(script_file)
 
     if handle.returncode == 0:
-        jobid = handle.stdout[0][5:]
-        debug('Job submitted successfully!', 'fork.Submit')
-        debug('Local job id: ' + jobid, 'fork.Submit') 
-        debug('----- exiting forkSubmitter.py -----', 'fork.Submit')
-
-        endpointURL = arc.common.URL(Config.remote_endpoint)
-        job = arc.Job()
-        job.JobID = jobid
-        # TODO: What interface name to use?
-        job.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
-        job.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
-        job.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
-        # TODO: Change returned endpoints for job. 
-        # Currently these URLs are not usable.
-        job.ServiceInformationURL = arc.common.URL('test://localhost')
-        job.JobStatusURL = endpointURL
-        job.JobManagementURL = endpointURL
-        job.SessionDir  = arc.common.URL('file://' + directory)
-        job.StageInDir  = job.SessionDir
-        job.StageOutDir = job.SessionDir
-        job.IDFromEndpoint = jobid
-        return jobid
+        jobid = None
+        try:
+            jobid = handle.stdout[0][5:]
+            debug('Job submitted successfully!', 'fork.Submit')
+            debug('Local job id: ' + jobid, 'fork.Submit') 
+            debug('----- exiting forkSubmitter.py -----', 'fork.Submit')
+            return jobid
+        except:
+            pass
 
     debug('Job *NOT* submitted successfully!', 'fork.Submit')
     debug('Got error code: %d !' % (handle.returncode), 'fork.Submit')
@@ -190,9 +177,6 @@ def Scan(config, ctr_dirs):
     """
 
     configure(config, set_fork)
-    if Config.scanscriptlog:
-        scanlogfile = arc.common.LogFile(Config.scanscriptlog)
-        arc.common.Logger_getRootLogger().addDestination(scanlogfile)
 
     jobs = get_jobs(ctr_dirs)
     if not jobs: return

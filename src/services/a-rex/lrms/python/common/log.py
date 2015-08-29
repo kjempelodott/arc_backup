@@ -6,6 +6,7 @@ Methods for logging.
 import sys, time
 import arc
 
+
 def debug(message = '', caller = None):
     """
     Print a ``DEBUG`` message to the log.

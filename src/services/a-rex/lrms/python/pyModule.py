@@ -21,7 +21,7 @@ def submit(arc_conf, jobdesc, lrmsname):
 
     try:
         from lrms.common.log import ArcError, error
-        jobdesc = modules['arc'].JobDescription._cast(jobdesc)
+        jobdesc = modules['arc'].JobDescription.fromPy(jobdesc)
         localid = modules['lrms'].Submit(arc_conf, jobdesc)
         assert(type(localid) == str)
         return int(localid)

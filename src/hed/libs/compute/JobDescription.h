@@ -862,7 +862,7 @@ namespace Arc {
     JobDescription(const long int& ptraddr);
 
     // Cast from PyObject to JobDescription
-    static JobDescription* _cast(PyObject* j);
+    static JobDescription* fromPy(PyObject* j);
 
     ~JobDescription() {}
 

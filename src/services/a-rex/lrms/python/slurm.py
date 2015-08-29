@@ -93,39 +93,23 @@ def Submit(config, jobdesc):
             continue
         break # Other error than full queue
 
-    job = arc.Job()
-    if handle.returncode == 0 and set_job_id(handle, job):
-
+    if handle.returncode == 0:
         # TODO: Test what happens when the jobqueue is full or when the slurm
         # ctld is not responding. SLURM 1.x and 2.2.x outputs the jobid into 
         # STDERR and STDOUT respectively. Concat them, and let sed sort it out. 
         # From the exit code we know that the job was submitted, so this
         # is safe. Ulf Tigerstedt <tigerste@csc.fi> 1.5.2011 
-
-        debug('Job submitted successfully!', 'slurm.Submit')
-        debug('Local job id: ' + job.JobID, 'slurm.Submit')
-        debug('----- exiting submitSubmitter.py -----', 'slurm.Submit')
-
-        # TODO: What interface name to use?
-        job.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
-        job.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
-        job.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
-        # TODO: Change returned endpoints for job. 
-        # Currently these URLs are not usable.
-        endpointURL = arc.common.URL(Config.remote_endpoint)
-        job.ServiceInformationURL = arc.common.URL('test://localhost')
-        job.JobStatusURL = endpointURL
-        job.JobManagementURL = endpointURL
-        job.SessionDir  = arc.common.URL('file://' + directory)
-        job.StageInDir  = job.SessionDir
-        job.StageOutDir = job.SessionDir
-        job.IDFromEndpoint = str(job.JobID)
-        return job.JobID
+        localid = get_job_id(handle)
+        if localid:
+            debug('Job submitted successfully!', 'slurm.Submit')
+            debug('Local job id: ' + localid, 'slurm.Submit')
+            debug('----- exiting submitSubmitter.py -----', 'slurm.Submit')
+            return localid
 
     debug('job *NOT* submitted successfully!', 'slurm.Submit')
     debug('got error code from sbatch: %d !' % handle.returncode, 'slurm.Submit')
     debug('Output is:\n' + ''.join(handle.stdout), 'slurm.Submit')
-    debug('Error output is:\n', ''.join(handle.stderr), 'slurm.Submit')
+    debug('Error output is:\n' + ''.join(handle.stderr), 'slurm.Submit')
     debug('----- exiting slurmSubmitter.py -----', 'slurm.Submit')
 
 
@@ -148,14 +132,12 @@ def wait_for_queue(handle):
     return False
 
 
-def set_job_id(handle, job):
+def get_job_id(handle):
     """
-    Read local job ID from ``sbatch`` output and set ``JobID`` attribute of job.
+    Read local job ID from ``sbatch`` output.
 
     :param object handle: sbatch handle
-    :param job: job object 
-    :type job: py:class:`arc.Job`
-    :return: ``True`` if found, else ``False``
+    :return: local job ID if found, else ``None``
     :rtype: :py:obj:`str`
     """
 
@@ -163,10 +145,8 @@ def set_job_id(handle, job):
         for line in f:
             match = re.search(r'Submitted batch job (\d+)', line)
             if match:
-                job.JobID = match.group(1)
-                return True
+                return match.group(1)
     error('Job ID not found in stdout or stderr', 'slurm.Submit')
-    return False
 
 
 def get_job_script(jobdesc):
@@ -237,9 +217,6 @@ def Scan(config, ctr_dirs):
     """
 
     configure(config, set_slurm)
-    if Config.scanscriptlog:
-        scanlogfile = arc.common.LogFile(Config.scanscriptlog)
-        arc.common.Logger_getRootLogger().addDestination(scanlogfile)
 
     jobs = get_jobs(ctr_dirs)
     if not jobs: return

@@ -251,6 +251,7 @@ bool JobsList::GetLocalDescription(const JobsList::iterator &i) {
 bool JobsList::state_submitting_py(const JobsList::iterator &i,bool &state_changed,bool cancel) {
   // TODO: run submit/cancel in threads. none write to controldir, so shouldn't
   // need to worry about locks
+  // TODO: just pass the jobdescription to python and let jobdescription.parser do the job
 
   // Submit
   if (!cancel) {    

@@ -47,12 +47,12 @@ if __name__ == '__main__':
         sys.exit(1)
     
     try:
-        jc = arc.compute.JobContainer()
-        if slurm.Submit(arc_conf, jobdescs, jc):
-            if grami[-6:] == '.grami':
-                with open(grami, "a") as fgrami:
-                    fgrami.write('joboption_jobid=%s\n' % (jc[0].IDFromEndpoint))
-    except ArcError:
+        localid = slurm.Submit(arc_conf, jobdescs[0])
+        assert(type(localid) == str and localid.isnum())
+        if grami[-6:] == '.grami':
+            with open(grami, "a") as fgrami:
+                fgrami.write('joboption_jobid=%s\n' % localid)
+    except (ArcError, AssertionError):
         sys.exit(1)
     except Exception:
         error('Unexpected exception:\n%s' % traceback.format_exc(), 'slurmSubmitter')
