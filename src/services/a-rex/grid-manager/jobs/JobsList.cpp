@@ -38,9 +38,6 @@ JobsList::JobsList(const GMConfig& gmconfig) :
     config(gmconfig), staging_config(gmconfig), old_dir(NULL), dtr_generator(NULL), job_desc_handler(config), jobs_pending(0) {
   for(int n = 0;n<JOB_STATE_NUM;n++) jobs_num[n]=0;
   jobs.clear();
-  if (config.use_python_lrms && !py.init(config.default_lrms, config.conffile)) {
-    logger.msg(Arc::FATAL, "Failed to initialize PythonPlugin");
-  }
 }
  
 JobsList::iterator JobsList::FindJob(const JobId &id){
@@ -247,88 +244,7 @@ bool JobsList::GetLocalDescription(const JobsList::iterator &i) {
   }
   return true;
 }
-
-bool JobsList::state_submitting_py(const JobsList::iterator &i,bool &state_changed,bool cancel) {
-  // TODO: run submit/cancel in threads. none write to controldir, so shouldn't
-  // need to worry about locks
-  // TODO: just pass the jobdescription to python and let jobdescription.parser do the job
-
-  // Submit
-  if (!cancel) {    
-    // TODO: this one parses descripton file, no need to do it agan
-    // instance of JobDescription should be a member of GMJob
-    if (!job_desc_handler.set_execs(*i)) {
-      logger.msg(Arc::ERROR, "%s: Failed setting executable permissions", i->job_id);
-      return false;
-    }
-
-    Arc::JobDescription job_desc;
-    const std::string fname = config.ControlDir() + "/job." + i->job_id + ".description";
-    if (!job_desc_handler.get_arc_job_description(fname, job_desc)) {
-      i->AddFailure("Failed initiating job submission to LRMS");
-      logger.msg(Arc::ERROR, "%s: Failed running submission process", i->job_id);
-      return false;
-    }
-
-    // precreate file to store diagnostics from lrms
-    job_diagnostics_mark_put(*i, config);
-    job_lrmsoutput_mark_put(*i, config);
-    job_errors_mark_put(*i,config);
-
-    job_desc.OtherAttributes["joboption;gridid"] = i->job_id;
-    job_desc.OtherAttributes["joboption;directory"] = i->session_dir;
-
-    std::string local_id = py.submit(&job_desc);
-    if (local_id.length() == 0) {
-      JobFailStateRemember(i,JOB_STATE_SUBMITTING);
-      i->AddFailure("Job submission to LRMS failed");
-      return false;
-    }
-
-    // put id into local information file
-    if (!GetLocalDescription(i)) {
-      i->AddFailure("Internal error");
-      return false;
-    }
-    i->local->localid = local_id;
-    if (!job_local_write_file(*i, config, *(i->local))) {
-      i->AddFailure("Internal error");
-      logger.msg(Arc::ERROR, "%s: Failed writing local information: %s", i->job_id,Arc::StrError(errno));
-      return false;
-    }
-  }
-  // Cancel
-  else { 
-    if (!job_lrms_mark_check(i->job_id, config)) {
-      JobLocalDescription* job_desc;
-      if (i->local) { 
-	job_desc = i->local;
-      }
-      else {
-	job_desc = new JobLocalDescription;
-	if (!job_local_read_file(i->job_id, config, *job_desc)) {
-	  logger.msg(Arc::ERROR,"%s: Failed reading local information", i->job_id);
-	  delete job_desc;
-	  return false;
-	}
-	i->local = job_desc;
-      }
-      job_errors_mark_put(*i,config);
-      if (!py.cancel(i->local->localid)) {
-	logger.msg(Arc::ERROR,"%s: Failed to cancel running job",i->job_id);
-	return false;
-      }
-      job_diagnostics_mark_move(*i,config);
-    } 
-    else {
-      logger.msg(Arc::INFO,"%s: Job has completed already. No action taken to cancel", i->job_id);
-    }
-  }
-  state_changed = true;
-  return true;
-}
-
-
+  // TODO: add python test. if so, pass description file, not grami. do not write to local file
 bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,bool cancel) {
   if (config.use_python_lrms) return state_submitting_py(i, state_changed, cancel);
   if(i->child == NULL) {

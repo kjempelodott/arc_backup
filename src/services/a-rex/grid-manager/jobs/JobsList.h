@@ -8,7 +8,6 @@
 
 #include "GMJob.h"
 #include "JobDescriptionHandler.h"
-#include "PythonPlugin.h"
 
 namespace ARex {
 
@@ -44,7 +43,6 @@ class JobsList {
  public:
   typedef std::list<GMJob>::iterator iterator;
  private:
-  PythonPlugin py;
   // List of jobs currently tracked in memory
   std::list<GMJob> jobs;
   // GM configuration
