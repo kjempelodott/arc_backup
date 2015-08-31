@@ -26,20 +26,13 @@ def validate_attributes(jd):
      if not 'joboption;directory' in jd.OtherAttributes:
           jd.OtherAttributes['joboption;directory'] = \
               os.path.join(Config.sessiondir, jd.OtherAttributes['joboption;gridid'])
-
      if Config.remote_sessiondir:
           jd.OtherAttributes['joboption;directory'] = \
               os.path.join(Config.remote_sessiondir, jd.OtherAttributes['joboption;gridid'])
-          jd.Application.Input = jd.Application.Input.replace(Config.sessiondir, Config.remote_sessiondir)
-          jd.Application.Output = jd.Application.Output.replace(Config.sessiondir, Config.remote_sessiondir)
-          jd.Application.Error = jd.Application.Error.replace(Config.sessiondir, Config.remote_sessiondir)
-     else:
-          if jd.Application.Input and not jd.Application.Input.startswith(os.path.sep):
-               jd.Application.Input = os.path.join(jd.OtherAttributes['joboption;directory'], jd.Application.Input)
-          if jd.Application.Output and not jd.Application.Output.startswith(os.path.sep):
-               jd.Application.Output = os.path.join(jd.OtherAttributes['joboption;directory'], jd.Application.Output)
-          if jd.Application.Error and not jd.Application.Error.startswith(os.path.sep):
-               jd.Application.Error = os.path.join(jd.OtherAttributes['joboption;directory'], jd.Application.Error)
+     add_dir = lambda jobfile: os.path.join(jd.OtherAttributes['joboption;directory'], jobfile) if jobfile else ''
+     jd.Application.Input = add_dir(jd.Application.Input)
+     jd.Application.Output = add_dir(jd.Application.Output)
+     jd.Application.Error = add_dir(jd.Application.Error)
           
      if not jd.Application.Executable.Path:
           raise ArcError('Executable is not specified', 'common.submit')
@@ -137,8 +130,8 @@ def RTE_stage0(jobdesc, lrms, **mapping):
 
    :param jd: job description object
    :type jd: :py:class:`arc.JobDescription`
-   :param dict mapping: additional environment variables
-   """     
+   :param dict mapping: mapping between additional environment variables and job description
+   """
    
    if jobdesc.Resources.RunTimeEnvironment.getSoftwareList():
         from parse import RTE0EnvCreator

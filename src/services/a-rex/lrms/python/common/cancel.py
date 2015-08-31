@@ -7,17 +7,16 @@ from log import debug, error
 from ssh import ssh_connect
 from proc import *
 
-def cancel(lrms, job_id):
+def cancel(lrms, jobid):
      """
-     Cancel job with ID ``job_id`` within the given batch system.
+     Cancel job with ID ``jobid`` in the given batch system.
 
      :param str lrms: batch system (e.g. slurm)
-     :param str job_id: local job ID within the batch system
+     :param str jobid: local job ID in the batch system
      :param str remote: ``True`` if remote host
      :return: command return code
      :rtype: :py:obj:`int`
      """
-
 
      executable = None
      cmd = None
@@ -32,9 +31,9 @@ def cancel(lrms, job_id):
           ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
 
      debug('----- starting %sCancel.py -----' % lrms, 'common.cancel')
-     debug('executing %s with job id %s' % (executable, job_id), 'common.cancel')
-     execute = excute_local if not Config.remote_host else execute_remote
-     handle = p.execute(cmd)
+     debug('executing %s with job id %s' % (executable, jobid), 'common.cancel')
+     execute = execute_local if not Config.remote_host else execute_remote
+     handle = execute(cmd)
      rc = handle.returncode
 
      if rc:

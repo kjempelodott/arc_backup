@@ -193,7 +193,7 @@ class SLURMInfo(LRMSInfo, object):
                 continue
             _job = self.jobs[jid]
             job = {}
-            job['status'] = statemap[_job['JobState']] if job['JobState'] in statemap else 'O'
+            job['status'] = statemap.get(_job['JobState'], 'O')
             
             # TODO: calculate rank? Probably not possible.
             job['rank'] = 0
@@ -209,7 +209,7 @@ class SLURMInfo(LRMSInfo, object):
             if node != ' NoNode ':
                 job['mem'] = self.nodes[node]['RealMemory']
     
-            walltime = int(_job['TimeUser'].GetPeriod())
+            walltime = int(_job['TimeUsed'].GetPeriod())
             count = int(_job['ReqCPUs'])
             # TODO: multiply walltime by number of cores to get cputime?
             job['walltime'] = walltime

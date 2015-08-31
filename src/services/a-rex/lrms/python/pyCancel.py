@@ -20,7 +20,7 @@ def get_lrms_module(lrmsname):
 if __name__ == '__main__':
 
     if len(sys.argv) != 4:
-        error('Usage: %s <arc.conf> <jobid> <lrms>' % (sys.argv[0]), 'pySubmit')
+        error('Usage: %s <arc.conf> <jobid> <lrms>' % (sys.argv[0]), 'pyCancel')
         sys.exit(1)
 
     lrms = get_lrms_module(sys.argv[3])
@@ -28,7 +28,7 @@ if __name__ == '__main__':
         if lrms.Cancel(sys.argv[1], sys.argv[2]):
             sys.exit(0)
     except Exception:
-        error('Unexpected exception:\n%s' % traceback.format_exc(), 'pyModule.submit')
+        error('Unexpected exception:\n%s' % traceback.format_exc(), 'pyCancel')
     except ArcError:
         pass
     sys.exit(1)

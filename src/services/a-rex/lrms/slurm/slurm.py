@@ -505,9 +505,9 @@ class JobscriptAssemblerSLURM(JobscriptAssembler):
                   'slurm.JobDescriptionParserSLURM', 'slurm.Assemble')
             return
         ### TODO: Expression: \mapattr --time <- TotalCPUTime/NumberOfSlots
-        if j.Resources.TotalCPUTime.range.max >= 0 and j.Resources.SlotRequirement.NumberOfSlots > 0: 
+        if j.Resources.TotalCPUTime.range.max >= 0:
             # TODO: Check for benchmark
-            individualCPUTime = j.Resources.TotalCPUTime.range.max/j.Resources.SlotRequirement.NumberOfSlots
+            individualCPUTime = j.Resources.TotalCPUTime.range.max/nslots
             product += "#SBATCH -t {0}:{1}\n".format(str(individualCPUTime/60), str(individualCPUTime%60))
             if j.Resources.IndividualWallTime.range.max >= 0:
                 n, m = (str(j.Resources.IndividualWallTime.range.max/60),

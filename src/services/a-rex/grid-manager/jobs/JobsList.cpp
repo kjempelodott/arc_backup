@@ -244,7 +244,7 @@ bool JobsList::GetLocalDescription(const JobsList::iterator &i) {
   }
   return true;
 }
-  // TODO: add python test. if so, pass description file, not grami. do not write to local file
+
 bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,bool cancel) {
   if(i->child == NULL) {
     // no child was running yet, or recovering from fault 
@@ -267,11 +267,9 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
       if(staging_config.get_local_transfer()) {
         local_transfer_s="joboption_localtransfer=yes";
       }
-      if (!config.use_python_lrms) { // don't write grami if python
-	if(!job_desc_handler.write_grami(*i,local_transfer_s)) {
-	  logger.msg(Arc::ERROR,"%s: Failed creating grami file",i->job_id);
-	  return false;
-	}
+      if(!config.use_python_lrms && !job_desc_handler.write_grami(*i,local_transfer_s)) { // no grami if python
+	logger.msg(Arc::ERROR,"%s: Failed creating grami file",i->job_id);
+	return false;
       }
       if(!job_desc_handler.set_execs(*i)) {
         logger.msg(Arc::ERROR,"%s: Failed setting executable permissions",i->job_id);
@@ -282,15 +280,9 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
       job_lrmsoutput_mark_put(*i,config);
     }
     // submit/cancel job to LRMS using submit/cancel-X-job
-    std::string cmd;
-    if (config.use_python_lrms) {
-	if(cancel) { cmd=Arc::ArcLocation::GetDataDir()+"/pyCancel.py"; }
-	else { cmd=Arc::ArcLocation::GetDataDir()+"/pySubmit.py"; }
-      }
-    else {
-      if(cancel) { cmd=Arc::ArcLocation::GetDataDir()+"/"+config.cancelScriptName; }
-      else { cmd=Arc::ArcLocation::GetDataDir()+"/"+config.submitScriptName; }
-    }
+    std::string cmd = Arc::ArcLocation::GetDataDir();
+    if(cancel) { cmd += config.use_python_lrms ? "/pyCancel.py" : "/cancel-" + job_desc->lrms + "-job"; }
+    else       { cmd += config.use_python_lrms ? "/pySubmit.py" : "/submit-" + job_desc->lrms + "-job"; }
     if(!cancel) {
       logger.msg(Arc::INFO,"%s: state SUBMIT: starting child: %s",i->job_id,cmd);
     } else {
@@ -312,10 +304,10 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
     job_errors_mark_put(*i,config);
     if(!RunParallel::run(config,*i,cmd,&(i->child))) {
       if(!cancel) {
-	i->AddFailure("Failed initiating job submission to LRMS");
-	logger.msg(Arc::ERROR,"%s: Failed running submission process",i->job_id);
+        i->AddFailure("Failed initiating job submission to LRMS");
+        logger.msg(Arc::ERROR,"%s: Failed running submission process",i->job_id);
       } else {
-	logger.msg(Arc::ERROR,"%s: Failed running cancellation process",i->job_id);
+        logger.msg(Arc::ERROR,"%s: Failed running cancellation process",i->job_id);
       }
       return false;
     }

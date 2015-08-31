@@ -325,15 +325,9 @@ private:
   /// WS-interface endpoint
   std::string arex_endpoint;
 
-  /// Use Python script, else Bash
+  /// Use Python backends, else Bash
   bool use_python_lrms;
-  /// Name of submit script - default name: submit-<default_lrms>-job (temporary attribute during rewrite).
-  std::string submitScriptName;
-  /// Name of scan script - default name: scan-<default_lrms>-job (temporary attribute during rewrite).
-  std::string scanScriptName;
-  /// Name of cancel script - default name: cancel-<default_lrms>-job (temporary attribute during rewrite).
-  std::string cancelScriptName;
-
+  /// Struct for ssh options (only suppored by Python backends)
   SSHConfig ssh_config;
 
   /// Logger object

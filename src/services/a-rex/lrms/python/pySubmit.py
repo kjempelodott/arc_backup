@@ -29,7 +29,6 @@ if __name__ == '__main__':
     gridid = descfile.split('.')[-2]
     is_parsed = False
     try:
-        from lrms.common.log import ArcError, error
         jds = arc.JobDescriptionList()
         with open(descfile, 'r') as jobdesc:
             is_parsed = arc.JobDescription.Parse(jobdesc.read(), jds, '', 'GRIDMANAGER')

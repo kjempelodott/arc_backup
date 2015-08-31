@@ -2,95 +2,10 @@
 Classes for parsing GRAMI files.
 """
 
+import re, os
+
 import arc
-import re
 from log import ArcError
-
-class SimpleGramiParser(object):
-    """
-    Read grami file and set each option as a class attribute.
-
-    :param str grami: path to grami file
-    """
-    def __init__(self, grami):
-        self._file = grami
-        try:
-            with open(grami) as f:
-                for line in f.readlines():
-                    setattr(self, *line.split('=', 1))
-        except IOError:
-            raise ArcError('Failed to read job description file %s' % grami,
-                           'common.parse.SimpleGramiParser')
-
-    @property 
-    def jobid(self):
-        """
-        Get local ID from grami or job local file.
-
-        :return: local ID
-        :rtype: :py:obj:`str`
-        """
-
-        try:
-            return self.joboption_jobid
-        except:
-            try:
-                with open('%s/job.%s.local' % (self.get_controldir, self.get_gridid)) as f:
-                    for line in f:
-                        if line[:7] == 'localid':
-                            jobid = line[8:].strip()
-                            self.joboption_jobid = jobid
-                            return jobid
-                raise ArcError('Can\'t find local ID of job', 'common.parse.SimpleGramiParser')
-            except OSError:
-                raise ArcError('Local description of job %s not found '
-                               'at \'%s\'' % (self.get_gridid(), self.get_controldir()),
-                               'common.parse.SimpleGramiParser')
-
-    @property 
-    def gridid(self):
-        """
-        Get GRID (global) job ID from grami.
-
-        :return: GRID job ID
-        :rtype: :py:obj:`str`
-        """
-        try:
-            return self.joboption_gridid
-        except:
-            gridid = re.findall('job.(\w+).grami', os.path.basename(self._file))[0]
-            self.joboption_gridid = gridid
-            return gridid
-
-    @property 
-    def controldir(self):
-        """
-        Get control directory from grami.
-
-        :return: control directory
-        :rtype: :py:obj:`str`
-        """
-        try:
-            return self.joboption_controldir
-        except:
-            cd = os.getcwd() if os.path.dirname(self._file) == '.' else os.path.dirname(self._file)
-            self.joboption_controldir = cd
-            return cd
-
-    @property 
-    def arg_code(self):
-        """
-        Get expected exit code from grami.
-
-        :return: arg code
-        :rtype: :py:obj:`int`
-        """
-        try:
-            return self.joboption_arg_code
-        except:
-            self.joboption_arg_code = 0
-            return 0
-
 
 class RTE0EnvCreator(object):
     """
@@ -131,7 +46,7 @@ class RTE0EnvCreator(object):
         "joboption_rsl_project     " : "OtherAttributes.joboption;rsl_project",
         "joboption_rsl_architecture" : "OtherAttributes.joboption;rsl_architecture",
         "joboption_gridid"           : "OtherAttributes.joboption;gridid"
-                }
+        }
     
     def __init__(self, jobdesc, config, mappingUpdate = {}):
         self.jobdesc, self.config = jobdesc, config
@@ -309,31 +224,3 @@ class RTE0EnvCreator(object):
     @staticmethod
     def _removeQuotes(text):
       return re.sub(r"^'(.*)'$", "\\1", text)
-
-
-class JobDescriptionParserGRAMi(object):
-    """
-    .. todo:: Add docstring
-    """
-    def __init__(self):
-        pass
-      
-    @staticmethod
-    def Parse(source, jobdescs, language = "", dialect = ""):
-        
-        mapping = {
-                   "RUNTIME_FRONTEND_SEES_NODE" : "none",
-                   "RUNTIME_NODE_SEES_FRONTEND" : "none", 
-                   "RUNTIME_LOCAL_SCRATCH_DIR"  : "none",
-                   "joboption_directory"        : "OtherAttributes.joboption;directory",
-                   "joboption_controldir"       : "OtherAttributes.joboption;controldir",
-                   "joboption_localtransfer"    : "OtherAttributes.joboption;localtransfer",
-                   }
-        j = arc.compute.JobDescription()
-        try:
-            env = dict( line.strip().replace("\\\\", "\\").split("=", 1) for line in source.splitlines() if not re.search(r"^\s*(#|$)", line) )
-        except:
-            return False
-        RTE0EnvCreator(j, type('JobDescription', (object,), {})(), mapping).setPyEnv(env)
-        jobdescs.append(j)
-        return True

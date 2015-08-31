@@ -28,19 +28,35 @@ namespace ARex {
 Arc::Logger CoreConfig::logger(Arc::Logger::getRootLogger(), "CoreConfig");
 #define REPORTER_PERIOD "3600";
 
-void CoreConfig::CheckLRMSBackends(const GMConfig& config) {
-  std::string tool_path;
-  tool_path=Arc::ArcLocation::GetDataDir()+"/"+config.cancelScriptName;
-  if(!Glib::file_test(tool_path,Glib::FILE_TEST_IS_REGULAR)) {
-    logger.msg(Arc::WARNING,"Missing cancel script (%s) - job cancelation may not work",config.cancelScriptName);
+void CoreConfig::CheckLRMSBackends(const std::string& default_lrms, bool use_python_lrms) {
+  if (use_python_lrms) {
+    std::string tool_path = Arc::ArcLocation::GetDataDir() + "/pyCancel.py";
+    if(!Glib::file_test(tool_path,Glib::FILE_TEST_IS_REGULAR)) {
+      logger.msg(Arc::WARNING, "Missing pyCancel.py - job cancellation may not work");
+    }
+    tool_path = Arc::ArcLocation::GetDataDir() + "/pySubmit.py";
+    if(!Glib::file_test(tool_path,Glib::FILE_TEST_IS_REGULAR)) {
+      logger.msg(Arc::WARNING, "Missing pySubmit.py - job submission to LRMS may not work");
+    }
+    tool_path = Arc::ArcLocation::GetDataDir() + "/pyScanner.py";
+    if(!Glib::file_test(tool_path,Glib::FILE_TEST_IS_REGULAR)) {
+      logger.msg(Arc::WARNING, "Missing pyScanner.py - may miss when job finished executing");
+    }
   }
-  tool_path=Arc::ArcLocation::GetDataDir()+"/"+config.submitScriptName;
-  if(!Glib::file_test(tool_path,Glib::FILE_TEST_IS_REGULAR)) {
-    logger.msg(Arc::WARNING,"Missing submit script (%s) - job submission to LRMS may not work",config.submitScriptName);
-  }
-  tool_path=Arc::ArcLocation::GetDataDir()+"/"+config.scanScriptName;
-  if(!Glib::file_test(tool_path,Glib::FILE_TEST_IS_REGULAR)) {
-    logger.msg(Arc::WARNING,"Missing scan script (%s) - may miss when job finished executing",config.scanScriptName);
+  else {
+    std::string tool_path;
+    tool_path=Arc::ArcLocation::GetDataDir()+"/cancel-"+default_lrms+"-job";
+    if(!Glib::file_test(tool_path,Glib::FILE_TEST_IS_REGULAR)) {
+      logger.msg(Arc::WARNING,"Missing cancel-%s-job - job cancellation may not work",default_lrms);
+    }
+    tool_path=Arc::ArcLocation::GetDataDir()+"/submit-"+default_lrms+"-job";
+    if(!Glib::file_test(tool_path,Glib::FILE_TEST_IS_REGULAR)) {
+      logger.msg(Arc::WARNING,"Missing cancel-%s-job - job cancellation may not work",default_lrms);
+    }
+    tool_path=Arc::ArcLocation::GetDataDir()+"/scan-"+default_lrms+"-job";
+    if(!Glib::file_test(tool_path,Glib::FILE_TEST_IS_REGULAR)) {
+      logger.msg(Arc::WARNING,"Missing scan-%s-job - may miss when job finished executing",default_lrms);
+    }
   }
 }
 
@@ -406,7 +422,7 @@ bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
     }
     else if (command == "use_python_lrms") {
       if (!CheckYesNoCommand(config.use_python_lrms, command, rest)) return false;
-    }
+    }    
     // SSH
     else if (command == "remote_host") {
       std::string remote_host = config_next_arg(rest);
@@ -449,23 +465,10 @@ bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
         logger.msg(Arc::ERROR, "Missing directory in private_key command"); return false;
       }
       config.ssh_config.private_key = private_key;
-    } 
+    }
+    CheckLRMSBackends(config.default_lrms, config.use_python_lrms);
   }
   // End of parsing conf commands
-
-  // Set default value for submitScriptName, scanScriptName and cancelScriptName
-  if (!config.use_python_lrms) {
-    config.submitScriptName = "submit-" + config.default_lrms + "-job";
-    config.scanScriptName = "scan-" + config.default_lrms + "-job";
-    config.cancelScriptName = "cancel-" + config.default_lrms + "-job";
-  }
-  else {
-    config.submitScriptName = config.default_lrms + "Submitter.py";
-    config.scanScriptName = config.default_lrms + "Scanner.py";
-    config.cancelScriptName = config.default_lrms + "Cancel.py";
-    
-  }
-  CheckLRMSBackends(config);
 
   // Do substitution of control dir and helpers here now we have all the
   // configuration. These are special because they do not change per-user
@@ -477,9 +480,11 @@ bool CoreConfig::ParseConfINI(GMConfig& config, std::ifstream& cfile) {
 
   // Add helper to poll for finished LRMS jobs
   if (!config.default_lrms.empty() && !config.control_dir.empty()) {
-    std::string cmd = Arc::ArcLocation::GetDataDir() + "/" + config.scanScriptName;
+    std::string cmd = Arc::ArcLocation::GetDataDir();
+    cmd += config.use_python_lrms ? "/pyScanner.py" : "/scan-" + config.default_lrms + "-job";
     cmd = Arc::escape_chars(cmd, " \\", '\\', false);
-    if (!config.conffile.empty()) cmd += " --config " + config.conffile;
+    if (!config.conffile.empty())
+      cmd += config.use_python_lrms ? " " + config.conffile + " " + config.default_lrms : " --config " + config.conffile;
     cmd += " " + config.control_dir;
     config.helpers.push_back(cmd);
   }
@@ -614,20 +619,7 @@ bool CoreConfig::ParseConfXML(GMConfig& config, const Arc::XMLNode& cfg) {
       return false;
     }
     config.default_queue = (std::string)(tmp_node["defaultShare"]);
-
-    // Set default value for submitScriptName, scanScriptName and cancelScriptName
-    if (!tmp_node["usePythonLRMS"] || Arc::lower((std::string)tmp_node["usePythonLRMS"]) != "yes") {
-      config.submitScriptName = "submit-" + config.default_lrms + "-job";
-      config.scanScriptName = "scan-" + config.default_lrms + "-job";
-      config.cancelScriptName = "cancel-" + config.default_lrms + "-job";
-    }
-    else {
-      config.submitScriptName = config.default_lrms + "Submitter.py";
-      config.scanScriptName = config.default_lrms + "Scanner.py";
-      config.cancelScriptName = config.default_lrms + "Cancel.py";
-    }
-    CheckLRMSBackends(config);
-
+    CheckLRMSBackends(config.default_lrms, config.use_python_lrms);
     config.rte_dir = (std::string)(tmp_node["runtimeDir"]);
     // We only want the scratch path as seen on the front-end
     if (tmp_node["sharedScratch"]) {
@@ -836,9 +828,11 @@ bool CoreConfig::ParseConfXML(GMConfig& config, const Arc::XMLNode& cfg) {
   }
 
   // Add helper to poll for finished LRMS jobs
-  std::string cmd = Arc::ArcLocation::GetDataDir() + "/" + config.scanScriptName;
+  std::string cmd = Arc::ArcLocation::GetDataDir();
+  cmd += config.use_python_lrms ? "/pyScanner.py" : "/scan-" + config.default_lrms + "-job";
   cmd = Arc::escape_chars(cmd, " \\", '\\', false);
-  if (!config.conffile.empty()) cmd += " --config " + config.conffile;
+  if (!config.conffile.empty())
+    cmd += config.use_python_lrms ? " " + config.conffile + " " + config.default_lrms : " --config " + config.conffile;
   cmd += " " + config.control_dir;
   config.helpers.push_back(cmd);
 
