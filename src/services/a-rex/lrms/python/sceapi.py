@@ -2,7 +2,7 @@
 ScGrid SCEAPI interface module.
 """
 
-import os, sys, time, re, json
+import os, sys, re, json
 import arc
 from common.cancel import cancel
 from common.config import Config, configure, is_conf_setter
@@ -66,17 +66,15 @@ def translate(text):
 # Submit methods
 #---------------------
 
-def Submit(config, jobdescs, jc):
+def Submit(config, jobdesc):
     """    
     Submits an ATLAS job to the ScGrid host specified in arc.conf. This method executes the required
     RunTimeEnvironment scripts and assembles the bash job script. The job script is
     written to file and submitted with SCEAPI.
                                                                                      
     :param str config: path to arc.conf
-    :param jobdescs: job description list object                                 
-    :type jobdescs: :py:class:`arc.JobDescriptionList`        
-    :param jc: job container object
-    :type jc: :py:class:`arc.compute.JobContainer`
+    :param jobdesc: job description object  
+    :type jobdesc: :py:class:`arc.JobDescription`
     :return: ``True`` if successfully submitted, else ``False``
     :rtype: :py:obj:`bool`
     """
@@ -89,14 +87,13 @@ def Submit(config, jobdescs, jc):
     configure(config, set_sceapi)
     client = setup_api()
 
-    jd = jobdescs[0]
-    validate_attributes(jd)
+    validate_attributes(jobdesc)
 
     # Run RTE stage0
     debug('----- starting sceapiSubmitter.py -----', 'sceapi.Submit')
     rel = re.compile(r'APPS/HEP/ATLAS-(?P<release>[\d\.]+-[\w_-]+)')
     release = None
-    for rte in jd.Resources.RunTimeEnvironment.getSoftwareList():
+    for rte in jobdesc.Resources.RunTimeEnvironment.getSoftwareList():
         match = rel.match(str(rte))
         if match:
             release = match.groupdict()['release']
@@ -105,11 +102,11 @@ def Submit(config, jobdescs, jc):
         raise ArcError('ATLAS release not specified', 'sceapi.Submit')
 
     # Create job dict
-    jobJSDL = assemble_dict(jd, release)
+    jobJSDL = assemble_dict(jobdesc, release)
     args = jobJSDL.pop('arguments')
-    input_dict = get_input_dict(jd, args)
+    input_dict = get_input_dict(jobdesc, args)
 
-    debug('SCEAPI jobname: %s' % jd.Identification.JobName, 'sceapi.Submit')
+    debug('SCEAPI jobname: %s' % jobdesc.Identification.JobName, 'sceapi.Submit')
     debug('SCEAPI job dict built', 'sceapi.Submit')
     debug('----------------- BEGIN job dict -----', 'sceapi.Submit')
     for key, val in jobJSDL.items():
@@ -120,7 +117,7 @@ def Submit(config, jobdescs, jc):
     #  Submit the job
     ######################################
 
-    directory = jd.OtherAttributes['joboption;directory']
+    directory = jobdesc.OtherAttributes['joboption;directory']
     debug('session directory: %s' % directory, 'sceapi.Submit')
     resp = client.submitJSON(jobJSDL)
     handle = None
@@ -207,12 +204,12 @@ def Scan(config, ctr_dirs):
     :type ctr_dirs: :py:obj:`list` [ :py:obj:`str` ... ]
     """
 
-    time.sleep(10)
     configure(config, set_sceapi);
                                           
     if Config.scanscriptlog:
         scanlogfile = arc.common.LogFile(Config.scanscriptlog)
         arc.common.Logger_getRootLogger().addDestination(scanlogfile)
+        arc.common.Logger_getRootLogger().setThreshold(Config.log_threshold)
 
     jobs = get_jobs(ctr_dirs)
     if not jobs: return

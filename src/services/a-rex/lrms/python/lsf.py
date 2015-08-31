@@ -2,7 +2,7 @@
 LSF batch system interface module.
 """
 
-import os, sys, time, re
+import os, sys, re
 import arc
 from common.cancel import cancel
 from common.config import Config, configure, is_conf_setter
@@ -37,37 +37,34 @@ def set_lsf(cfg):
 # Submit methods
 #---------------------
 
-def Submit(config, jobdescs, jc):
+def Submit(config, jobdesc):
     """
     Submits a job to the LSF queue specified in arc.conf. This method executes the required
     RunTimeEnvironment scripts and assembles the bash job script. The job script is
     written to file and submitted with ``bsub``.
 
     :param str config: path to arc.conf
-    :param jobdescs: job description list object
-    :type jobdescs: :py:class:`arc.JobDescriptionList`
-    :param jc: job container object 
-    :type jc: :py:class:`arc.compute.JobContainer`
+    :param jobdesc: job description object
+    :type jobdesc: :py:class:`arc.JobDescription`
     :return: ``True`` if successfully submitted, else ``False``
     :rtype: :py:obj:`bool`
     """
 
     configure(config, set_lsf)
 
-    jd = jobdescs[0]
-    validate_attributes(jd)
+    validate_attributes(jobdesc)
     if Config.remote_host:
         ssh_connect(Config.remote_host, Config.remote_user, Config.private_key)
         
     # Run RTE stage0
     debug('----- starting lsfSubmitter.py -----', 'lsf.Submit')
-    RTE_stage0(jobdescs, 'LSF')
+    RTE_stage0(jobdesc, 'LSF')
 
     # Create script file and write job script
-    jobscript = get_job_script(jobdescs)
+    jobscript = get_job_script(jobdesc)
     script_file = write_script_file(jobscript)
 
-    debug('LSF jobname: %s' % jd.Identification.JobName, 'lsf.Submit')
+    debug('LSF jobname: %s' % jobdesc.Identification.JobName, 'lsf.Submit')
     debug('LSF job script built', 'lsf.Submit')
     debug('----------------- BEGIN job script -----', 'lsf.Submit')
     for line in jobscript.split('\n'):
@@ -82,7 +79,7 @@ def Submit(config, jobdescs, jc):
     ######################################
 
     execute = excute_local if not Config.remote_host else execute_remote
-    directory = jd.OtherAttributes['joboption;directory']
+    directory = jobdesc.OtherAttributes['joboption;directory']
 
     debug('Session directory: %s' % directory, 'lsf.Submit')
 
@@ -112,7 +109,6 @@ def Submit(config, jobdescs, jc):
         job.StageInDir  = job.SessionDir
         job.StageOutDir = job.SessionDir
         job.IDFromEndpoint = str(job.JobID)
-        jc.addEntity(job)
         return True
 
     debug('job *NOT* submitted successfully!', 'lsf.Submit')
@@ -143,18 +139,18 @@ def set_job_id(handle, job):
     error('Job ID not found in stdout', 'lsf.Submit')
 
 
-def get_job_script(jobdescs):
+def get_job_script(jobdesc):
     """
     Assemble bash job script for an LSF host.
 
-    :param jobdescs: list of job description objects
-    :type jd: :py:obj:`list` [ :py:class:`arc.JobDescription` ... ]
+    :param jobdesc: job description objects
+    :type jobdesc: :py:class:`arc.JobDescription`
     :return: job script
     :rtype: :py:obj:`str`
     """
 
-    set_req_mem(jobdescs)
-    return JobscriptAssemblerLSF(jobdescs[0]).assemble()
+    set_req_mem(jobdesc)
+    return JobscriptAssemblerLSF(jobdesc).assemble()
 
 
 #---------------------
@@ -194,12 +190,11 @@ def Scan(config, ctr_dirs):
     :type ctr_dirs: :py:obj:`list` [ :py:obj:`str` ... ]
     """
 
-    time.sleep(10)
-
     configure(config, set_lsf)
     if Config.scanscriptlog:
         scanlogfile = arc.common.LogFile(Config.scanscriptlog)
         arc.common.Logger_getRootLogger().addDestination(scanlogfile)
+        arc.common.Logger_getRootLogger().setThreshold(Config.log_threshold)
 
     jobs = get_jobs(ctr_dirs)
     if not jobs: return
@@ -289,12 +284,12 @@ class JobscriptAssemblerLSF(JobscriptAssembler):
         return script
 
     @staticmethod
-    def assemble_BSUB(j):
+    def assemble_BSUB(jobdesc):
         """
         Assemble the ``bsub`` specific section of the job script.
         
-        :param jobdescs: job description object
-        :type jobdescs: :py:class:`arc.JobDescription`
+        :param jobdesc: job description object
+        :type jobdesc: :py:class:`arc.JobDescription`
         :return: job script part
         :rtype: :py:obj:`str`
         """
@@ -303,58 +298,58 @@ class JobscriptAssemblerLSF(JobscriptAssembler):
         product += '#LSF batch job script built by grid-manager\n#\n'
 
         ### output to comment file
-        if 'joboption;directory' in j.OtherAttributes:
-            product += '#BSUB -oo ' + j.OtherAttributes['joboption;directory'] + '.comment\n\n'
+        if 'joboption;directory' in jobdesc.OtherAttributes:
+            product += '#BSUB -oo ' + jobdesc.OtherAttributes['joboption;directory'] + '.comment\n\n'
 
         ### queue
-        if j.Resources.QueueName:
-            product += '#BSUB -q ' + j.Resources.QueueName + '\n'
-        if 'joboption;rsl_architecthure' in j.OtherAttributes:
-            product += '#BSUB -R type=' + j.OtherAttributes['joboption;rsl_architecthure'] + '\n'
+        if jobdesc.Resources.QueueName:
+            product += '#BSUB -q ' + jobdesc.Resources.QueueName + '\n'
+        if 'joboption;rsl_architecthure' in jobdesc.OtherAttributes:
+            product += '#BSUB -R type=' + jobdesc.OtherAttributes['joboption;rsl_architecthure'] + '\n'
         elif Config.lsf_architecture:
             product += '#BSUB -R type=' + Config.lsf_architecture + '\n'
 
         ### project name
-        if 'joboption;rsl_project' in j.OtherAttributes:
-            product += '#BSUB -P ' + j.OtherAttributes['joboption;rsl_project'] + '\n'
+        if 'joboption;rsl_project' in jobdesc.OtherAttributes:
+            product += '#BSUB -P ' + jobdesc.OtherAttributes['joboption;rsl_project'] + '\n'
 
         ### job name
-        if j.Identification.JobName:
-            prefix = 'N' if not j.Identification.JobName[0].isalpha() else ''
+        if jobdesc.Identification.JobName:
+            prefix = 'N' if not jobdesc.Identification.JobName[0].isalpha() else ''
             product += '#BSUB -J ' + prefix + \
-                       re.sub(r'\W', '_', j.Identification.JobName)[:15-len(prefix)] + '\n'
+                       re.sub(r'\W', '_', jobdesc.Identification.JobName)[:15-len(prefix)] + '\n'
         ### job name is required in lsf to get parsable output from bjobs
         else:
             product += '#BSUB -J arcjob\n'
 
         ### (non-)parallel jobs
-        nslots = j.Resources.SlotRequirement.NumberOfSlots \
-                 if j.Resources.SlotRequirement.NumberOfSlots > 1 else 1
+        nslots = jobdesc.Resources.SlotRequirement.NumberOfSlots \
+                 if jobdesc.Resources.SlotRequirement.NumberOfSlots > 1 else 1
         product += '#BSUB -n ' + str(nslots) + '\n'
         ### parallel jobs
-        if j.Resources.SlotRequirement.SlotsPerHost > 1:
-            product += '#BSUB -R span[ptile=' + str(j.Resources.SlotRequirement.SlotsPerHost) + ']\n'
+        if jobdesc.Resources.SlotRequirement.SlotsPerHost > 1:
+            product += '#BSUB -R span[ptile=' + str(jobdesc.Resources.SlotRequirement.SlotsPerHost) + ']\n'
 
         ### exclusive execution
-        if j.Resources.SlotRequirement.ExclusiveExecution:
+        if jobdesc.Resources.SlotRequirement.ExclusiveExecution:
             product += '#BSUB -x\n'
 
         ### execution times (seconds)
-        if j.Resources.TotalCPUTime.range.max > 0:
-            product += '#BSUB -c %g\n' % (j.Resources.TotalCPUTime.range.max/60.)
-        if j.Resources.IndividualWallTime.range.max > 0:
-            product += '#BSUB -W %g\n' % (j.Resources.IndividualWallTime.range.max/60.)
+        if jobdesc.Resources.TotalCPUTime.range.max > 0:
+            product += '#BSUB -c %g\n' % (jobdesc.Resources.TotalCPUTime.range.max/60.)
+        if jobdesc.Resources.IndividualWallTime.range.max > 0:
+            product += '#BSUB -W %g\n' % (jobdesc.Resources.IndividualWallTime.range.max/60.)
 
         ### requested memory(mb)
-        if j.Resources.IndividualPhysicalMemory.max > 0:
-            product += '#BSUB -M %i\n' % (j.Resources.IndividualPhysicalMemory.max*1024)
+        if jobdesc.Resources.IndividualPhysicalMemory.max > 0:
+            product += '#BSUB -M %i\n' % (jobdesc.Resources.IndividualPhysicalMemory.max*1024)
 
         ### start time
-        if j.Application.ProcessingStartTime > arc.common.Time(): # now
+        if jobdesc.Application.ProcessingStartTime > arc.common.Time(): # now
             date_MDS = re.compile(r'^(?P<YYYY>\d\d\d\d)-(?P<MM>\d\d)-(?P<DD>\d\d)T(?P<hh>\d\d):'
                                     '(?P<mm>\d\d):(?P<ss>\d\d)$')
             f = arc.common.MDSTime
-            m = date_MDS.match(j.Application.ProcessingStartTime(f))
+            m = date_MDS.match(jobdesc.Application.ProcessingStartTime(f))
             product += '#BSUB -b %i:%i:%i:%i\n' % (m['MM'], m['DD'], m['HH'], m['mm'])
 
         return product

@@ -1,17 +1,20 @@
+#!/usr/bin/env python
+
 import sys, traceback
 
-def setup(lrmsname):
-    modules = {}
-    try:
-        modules['arc'] = __import__('arc')
-    except:
-        return 'Failed to import arc module'
+try:
+    import arc
+    from lrms.common.log import ArcError, error
+except:
+    sys.stderr.write('Failed to import arc or lrms.common module\n')
+    sys.exit(2)
 
+def get_lrms_module(lrmsname):
     try:
-        modules['lrms'] =  __import__('lrms.' + lrmsname, fromlist = ['lrms'])
-        return modules
+        return  __import__('lrms.' + lrmsname, fromlist = ['lrms'])
     except:
-        return 'Failed to import lrms module'
+        error('Failed to import lrms.%s module' % lrmsname, 'pySubmit')
+        sys.exit(2)
 
 
 if __name__ == '__main__':
@@ -20,24 +23,30 @@ if __name__ == '__main__':
         error('Usage: %s <arc.conf> <jobdesc> <lrms>' % (sys.argv[0]), 'pySubmit')
         sys.exit(1)
 
-    modules = setup(sys.argv[3])
-    if not type(modules) == dict:
-        sys.stderr.write(modules)
-        sys.exit(1)
-
+    lrms = get_lrms_module(sys.argv[3])
+    descfile = sys.argv[2]
+    localfile = sys.argv[2].replace('.description', '.local')
+    gridid = descfile.split('.')[-2]
+    is_parsed = False
     try:
         from lrms.common.log import ArcError, error
-        _jds = arc.JobDescriptionList()
-        content = open(sys.argv[2], 'r').read()
-        is_parsed = arc.JobDescription.Parse(jd.read(), _jds)
-        localid = modules['lrms'].Submit(sys.argv[1], _jds[0])
+        jds = arc.JobDescriptionList()
+        with open(descfile, 'r') as jobdesc:
+            is_parsed = arc.JobDescription.Parse(jobdesc.read(), jds, '', 'GRIDMANAGER')
+        jd = jds[0]
+        jd.OtherAttributes['joboption;gridid'] = gridid
+        localid = lrms.Submit(sys.argv[1], jd)
         assert(type(localid) == str)
-        # write localid to local file
+        with open(localfile, 'a') as local:
+            local.write('localid=%s\n' % localid)
         sys.exit(0)
     except (ArcError, AssertionError):
         pass
     except IOError:
-        error('Failed to read job description file (%s)' % jobdesc, 'pySubmit')
+        if not is_parsed:
+            error('%s: Failed to read job description file' % gridid, 'pySubmit')
+        else:
+            error('%s: Failed to write job ID to local file' % gridid, 'pySubmit')
     except Exception:
         error('Unexpected exception:\n%s' % traceback.format_exc(), 'pySubmit')
     sys.exit(1)

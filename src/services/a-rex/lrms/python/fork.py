@@ -177,6 +177,10 @@ def Scan(config, ctr_dirs):
     """
 
     configure(config, set_fork)
+    if Config.scanscriptlog:
+        scanlogfile = arc.common.LogFile(Config.scanscriptlog)
+        arc.common.Logger_getRootLogger().addDestination(scanlogfile)
+        arc.common.Logger_getRootLogger().setThreshold(Config.log_threshold)
 
     jobs = get_jobs(ctr_dirs)
     if not jobs: return

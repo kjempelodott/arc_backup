@@ -246,7 +246,6 @@ bool JobsList::GetLocalDescription(const JobsList::iterator &i) {
 }
   // TODO: add python test. if so, pass description file, not grami. do not write to local file
 bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,bool cancel) {
-  if (config.use_python_lrms) return state_submitting_py(i, state_changed, cancel);
   if(i->child == NULL) {
     // no child was running yet, or recovering from fault 
     // write grami file for submit-X-job
@@ -268,9 +267,11 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
       if(staging_config.get_local_transfer()) {
         local_transfer_s="joboption_localtransfer=yes";
       }
-      if(!job_desc_handler.write_grami(*i,local_transfer_s)) {
-        logger.msg(Arc::ERROR,"%s: Failed creating grami file",i->job_id);
-        return false;
+      if (!config.use_python_lrms) { // don't write grami if python
+	if(!job_desc_handler.write_grami(*i,local_transfer_s)) {
+	  logger.msg(Arc::ERROR,"%s: Failed creating grami file",i->job_id);
+	  return false;
+	}
       }
       if(!job_desc_handler.set_execs(*i)) {
         logger.msg(Arc::ERROR,"%s: Failed setting executable permissions",i->job_id);
@@ -282,8 +283,14 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
     }
     // submit/cancel job to LRMS using submit/cancel-X-job
     std::string cmd;
-    if(cancel) { cmd=Arc::ArcLocation::GetDataDir()+"/"+config.cancelScriptName; }
-    else { cmd=Arc::ArcLocation::GetDataDir()+"/"+config.submitScriptName; }
+    if (config.use_python_lrms) {
+	if(cancel) { cmd=Arc::ArcLocation::GetDataDir()+"/pyCancel.py"; }
+	else { cmd=Arc::ArcLocation::GetDataDir()+"/pySubmit.py"; }
+      }
+    else {
+      if(cancel) { cmd=Arc::ArcLocation::GetDataDir()+"/"+config.cancelScriptName; }
+      else { cmd=Arc::ArcLocation::GetDataDir()+"/"+config.submitScriptName; }
+    }
     if(!cancel) {
       logger.msg(Arc::INFO,"%s: state SUBMIT: starting child: %s",i->job_id,cmd);
     } else {
@@ -296,7 +303,12 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
       }
     }
     std::string grami = config.control_dir+"/job."+(*i).job_id+".grami";
-    cmd += " --config " + config.conffile + " " + grami;
+    if (config.use_python_lrms) {
+      if (!cancel) cmd += " " + config.conffile + " " + config.control_dir + "/job." + (*i).job_id + ".description " + config.default_lrms;
+      else cmd += " " + config.conffile + " " + i->local->localid + " " + config.default_lrms;
+    }
+    else
+      cmd += " --config " + config.conffile + " " + grami;
     job_errors_mark_put(*i,config);
     if(!RunParallel::run(config,*i,cmd,&(i->child))) {
       if(!cancel) {
@@ -318,7 +330,7 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
     // it does then check in grami file for generated local id
     // or in case of cancel just assume child exited.
     if((Arc::Time() - i->child->RunTime()) > Arc::Period(CHILD_RUN_TIME_SUSPICIOUS)) {
-      if(!cancel) {
+      if(!cancel && !config.use_python_lrms) { // there is not grami file if python
         // Check if local id is already obtained
         std::string local_id=job_desc_handler.get_local_id(i->job_id);
         if(local_id.length() > 0) {
@@ -380,6 +392,10 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
   }
   if(!cancel) {
     delete i->child; i->child=NULL;
+    if (config.use_python_lrms) { // if child exit code is 0, python has written localid to local file
+      state_changed=true;
+      return true;
+    }
     // success code - get LRMS job id
     std::string local_id=job_desc_handler.get_local_id(i->job_id);
     if(local_id.length() == 0) {

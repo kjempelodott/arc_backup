@@ -1,17 +1,20 @@
+#!/usr/bin/env python
+
 import sys, traceback
 
-def setup(lrmsname):
-    modules = {}
-    try:
-        modules['arc'] = __import__('arc')
-    except:
-        return 'Failed to import arc module'
+try:
+    import arc
+    from lrms.common.log import ArcError, error
+except:
+    sys.stderr.write('Failed to import arc or lrms.common module\n')
+    sys.exit(2)
 
+def get_lrms_module(lrmsname):
     try:
-        modules['lrms'] =  __import__('lrms.' + lrmsname, fromlist = ['lrms'])
-        return modules
+        return  __import__('lrms.' + lrmsname, fromlist = ['lrms'])
     except:
-        return 'Failed to import lrms module'
+        error('Failed to import lrms.%s module' % lrmsname, 'pyCancel')
+        sys.exit(2)
 
 
 if __name__ == '__main__':
@@ -20,13 +23,9 @@ if __name__ == '__main__':
         error('Usage: %s <arc.conf> <jobid> <lrms>' % (sys.argv[0]), 'pySubmit')
         sys.exit(1)
 
-    modules = setup(sys.argv[3])
-    if not type(modules) == dict:
-        sys.stderr.write(modules)
-        sys.exit(1)
-
+    lrms = get_lrms_module(sys.argv[3])
     try:
-        if modules['lrms'].Cancel(sys.argv[1], sys.argv[2]):
+        if lrms.Cancel(sys.argv[1], sys.argv[2]):
             sys.exit(0)
     except Exception:
         error('Unexpected exception:\n%s' % traceback.format_exc(), 'pyModule.submit')

@@ -72,7 +72,7 @@ def Submit(config, jobdesc):
     #  Submit the job
     ######################################
 
-    execute = excute_local if not Config.remote_host else execute_remote
+    execute = execute_local if not Config.remote_host else execute_remote
     directory = jobdesc.OtherAttributes['joboption;directory']
 
     debug('Session directory: %s' % directory, 'slurm.Submit')
@@ -215,8 +215,12 @@ def Scan(config, ctr_dirs):
     :param ctr_dirs: list of paths to control directories 
     :type ctr_dirs: :py:obj:`list` [ :py:obj:`str` ... ]
     """
-
+    
     configure(config, set_slurm)
+    if Config.scanscriptlog:
+        scanlogfile = arc.common.LogFile(Config.scanscriptlog)
+        arc.common.Logger_getRootLogger().addDestination(scanlogfile)
+        arc.common.Logger_getRootLogger().setThreshold(Config.log_threshold)
 
     jobs = get_jobs(ctr_dirs)
     if not jobs: return

@@ -61,8 +61,6 @@ def configure(configfile, *func):
         except IOError:
             pass
 
-    arc.Logger_getRootLogger().setThreshold(Config.log_threshold)
-
 
 def set_common(cfg):
     """
