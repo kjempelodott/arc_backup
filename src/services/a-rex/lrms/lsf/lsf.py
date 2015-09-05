@@ -46,7 +46,7 @@ def Submit(config, jobdesc):
     :param str config: path to arc.conf
     :param jobdesc: job description object
     :type jobdesc: :py:class:`arc.JobDescription`
-    :return: ``True`` if successfully submitted, else ``False``
+    :return: local job ID if successfully submitted, else ``None``
     :rtype: :py:obj:`bool`
     """
 
@@ -88,54 +88,34 @@ def Submit(config, jobdesc):
     verbose('executing \'%s\' on %s' % (args, Config.remote_host if Config.remote_host else 'localhost'), 'lsf.Submit')
     handle = execute(args)
 
-    job = arc.Job()
-    if handle.returncode == 0 and set_job_id(handle, job):
-
-        debug('job submitted successfully!', 'lsf.Submit')
-        debug('local job id: %s' % (job.JobID), 'lsf.Submit')
-        debug('----- exiting lsfSubmitter.py -----', 'lsf.Submit')
-
-        # TODO: What interface name to use?
-        job.ServiceInformationInterfaceName = 'org.nordugrid.slurm.sbatch'
-        job.JobStatusInterfaceName = 'org.nordugrid.slurm.sbatch'
-        job.JobManagementInterfaceName = 'org.nordugrid.slurm.sbatch'
-        # TODO: Change returned endpoints for job.
-        # Currently these URLs are not usable.
-        endpointURL = arc.common.URL(Config.remote_endpoint)
-        job.ServiceInformationURL = arc.common.URL('test://localhost')
-        job.JobStatusURL = endpointURL
-        job.JobManagementURL = endpointURL
-        job.SessionDir  = arc.common.URL('file://' + directory)
-        job.StageInDir  = job.SessionDir
-        job.StageOutDir = job.SessionDir
-        job.IDFromEndpoint = str(job.JobID)
-        return True
+    if handle.returncode == 0:
+        localid = get_job_id(handle)
+        if localid:
+            debug('Job submitted successfully!', 'lsf.Submit')
+            debug('Local job id: ' + localid, 'lsf.Submit')
+            debug('----- exiting lsfSubmitter.py -----', 'lsf.Submit')
+            return localid
 
     debug('job *NOT* submitted successfully!', 'lsf.Submit')
     debug('got error code from bsub: %d !' % handle.returncode, 'lsf.Submit')
     debug('Output is:\n' + ''.join(handle.stdout), 'lsf.Submit')
     debug('Error output is:\n' + ''.join(handle.stderr), 'lsf.Submit')
     debug('----- exiting lsfSubmitter.py -----', 'lsf.Submit')
-    return False
 
 
-def set_job_id(handle, job):
+def get_job_id(handle):
     """
-    Read local job ID from ``bsub`` output and set ``JobID`` attribute of job.
+    Read local job ID from ``bsub`` output.
 
     :param object handle: sbatch handle
-    :param job: job object 
-    :type job: :py:class:`arc.Job`
-    :return: ``True`` if found, else ``False``
+    :return: local job ID if found, else ``None``
     :rtype: :py:obj:`str`
     """
-
+    
     for line in handle.stdout:
         match = re.search(r'Job <(\d+)> .+', line)
         if match:
-            job.JobID = match.group(1)
-            return True
-    return False
+            return match.group(1)
     error('Job ID not found in stdout', 'lsf.Submit')
 
 

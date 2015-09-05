@@ -131,6 +131,7 @@ def RTE_stage0(jobdesc, lrms, **mapping):
    :param jd: job description object
    :type jd: :py:class:`arc.JobDescription`
    :param dict mapping: mapping between additional environment variables and job description
+   :todo: is all this sh-to-py back and forth nescessary?
    """
    
    if jobdesc.Resources.RunTimeEnvironment.getSoftwareList():

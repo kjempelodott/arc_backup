@@ -20,12 +20,12 @@ def get_lrms_module(lrmsname):
 if __name__ == '__main__':
     
     if len(sys.argv) != 4:
-        error('Usage: %s <arc.conf> <jobdesc> <lrms>' % (sys.argv[0]), 'pySubmit')
+        error('Usage: %s <arc.conf> <lrms> <jobdesc>' % (sys.argv[0]), 'pySubmit')
         sys.exit(1)
 
-    lrms = get_lrms_module(sys.argv[3])
-    descfile = sys.argv[2]
-    localfile = sys.argv[2].replace('.description', '.local')
+    lrms = get_lrms_module(sys.argv[2])
+    descfile = sys.argv[3]
+    localfile = descfile.replace('.description', '.local')
     gridid = descfile.split('.')[-2]
     is_parsed = False
     try:

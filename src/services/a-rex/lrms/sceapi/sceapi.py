@@ -1,5 +1,5 @@
 """
-ScGrid SCEAPI interface module.
+ScGrid SCEAPI (a RESTful API) interface module.
 """
 
 import os, sys, re, json
@@ -75,8 +75,8 @@ def Submit(config, jobdesc):
     :param str config: path to arc.conf
     :param jobdesc: job description object  
     :type jobdesc: :py:class:`arc.JobDescription`
-    :return: ``True`` if successfully submitted, else ``False``
-    :rtype: :py:obj:`bool`
+    :return: local job ID if successfully submitted, else ``None``
+    :rtype: :py:obj:`str`
     """
 
     import fcntl
@@ -149,12 +149,9 @@ def Submit(config, jobdesc):
         if ret_code == 0:
             if json.loads(client.run(jobid), 'utf8')['status_code'] == 0:
                 debug('job submitted successfully!', 'sceapi.Submit')
-                debug('local job id: %s' % (jobid), 'sceapi.Submit')
+                debug('local job id: %s' % jobid, 'sceapi.Submit')
                 debug('----- exiting sceapiSubmitter.py -----', 'sceapi.Submit')
-                newJob = arc.Job()
-                newJob.IDFromEndpoint = str(jobid)
-                jc.addEntity(newJob)
-                return True
+                return jobid
             failure = 'Start job query failed.'
         else:
             failure = 'Failed to upload input files.'
@@ -163,9 +160,9 @@ def Submit(config, jobdesc):
         
     debug('job *NOT* submitted successfully!', 'sceapi.Submit')
     if failure:
-        debug(str(failure), 'sceapi.Submit')
+        debug(failure, 'sceapi.Submit')
     debug('----- exiting sceapiSubmitter.py -----', 'sceapi.Submit')
-    return False
+
 
 #---------------------
 # Cancel methods
@@ -173,7 +170,7 @@ def Submit(config, jobdesc):
 
 def Cancel(config, jobid):
     """
-    Cancel a job running at an ScGrid host with ``scancel``.
+    Cancel a job running at an ScGrid host.
 
     :param str config: path to arc.conf
     :param str jobid: local job ID

@@ -296,8 +296,9 @@ bool JobsList::state_submitting(const JobsList::iterator &i,bool &state_changed,
     }
     std::string grami = config.control_dir+"/job."+(*i).job_id+".grami";
     if (config.use_python_lrms) {
-      if (!cancel) cmd += " " + config.conffile + " " + config.control_dir + "/job." + (*i).job_id + ".description " + config.default_lrms;
-      else cmd += " " + config.conffile + " " + i->local->localid + " " + config.default_lrms;
+      cmd += " " + config.conffile + " " + config.default_lrms;
+      if (!cancel) cmd += " " + config.control_dir + "/job." + (*i).job_id + ".description ";
+      else         cmd += " " + i->local->localid;
     }
     else
       cmd += " --config " + config.conffile + " " + grami;

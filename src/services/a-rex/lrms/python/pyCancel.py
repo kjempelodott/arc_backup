@@ -20,12 +20,12 @@ def get_lrms_module(lrmsname):
 if __name__ == '__main__':
 
     if len(sys.argv) != 4:
-        error('Usage: %s <arc.conf> <jobid> <lrms>' % (sys.argv[0]), 'pyCancel')
+        error('Usage: %s <arc.conf> <lrms> <jobid>' % (sys.argv[0]), 'pyCancel')
         sys.exit(1)
 
-    lrms = get_lrms_module(sys.argv[3])
+    lrms = get_lrms_module(sys.argv[2])
     try:
-        if lrms.Cancel(sys.argv[1], sys.argv[2]):
+        if lrms.Cancel(sys.argv[1], sys.argv[3]):
             sys.exit(0)
     except Exception:
         error('Unexpected exception:\n%s' % traceback.format_exc(), 'pyCancel')

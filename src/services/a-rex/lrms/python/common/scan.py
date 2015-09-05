@@ -51,9 +51,9 @@ def get_jobs(ctrdirs):
     :rtype: :py:obj:`dict` { :py:obj:`str` : :py:obj:`object` ... }
 
     .. note:: The returned job obects have the following attributes: \
-    ``localid``, ``gridid``, ``local_file``, ``lrms_done_file``, ``grami_file``, \
-    ``output_file``, ``state``, ``uid``, ``gid``, ``sessiondir``, \
-    ``diag_file``, ``count_file``, ``errors_file`` and ``comment_file``.
+    ``localid``, ``gridid``, ``local_file``, ``lrms_done_file``, \
+    ``state``, ``uid``, ``gid``, ``sessiondir``, ``diag_file``, \
+    ``count_file``, ``errors_file`` and ``comment_file``.
 
     """
 
@@ -74,8 +74,6 @@ def get_jobs(ctrdirs):
                         if not read_local_file(job): # sets localid and sessiondir
                             continue
                         job.lrms_done_file = '%s/job.%s.lrms_done' % (ctrdir, job.globalid)
-                        job.grami_file = '%s/job.%s.grami' % (ctrdir, job.globalid)
-                        job.output_file = '%s/job.%s.output' % (ctrdir, job.globalid)
                         job.count_file = '%s/job.%s.lrms_job' % (ctrdir, job.globalid)
                         job.state = 'UNKNOWN'
                         job.message = ''

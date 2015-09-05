@@ -1,5 +1,5 @@
 """
-Classes for parsing GRAMI files.
+Mapping between sh (and GRAMi files) and Python.
 """
 
 import re, os
@@ -9,12 +9,10 @@ from log import ArcError
 
 class RTE0EnvCreator(object):
     """
-    .. todo:: Add docstring
+    :todo: parse joboption_pre_#_#, joboption_pre_#_code, joboption_post_#_#, \
+    joboption_post_#_code, joboption_penv_type, joboption_penv_version, \
+    joboption_penv_processesperhost, joboption_penv_threadsperprocess
     """
-    # TODO: Parse joboption_pre_#_#, joboption_pre_#_code, 
-    # joboption_post_#_#, joboption_post_#_code
-    # TODO: Parse joboption_penv_type, joboption_penv_version,
-    # joboption_penv_processesperhost, joboption_penv_threadsperprocess
 
     _shToPy = \
         {
