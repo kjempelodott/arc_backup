@@ -619,10 +619,7 @@ bool CoreConfig::ParseConfXML(GMConfig& config, const Arc::XMLNode& cfg) {
       return false;
     }
     config.default_queue = (std::string)(tmp_node["defaultShare"]);
-    if (Arc::lower((std::string)tmp_node["usePythonLRMS"]) == "yes")
-      config.use_python_lrms = true;
-    else:
-      config.use_python_lrms = false;
+    config.use_python_lrms = (Arc::lower((std::string)tmp_node["usePythonLRMS"]) == "yes");
     CheckLRMSBackends(config.default_lrms, config.use_python_lrms);
     config.rte_dir = (std::string)(tmp_node["runtimeDir"]);
     // We only want the scratch path as seen on the front-end

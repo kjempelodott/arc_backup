@@ -1820,7 +1820,7 @@ fi
 
 # Check for the Perl module Inline::Python - temporary during rewrite.
 PERL5LIB_INLINE_PYTHON=
-INLINE_PYTHON_FOUND=
+INLINE_PYTHON_FOUND="no"
 AC_ARG_WITH(inline-python-location,
   AC_HELP_STRING([--with-inline-python-location=<PATH>], [Location of the Perl Inline::Python module.]),
   [PERL5LIB_INLINE_PYTHON="$with_inline_python_location"

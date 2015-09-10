@@ -239,7 +239,8 @@ my $allbools = [ qw(
                  PublishNordugrid Homogeneous VirtualMachine
                  ConnectivityIn ConnectivityOut Preemption
                  infosys_nordugrid infosys_glue12 infosys_glue2_ldap infosys_glue2_ldap_showactivities
-                 GridftpdEnabled GridftpdAllowNew Distributed enable_arc_interface enable_emies_interface ) ];
+                 GridftpdEnabled GridftpdAllowNew Distributed enable_arc_interface enable_emies_interface
+                 use_python_lrms ) ];
 
 ############################ Generic functions ###########################
 
