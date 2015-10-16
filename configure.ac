@@ -2451,6 +2451,7 @@ AC_CONFIG_FILES([Makefile
                  src/services/a-rex/lrms/Makefile
 		 src/services/a-rex/lrms/python/Makefile
                  src/services/a-rex/lrms/python/common/Makefile
+                 src/services/a-rex/lrms/python/common/submit.py
 		 src/services/a-rex/lrms/sceapi/Makefile
                  src/services/a-rex/lrms/submit_common.sh
                  src/services/a-rex/lrms/scan_common.sh

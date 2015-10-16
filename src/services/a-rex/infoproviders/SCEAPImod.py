@@ -45,7 +45,7 @@ class SCEAPIInfo(LRMSInfo, object):
             self.app_info = ret_json['apps_list'][0]
         except KeyError:
             raise ArcError('\'apps_list\' or \'%s\' info missing from JSON: %s' % 
-                           (sceapi.translate(handle['status_reason'].strip()), app), 'SCEAPIInfo')
+                           (sceapi.translate(ret_json['status_reason'].strip()), app), 'SCEAPIInfo')
         except:
             raise ArcError('App query failed. Response: %s' % str(resp), 'SCEAPIInfo')
 
@@ -60,7 +60,7 @@ class SCEAPIInfo(LRMSInfo, object):
                 self.jobs[jid] = ret_json['jobs_list'][0]
             except KeyError: # Lost job or invalid id!
                 warn('\'jobs_list\' missing from JSON: %s' % 
-                     sceapi.translate(handle['status_reason'].strip()), 'SCEAPIInfo')
+                     sceapi.translate(ret_json['status_reason'].strip()), 'SCEAPIInfo')
                 continue
             except:
                 raise ArcError('Job query failed. Response: %s' % str(resp), 'SCEAPIInfo')

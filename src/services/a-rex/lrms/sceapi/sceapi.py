@@ -160,7 +160,7 @@ def Submit(config, jobdesc):
         
     debug('job *NOT* submitted successfully!', 'sceapi.Submit')
     if failure:
-        debug(failure, 'sceapi.Submit')
+        debug(failure.encode('utf-8'), 'sceapi.Submit')
     debug('----- exiting sceapiSubmitter.py -----', 'sceapi.Submit')
 
 

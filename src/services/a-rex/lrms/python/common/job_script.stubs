@@ -152,7 +152,7 @@ fi
 >> rte_stage1
 >
 # Running runtime scripts
-export RUNTIME_CONFIG_DIR=${RUNTIME_CONFIG_DIR:-%(RUNTIMEDIR)s
+export RUNTIME_CONFIG_DIR=${RUNTIME_CONFIG_DIR:-%(RUNTIMEDIR)s}
 runtimeenvironments=
 if [ ! -z "$RUNTIME_CONFIG_DIR" ] ; then
 @RTES %RTE %OPTS
@@ -214,7 +214,7 @@ fi
   exit 1; }
 
 GNU_TIME='%(GNU_TIME)s'
-if [ ! -z "$GNU_TIME" ] && ! "$GNU_TIME" --version >/dev/null 2>&1; then
+if [ ! -z "$GNU_TIME" ] || ! "$GNU_TIME" --version >/dev/null 2>&1; then
   echo "WARNING: GNU time not found at: $GNU_TIME" 2>&1
   GNU_TIME=
 fi

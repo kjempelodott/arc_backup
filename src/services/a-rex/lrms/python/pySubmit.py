@@ -5,6 +5,7 @@ import sys, traceback
 try:
     import arc
     from lrms.common.log import ArcError, error
+    from lrms.common.parse import JobDescriptionParserGRAMi
 except:
     sys.stderr.write('Failed to import arc or lrms.common module\n')
     sys.exit(2)
@@ -20,32 +21,27 @@ def get_lrms_module(lrmsname):
 if __name__ == '__main__':
     
     if len(sys.argv) != 4:
-        error('Usage: %s <arc.conf> <lrms> <jobdesc>' % (sys.argv[0]), 'pySubmit')
+        error('Usage: %s <arc.conf> <lrms> <grami>' % (sys.argv[0]), 'pySubmit')
         sys.exit(1)
 
     lrms = get_lrms_module(sys.argv[2])
-    descfile = sys.argv[3]
-    localfile = descfile.replace('.description', '.local')
-    gridid = descfile.split('.')[-2]
+    grami = sys.argv[3]
+    gridid = grami.split('.')[-2]
     is_parsed = False
     try:
         jds = arc.JobDescriptionList()
-        with open(descfile, 'r') as jobdesc:
-            is_parsed = arc.JobDescription.Parse(jobdesc.read(), jds, '', 'GRIDMANAGER')
-        jd = jds[0]
-        jd.OtherAttributes['joboption;gridid'] = gridid
-        localid = lrms.Submit(sys.argv[1], jd)
-        assert(type(localid) == str)
-        with open(localfile, 'a') as local:
-            local.write('localid=%s\n' % localid)
+        with open(grami, 'r+') as jobdesc:
+            content = jobdesc.read()
+            is_parsed = JobDescriptionParserGRAMi.Parse(content, jds)
+            jd = jds[0]
+            localid = lrms.Submit(sys.argv[1], jd)
+            assert(type(localid) == str and localid.isnum())
+            jobdesc.write('joboption_jobid=%s\n' % localid)
         sys.exit(0)
     except (ArcError, AssertionError):
         pass
     except IOError:
-        if not is_parsed:
-            error('%s: Failed to read job description file' % gridid, 'pySubmit')
-        else:
-            error('%s: Failed to write job ID to local file' % gridid, 'pySubmit')
+        error('%s: Failed to access GRAMi file' % gridid, 'pySubmit')
     except Exception:
         error('Unexpected exception:\n%s' % traceback.format_exc(), 'pySubmit')
     sys.exit(1)

@@ -222,3 +222,32 @@ class RTE0EnvCreator(object):
     @staticmethod
     def _removeQuotes(text):
       return re.sub(r"^'(.*)'$", "\\1", text)
+
+
+class JobDescriptionParserGRAMi(object):
+    """
+    :todo: Add docstring
+    """
+
+    def __init__(self):
+        pass
+      
+    @staticmethod
+    def Parse(source, jobdescs, language = "", dialect = ""):
+        
+        mapping = {
+                   "RUNTIME_FRONTEND_SEES_NODE" : "none",
+                   "RUNTIME_NODE_SEES_FRONTEND" : "none", 
+                   "RUNTIME_LOCAL_SCRATCH_DIR"  : "none",
+                   "joboption_directory"        : "OtherAttributes.joboption;directory",
+                   "joboption_controldir"       : "OtherAttributes.joboption;controldir",
+                   "joboption_localtransfer"    : "OtherAttributes.joboption;localtransfer",
+                   }
+        j = arc.compute.JobDescription()
+        try:
+            env = dict( line.strip().replace("\\\\", "\\").split("=", 1) for line in source.splitlines() if not re.search(r"^\s*(#|$)", line) )
+        except:
+            return False
+        RTE0EnvCreator(j, type('JobDescription', (object,), {})(), mapping).setPyEnv(env)
+        jobdescs.append(j)
+        return True
