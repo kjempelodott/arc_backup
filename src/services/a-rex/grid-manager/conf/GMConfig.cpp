@@ -91,6 +91,7 @@ void GMConfig::SetDefaults() {
   cert_dir = Arc::GetEnv("X509_CERT_DIR");
   voms_dir = Arc::GetEnv("X509_VOMS_DIR");
 
+  use_python_lrms = false;
   ssh_config.validated = false;
   ssh_config.ok = false;
 }
