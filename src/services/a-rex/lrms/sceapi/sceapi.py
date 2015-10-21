@@ -202,7 +202,8 @@ def Scan(config, ctr_dirs):
     """
 
     configure(config, set_sceapi);
-                                          
+    time.sleep(30)
+
     if Config.scanscriptlog:
         scanlogfile = arc.common.LogFile(Config.scanscriptlog)
         arc.common.Logger_getRootLogger().addDestination(scanlogfile)
@@ -211,27 +212,21 @@ def Scan(config, ctr_dirs):
     jobs = get_jobs(ctr_dirs)
     if not jobs: return
 
-    sce_jobs = {}
-    index = 0
-    client = setup_api()
-    for localid in jobs:
-        query = 'ujids=' + localid
-        resp = client.bjobs(query)
-        try:
-            ret_json = json.loads(resp, 'utf8')
-            sce_jobs[localid] = ret_json['jobs_list'][0]
-        except:
-            add_failure(job)
-            error('SCEAPI client response:\n%s' % str(resp), 'sceapi.Scan')
+    query = 'ujids=' + ','.join(jobs)
+    resp = client.bjobs(query)
+    sce_jobs = []
 
-    for localid, jdict in sce_jobs.items():
-        try:
-            job = jobs[localid]
-            job.state = str(jdict['status'])
-        except:
-            add_failure(job)
-            error('Job (%s) query returned empty json.' % job.globalid, 'sceapi.Scan')
-            continue
+    try:
+        ret_json = json.loads(resp, 'utf8')
+        sce_jobs = ret_json['jobs_list']
+    except:
+        error('SCEAPI client response:\n%s' % str(resp), 'sceapi.Scan')
+
+    for jdict in sce_jobs:
+
+	localid = str(jdict['ujid'])
+	job = jobs[localid]
+        job.state = str(jdict['status'])
 
         if job.state in RUNNING:
             continue
