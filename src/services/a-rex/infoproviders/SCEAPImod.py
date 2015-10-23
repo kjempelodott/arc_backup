@@ -51,19 +51,14 @@ class SCEAPIInfo(LRMSInfo, object):
 
 
     def read_jobs(self, jids):
-        self.jobs = {}
-        for jid in jids:
-            query = "/jobs?offset=0&ujids=" + jid
-            resp = self.client._ApiClient__processHttpGET(query)
-            try:
-                ret_json = json.loads(resp, 'utf8')
-                self.jobs[jid] = ret_json['jobs_list'][0]
-            except KeyError: # Lost job or invalid id!
-                warn('\'jobs_list\' missing from JSON: %s' % 
-                     sceapi.translate(ret_json['status_reason'].strip()), 'SCEAPIInfo')
-                continue
-            except:
-                raise ArcError('Job query failed. Response: %s' % str(resp), 'SCEAPIInfo')
+        query = "length=%i&ujids=%s" % (len(jids), ','.join(jids))
+        resp = self.client.bjobs(query)
+        try:
+            ret_json = json.loads(resp, 'utf8')
+            sce_jobs = ret_json['jobs_list']
+            self.jobs = dict((str(job['ujid']), job) for job in sce_jobs)
+        except:
+            raise ArcError('Job query failed. Response: %s' % str(resp), 'SCEAPIInfo')
 
 
     def nodes_info(self):

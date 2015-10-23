@@ -11,7 +11,7 @@ import os, arc, time
 from config import Config
 from files import read, write, getmtime
 from proc import execute_local, execute_remote
-from log import error, warn
+from log import error, warn, verbose
 
 RUNNING  = ['PENDING','RUNNING','SUSPENDED','COMPLETING',     # slurm
             'PSUSP','USUSP','SUSSP','RUN','PEND',             # lsf

@@ -212,7 +212,7 @@ def Scan(config, ctr_dirs):
     jobs = get_jobs(ctr_dirs)
     if not jobs: return
 
-    query = 'ujids=' + ','.join(jobs)
+    query = 'length=%i&ujids=%s' % (len(jobs), ','.join(jobs))
     resp = client.bjobs(query)
     sce_jobs = []
 
