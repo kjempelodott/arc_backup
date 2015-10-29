@@ -51,6 +51,10 @@ class SCEAPIInfo(LRMSInfo, object):
 
 
     def read_jobs(self, jids):
+        if not jids:
+            self.jobs = {}
+            return
+
         query = "length=%i&ujids=%s" % (len(jids), ','.join(jids))
         resp = self.client.bjobs(query)
         try:
